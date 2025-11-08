@@ -1,161 +1,148 @@
-# GitHub Actions Security Auditor
+# actsense
 
-A comprehensive security auditing tool for GitHub Actions that analyzes workflows and their transitive dependencies, identifying security issues and visualizing the action dependency graph.
+A security auditor for GitHub Actions that analyzes workflows and their dependencies to identify security vulnerabilities.
 
 ## Features
 
-- 🔍 **Repository Auditing**: Analyze all workflows in a GitHub repository
-- 🔗 **Action Dependency Resolution**: Recursively resolve and audit transitive action dependencies
-- 🛡️ **Security Checks**:
-  - Unpinned action versions
-  - Overly permissive permissions
-  - Potential hardcoded secrets
-  - Self-hosted runner usage
-  - Optional secret inputs
-- 📊 **Interactive Graph Visualization**: Visual representation of action dependencies with security issue highlighting
-- 📈 **Statistics Dashboard**: Overview of security issues by severity
-
-## Architecture
-
-- **Backend**: Python with FastAPI
-- **Frontend**: React with Vite and React Flow for graph visualization
-
-## Setup
-
-### Quick Start (Recommended)
-
-**Option 1: Run both servers together (Development)**
-```bash
-./start.sh
-```
-This starts both backend (port 8000) and frontend (port 3000) servers. Open `http://localhost:3000` in your browser.
-
-**Option 2: Integrated mode (Production-like)**
-```bash
-./start-integrated.sh
-```
-This builds the frontend and serves it from the Python backend. Everything runs on `http://localhost:8000`.
-
-### Manual Setup
-
-#### Backend
-
-1. Navigate to the backend directory:
-```bash
-cd backend
-```
-
-2. Create a virtual environment:
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Run the server:
-```bash
-python main.py
-```
-
-The API will be available at `http://localhost:8000`
-
-#### Frontend
-
-1. Navigate to the frontend directory:
-```bash
-cd frontend
-```
-
-2. Install dependencies:
-```bash
-npm install --ignore-scripts
-```
-
-3. Start the development server:
-```bash
-npm run dev
-```
-
-The frontend will be available at `http://localhost:3000`
-
-## Usage
-
-1. Open the frontend in your browser
-2. Enter either:
-   - A repository in the format `owner/repo` (e.g., `actions/checkout`)
-   - An action reference in the format `owner/repo@version` (e.g., `actions/checkout@v3`)
-3. Optionally provide a GitHub token for private repositories or higher rate limits
-4. Click "Audit" to analyze
-5. View the interactive graph and security issues
-
-## API Endpoints
-
-### POST `/api/audit`
-
-Audit a repository or action.
-
-**Request Body:**
-```json
-{
-  "repository": "owner/repo",  // Optional
-  "action": "owner/repo@v1",   // Optional
-  "github_token": "ghp_..."    // Optional
-}
-```
-
-**Response:**
-```json
-{
-  "graph": {
-    "nodes": [...],
-    "edges": [...],
-    "issues": {...}
-  },
-  "statistics": {
-    "total_nodes": 10,
-    "total_edges": 15,
-    "total_issues": 5,
-    "severity_counts": {
-      "high": 3,
-      "medium": 2
-    }
-  }
-}
-```
+- 🔍 **Comprehensive Security Auditing**: Detects 30+ security issues in GitHub Actions workflows
+- 📊 **Interactive Graph Visualization**: Visualize action dependencies with an interactive graph
+- 📋 **Table Views**: View nodes and dependencies in organized table formats
+- 🔗 **Transitive Dependency Analysis**: Automatically resolves and audits all action dependencies
+- 💾 **Analysis History**: Save and load previous analyses
+- 🔐 **Multiple Analysis Methods**: Use GitHub API or clone repositories locally
+- 🎨 **Modern UI**: Clean, professional interface built with React
 
 ## Security Checks
 
-The auditor checks for:
+actsense performs comprehensive security audits including:
 
-1. **Unpinned Versions**: Actions using branch references instead of tags or SHAs
-2. **Overly Permissive Permissions**: Workflows with write access to contents or actions
-3. **Hardcoded Secrets**: Potential secrets in workflow files
-4. **Self-Hosted Runners**: Usage of self-hosted runners (potential security risk)
-5. **Optional Secret Inputs**: Actions with optional secret inputs
+### Action Pinning & Immutability
+- Unpinned action versions
+- Hash pinning (commit SHA) vs tags
+- Unpinnable Docker actions (mutable tags)
+- Unpinnable composite actions
+- Unpinnable JavaScript actions
 
-## Graph Visualization
+### Permissions & Access Control
+- Overly permissive workflow permissions
+- GITHUB_TOKEN write permissions
+- Self-hosted runners
+- Branch protection bypass
 
-- **Nodes**: Represent repositories, workflows, and actions
-- **Edges**: Show dependencies between actions
-- **Colors**: Indicate security severity:
-  - 🔴 Red: Critical issues
-  - 🟠 Orange: High severity
-  - 🟡 Yellow: Medium severity
-  - 🟢 Green: Safe
-- **Badges**: Show the number of issues per node
-- **Click**: Click on nodes to see detailed security issues
+### Secrets & Credentials
+- Hardcoded secrets detection
+- Optional secret inputs
+- Long-term cloud credentials (AWS, Azure, GCP)
+- Environment secrets usage
 
-## Limitations
+### Workflow Security
+- Dangerous workflow events (pull_request_target, workflow_run)
+- Unsafe checkout actions
+- Script injection vulnerabilities
+- Code injection via workflow inputs
+- Unvalidated workflow dispatch inputs
 
-- Rate limiting: GitHub API has rate limits (60 requests/hour without token, 5000/hour with token)
-- Depth limit: Dependency resolution is limited to 5 levels deep by default
-- Public repos only: Without a token, only public repositories can be accessed
+### Supply Chain Security
+- Untrusted third-party actions
+- Unpinned dependencies in Dockerfiles
+- External resources without checksums
+- Network traffic filtering
+- File tampering protection
+
+### Best Practices
+- Artifact retention settings
+- Matrix strategy security
+- Audit logging
+- And more...
+
+## Installation
+
+### Quick Setup
+
+Run the setup script to install everything automatically:
+
+```bash
+./setup.sh
+```
+
+This will:
+- Check prerequisites (Python, Node.js, npm, Git)
+- Create Python virtual environment
+- Install backend dependencies
+- Install frontend dependencies
+- Create necessary data directories
+
+### Manual Installation
+
+#### Prerequisites
+
+- Python 3.8+
+- Node.js 16+
+- Git (optional, for repository cloning)
+
+If you prefer to install manually:
+
+1. **Backend:**
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+2. **Frontend:**
+```bash
+cd frontend
+npm install
+```
+
+### Running
+
+**Development (integrated):**
+```bash
+./start-integrated.sh
+```
+
+**Or manually:**
+```bash
+# Terminal 1 - Backend
+cd backend && source venv/bin/activate && uvicorn main:app --reload
+
+# Terminal 2 - Frontend
+cd frontend && npm run dev
+```
+
+Visit `http://localhost:5173` (dev) or `http://localhost:8000` (production)
+
+## Usage
+
+1. Enter a repository (e.g., `actions/checkout`) or action reference (e.g., `actions/checkout@v3`)
+2. Optionally provide a GitHub token for higher rate limits
+3. Click "Audit" to analyze
+4. View results in the interactive graph or table views
+5. Click any node to see detailed security issues
+
+## GitHub Token (Optional)
+
+A GitHub Personal Access Token increases rate limits from 60/hour to 5,000/hour.
+
+[Create a token](https://github.com/settings/tokens) with `public_repo` scope (or `repo` for private repos).
+
+## Security Checks
+
+actsense detects issues including:
+- Unpinned action versions
+- Hardcoded secrets
+- Overly permissive permissions
+- Unpinnable actions (Docker, composite, JavaScript)
+- Script injection vulnerabilities
+- Untrusted third-party actions
+- And 20+ more security issues
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for technical details, API documentation, and development guidelines.
 
 ## License
 
-MIT
-
+MIT License
