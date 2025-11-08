@@ -48,7 +48,7 @@
 }
 
 .form-group small a {
-  color: #2563eb;
+  color: #111827;
   text-decoration: none;
   font-weight: 500;
 }
@@ -77,7 +77,7 @@
   cursor: pointer;
   width: 18px;
   height: 18px;
-  accent-color: #2563eb;
+  accent-color: #111827;
 }
 
 .submit-button {

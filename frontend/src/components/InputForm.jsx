@@ -99,7 +99,7 @@ function InputForm({ onAudit, loading }) {
         />
         <small>
           Increases rate limit from 60/hour to 5000/hour. 
-          <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" style={{color: '#2563eb', marginLeft: '4px'}}>
+          <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" style={{marginLeft: '4px'}}>
             Create token
           </a>
         </small>

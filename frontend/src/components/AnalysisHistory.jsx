@@ -70,9 +70,11 @@ function AnalysisHistory({ onLoadAnalysis }) {
                   <div className="history-item-header">
                     <div className="history-item-title">
                       <strong>{analysis.repository || analysis.action || 'Unknown'}</strong>
-                      <span className="history-method">{analysis.method || 'api'}</span>
+                      <div className="history-item-meta">
+                        <span className="history-method">{analysis.method || 'api'}</span>
+                        <span className="history-item-date">{formatDate(analysis.timestamp)}</span>
+                      </div>
                     </div>
-                    <div className="history-item-date">{formatDate(analysis.timestamp)}</div>
                   </div>
                   {analysis.statistics && (
                     <div className="history-item-stats">

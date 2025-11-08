@@ -61,17 +61,20 @@
 }
 
 .history-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
   margin-bottom: 0.5rem;
 }
 
 .history-item-title {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex: 1;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.history-item-meta {
+  display: flex;
+  gap: 0.75rem;
+  margin-right: auto;
 }
 
 .history-item-title strong {
