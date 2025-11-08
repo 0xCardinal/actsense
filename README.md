@@ -142,7 +142,3 @@ actsense detects issues including:
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for technical details, API documentation, and development guidelines.
-
-## License
-
-MIT License
