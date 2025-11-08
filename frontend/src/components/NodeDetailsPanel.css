@@ -1,8 +1,20 @@
+.node-details-backdrop {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(0, 0, 0, 0.3) !important;
+  z-index: 9998 !important;
+  animation: fadeIn 0.3s ease-out !important;
+  backdrop-filter: blur(2px) !important;
+}
+
 .node-details-panel {
   position: fixed !important;
   top: 0.75rem !important;
   right: 0.75rem !important;
-  width: 400px !important;
+  width: 700px !important;
   height: calc(100vh - 1.5rem) !important;
   background: #ffffff !important;
   border: 1px solid #e5e7eb !important;
@@ -15,6 +27,15 @@
   visibility: visible !important;
   opacity: 1 !important;
   overflow: hidden !important;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideIn {
@@ -212,6 +233,102 @@
   text-align: center;
   font-weight: 500;
   font-family: 'Inter', sans-serif;
+}
+
+/* Dependency Chain Styles */
+.dependency-section {
+  margin-top: 1.75rem;
+  margin-bottom: 1.75rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dependency-group {
+  margin-bottom: 1.5rem;
+}
+
+.dependency-group:last-child {
+  margin-bottom: 0;
+}
+
+.dependency-group-label {
+  color: #64748b;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  font-family: 'Inter', sans-serif;
+}
+
+.dependency-chain {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.chain-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition: all 0.15s ease;
+}
+
+.chain-node:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.chain-node-current {
+  background: #eff6ff;
+  border-color: #2563eb;
+  font-weight: 600;
+}
+
+.chain-node .node-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  display: inline-block;
+  line-height: 1;
+}
+
+.chain-node .node-label {
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.chain-arrow {
+  color: #9ca3af;
+  font-size: 1rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.node-issue-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 20px;
+  text-align: center;
 }
 
 /* Scrollbar styling - using global minimal style */

@@ -9,6 +9,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import NodeDetailsPanel from './NodeDetailsPanel'
 import CustomNode from './CustomNode'
+import { filterNodes } from '../utils/nodeFilters'
 import './ActionGraph.css'
 
 const nodeTypes = {
@@ -62,6 +63,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
   }
   
   // Dependency layout: show each node individually with its dependencies below
+  // Each dependency node can appear multiple times (once per parent)
   const calculateDependencyLayout = (nodes, edges) => {
     // Build adjacency lists - children are dependencies
     const children = new Map()
@@ -79,21 +81,46 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     }
     
     // Create a group for each node showing its dependencies
-    const nodeGroups = nodes.map(node => {
-      const nodeDeps = children.get(node.id) || []
-      // Only include dependencies that are in the filtered nodes list
-      const validDeps = nodeDeps
-        .map(depId => nodes.find(n => n.id === depId))
-        .filter(Boolean)
-      
-      return {
-        root: node,
-        dependencies: validDeps
-      }
-    })
+    // Important: Each dependency node will be duplicated for each parent
+    // Only show groups for nodes that actually have dependencies
+    const nodeGroups = nodes
+      .filter(node => {
+        const nodeDeps = children.get(node.id) || []
+        return nodeDeps.length > 0 // Only show nodes that have dependencies
+      })
+      .map(node => {
+        const nodeDeps = children.get(node.id) || []
+        // Include all dependencies, even if they appear in other groups
+        const validDeps = nodeDeps
+          .map(depId => {
+            const depNode = nodes.find(n => n.id === depId)
+            // Create a unique instance for this parent by adding a suffix to the ID
+            if (depNode) {
+              return {
+                ...depNode,
+                id: `${depNode.id}__from__${node.id}`, // Unique ID for this instance
+                originalId: depNode.id, // Keep reference to original
+                parentId: node.id, // Track which parent this instance belongs to
+                // Preserve all node data
+                data: {
+                  ...depNode.data,
+                  originalId: depNode.id,
+                  parentId: node.id
+                }
+              }
+            }
+            return null
+          })
+          .filter(Boolean)
+        
+        return {
+          root: node,
+          dependencies: validDeps
+        }
+      })
     
     // Layout constants
-    const GROUP_HORIZONTAL_SPACING = 300
+    const GROUP_HORIZONTAL_SPACING = 350
     const GROUP_VERTICAL_SPACING = 200
     const NODE_VERTICAL_SPACING = 100
     const START_X = 100
@@ -130,7 +157,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
   
   // Hierarchical layout for non-dependency views
   const calculateHierarchicalLayout = (nodes, edges) => {
-    // Build adjacency lists
+    // Build adjacency lists (deduplicated)
     const children = new Map()
     const parents = new Map()
     
@@ -139,37 +166,92 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
       parents.set(node.id, [])
     })
     
+    // Deduplicate edges when building adjacency lists
+    const edgeSet = new Set()
     if (edges && edges.length > 0) {
       edges.forEach(edge => {
         if (edge.source && edge.target) {
-          children.get(edge.source)?.push(edge.target)
-          parents.get(edge.target)?.push(edge.source)
+          const edgeKey = `${edge.source}->${edge.target}`
+          if (!edgeSet.has(edgeKey)) {
+            edgeSet.add(edgeKey)
+            children.get(edge.source)?.push(edge.target)
+            parents.get(edge.target)?.push(edge.source)
+          }
         }
       })
     }
     
-    // Find root nodes (nodes with no parents)
-    const roots = nodes.filter(node => {
-      const nodeParents = parents.get(node.id) || []
-      return nodeParents.length === 0
+    // Find root nodes (nodes with no parents, or repositories/workflows)
+    const roots = []
+    
+    // First, prioritize repositories and workflows as roots
+    nodes.forEach(node => {
+      if (node.type === 'repository') {
+        roots.push(node)
+      }
     })
     
-    // Calculate depth for each node
-    const depths = new Map()
-    const visited = new Set()
+    // Then add workflows that aren't already included
+    nodes.forEach(node => {
+      if (node.type === 'workflow' && !roots.find(r => r.id === node.id)) {
+        const nodeParents = parents.get(node.id) || []
+        // Only add if it's a direct child of a repository or has no parents
+        const hasRepoParent = nodeParents.some(parentId => {
+          const parentNode = nodes.find(n => n.id === parentId)
+          return parentNode && parentNode.type === 'repository'
+        })
+        if (hasRepoParent || nodeParents.length === 0) {
+          roots.push(node)
+        }
+      }
+    })
     
-    const calculateDepth = (nodeId, depth = 0) => {
-      if (visited.has(nodeId)) return
-      visited.add(nodeId)
-      depths.set(nodeId, Math.max(depths.get(nodeId) || 0, depth))
-      
-      const nodeChildren = children.get(nodeId) || []
-      nodeChildren.forEach(childId => {
-        calculateDepth(childId, depth + 1)
+    // Finally, add any nodes with no parents that aren't already included
+    if (roots.length === 0) {
+      nodes.forEach(node => {
+        const nodeParents = parents.get(node.id) || []
+        if (nodeParents.length === 0 && !roots.find(r => r.id === node.id)) {
+          roots.push(node)
+        }
       })
     }
     
-    roots.forEach(root => calculateDepth(root.id, 0))
+    // Calculate depth for each node using BFS for better handling of multiple parents
+    const depths = new Map()
+    const visited = new Set()
+    const queue = []
+    
+    // Initialize roots at depth 0
+    roots.forEach(root => {
+      depths.set(root.id, 0)
+      visited.add(root.id)
+      queue.push({ id: root.id, depth: 0 })
+    })
+    
+    // BFS to calculate depths
+    while (queue.length > 0) {
+      const { id, depth } = queue.shift()
+      const nodeChildren = children.get(id) || []
+      
+      nodeChildren.forEach(childId => {
+        if (!visited.has(childId)) {
+          visited.add(childId)
+          depths.set(childId, depth + 1)
+          queue.push({ id: childId, depth: depth + 1 })
+        } else {
+          // If already visited, use the minimum depth
+          const currentDepth = depths.get(childId) || 0
+          depths.set(childId, Math.min(currentDepth, depth + 1))
+        }
+      })
+    }
+    
+    // Set depth 0 for any unvisited nodes (orphans)
+    nodes.forEach(node => {
+      if (!depths.has(node.id)) {
+        depths.set(node.id, 0)
+      }
+    })
     
     // Group nodes by depth
     const nodesByDepth = new Map()
@@ -182,14 +264,15 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     })
     
     // Calculate positions with better distribution
-    const HORIZONTAL_SPACING = 300
-    const VERTICAL_SPACING = 200
+    const HORIZONTAL_SPACING = 250
+    const VERTICAL_SPACING = 180
     const START_Y = 80
     
-    // Calculate max depth to center the layout
+    // Calculate max depth and max nodes per depth for centering
     const depthValues = Array.from(depths.values())
     const maxDepth = depthValues.length > 0 ? Math.max(...depthValues) : 0
-    const centerX = depthValues.length > 0 ? (maxDepth * HORIZONTAL_SPACING) / 2 : 0
+    const maxNodesInDepth = Math.max(...Array.from(nodesByDepth.values()).map(arr => arr.length), 1)
+    const centerX = (maxNodesInDepth - 1) * HORIZONTAL_SPACING / 2
     
     const positionedNodes = nodes.map(node => {
       const depth = depths.get(node.id) || 0
@@ -231,40 +314,10 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
   const [nodesState, setNodes, onNodesChange] = useNodesState([])
   const [edgesState, setEdges, onEdgesChange] = useEdgesState([])
 
-  // Filter nodes based on filter criteria
+  // Filter nodes based on filter criteria - use shared filtering logic
   const filteredNodes = useMemo(() => {
-    if (!graphData?.nodes || !Array.isArray(graphData.nodes)) {
-      return []
-    }
-    
-    if (!filter) {
-      return graphData.nodes
-    }
-    
-    if (filter.type === 'has_issues') {
-      return graphData.nodes.filter(node => (node.issue_count || 0) > 0)
-    }
-    
-    if (filter.type === 'has_dependencies') {
-      // Show nodes that have outgoing edges (nodes that use other actions)
-      const nodesWithEdges = new Set()
-      if (graphData?.edges) {
-        graphData.edges.forEach(edge => {
-          nodesWithEdges.add(edge.source)
-        })
-      }
-      return graphData.nodes.filter(node => nodesWithEdges.has(node.id))
-    }
-    
-    if (filter.type === 'severity' && filter.severity) {
-      return graphData.nodes.filter(node => {
-        const issues = node.issues || []
-        return issues.some(issue => issue.severity === filter.severity)
-      })
-    }
-    
-    return graphData.nodes
-  }, [graphData?.nodes, graphData?.edges, filter])
+    return filterNodes(graphData, filter)
+  }, [graphData, filter])
   
   // Filter edges to only include edges between filtered nodes
   const filteredEdges = useMemo(() => {
@@ -272,12 +325,24 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
       return []
     }
     
+    // First, deduplicate edges - only keep unique source-target pairs
+    const edgeMap = new Map()
+    graphData.edges.forEach(edge => {
+      if (edge.source && edge.target) {
+        const edgeKey = `${edge.source}->${edge.target}`
+        if (!edgeMap.has(edgeKey)) {
+          edgeMap.set(edgeKey, edge)
+        }
+      }
+    })
+    const uniqueEdges = Array.from(edgeMap.values())
+    
     if (!filter) {
-      return graphData.edges
+      return uniqueEdges
     }
     
     const filteredNodeIds = new Set(filteredNodes.map(n => n.id))
-    return graphData.edges.filter(edge => 
+    return uniqueEdges.filter(edge =>
       filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
     )
   }, [graphData?.edges, filteredNodes, filter])
@@ -304,6 +369,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
           issues: node.issues || [],
           nodeType: node.type,
           nodeLabel: node.label,
+          originalId: node.id, // Keep original ID for reference
           onNodeClick: handleNodeClick,
         },
         draggable: false,
@@ -313,7 +379,29 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
       }
     })
     
-    return calculateLayout(baseNodes, filteredEdges, filter)
+    const positionedNodes = calculateLayout(baseNodes, filteredEdges, filter)
+    
+    // For dependency view, ensure duplicated nodes have correct data
+    if (filter?.type === 'has_dependencies') {
+      return positionedNodes.map(node => {
+        // If this is a duplicated node (has originalId), use original node data
+        if (node.originalId) {
+          const originalNode = baseNodes.find(n => n.id === node.originalId)
+          if (originalNode) {
+            return {
+              ...node,
+              data: {
+                ...originalNode.data,
+                nodeLabel: originalNode.data.label,
+              }
+            }
+          }
+        }
+        return node
+      })
+    }
+    
+    return positionedNodes
   }, [filteredNodes, filteredEdges, filter, handleNodeClick])
 
   const computedEdges = useMemo(() => {
@@ -321,37 +409,53 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
       return []
     }
     
-    // In dependency view, only show direct dependency edges (from node to its dependencies)
+    // Deduplicate edges one more time to be safe
+    const edgeMap = new Map()
+    filteredEdges.forEach(edge => {
+      if (edge.source && edge.target) {
+        const edgeKey = `${edge.source}-${edge.target}`
+        if (!edgeMap.has(edgeKey)) {
+          edgeMap.set(edgeKey, edge)
+        }
+      }
+    })
+    const uniqueEdges = Array.from(edgeMap.values())
+    
+    // In dependency view, show edges from each node to its duplicated dependencies
     if (filter?.type === 'has_dependencies') {
-      // Only show edges where source is a root node in a group and target is its dependency
-      const dependencyEdges = filteredEdges.filter(edge => {
-        // Check if this edge represents a direct dependency relationship
-        // (source node has target as a direct dependency)
-        return true // Show all edges in dependency view to show relationships
+      const dependencyEdges = []
+      
+      // For each edge, create an edge to the duplicated dependency node
+      // The duplicated node has ID: `${target}__from__${source}`
+      uniqueEdges.forEach(edge => {
+        if (edge.source && edge.target) {
+          const duplicatedTargetId = `${edge.target}__from__${edge.source}`
+          dependencyEdges.push({
+            id: `${edge.source}-${duplicatedTargetId}`,
+            source: edge.source,
+            target: duplicatedTargetId,
+            type: 'straight',
+            animated: false,
+            style: {
+              stroke: '#9ca3af',
+              strokeWidth: 2,
+              strokeOpacity: 0.6,
+            },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: '#9ca3af',
+              width: 16,
+              height: 16,
+            },
+          })
+        }
       })
       
-      return dependencyEdges.map((edge) => ({
-        id: `${edge.source}-${edge.target}`,
-        source: edge.source,
-        target: edge.target,
-        type: 'straight', // Use straight edges for cleaner dependency view
-        animated: false,
-        style: {
-          stroke: '#9ca3af',
-          strokeWidth: 2,
-          strokeOpacity: 0.6,
-        },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: '#9ca3af',
-          width: 16,
-          height: 16,
-        },
-      }))
+      return dependencyEdges
     }
     
     // For other views, show all edges
-    return filteredEdges.map((edge) => ({
+    return uniqueEdges.map((edge) => ({
       id: `${edge.source}-${edge.target}`,
       source: edge.source,
       target: edge.target,
@@ -407,7 +511,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     return () => window.removeEventListener('keydown', handleEscape)
   }, [selectedNode, onNodeSelect])
 
-      if (!graphData || !graphData.nodes || graphData.nodes.length === 0) {
+  if (!graphData || !graphData.nodes || graphData.nodes.length === 0) {
         return (
           <div className="action-graph">
             <div className="empty-state">
@@ -466,7 +570,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
         fitViewOptions={{ padding: 0.2, maxZoom: 1.5, duration: 500 }}
         attributionPosition="bottom-left"
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
-        key={filter ? JSON.stringify(filter) : 'no-filter'}
+        key={`graph-${filter ? JSON.stringify(filter) : 'no-filter'}-${computedEdges.length}-${computedNodes.length}`}
       >
         <Background color="#f9fafb" gap={16} />
         <Controls />

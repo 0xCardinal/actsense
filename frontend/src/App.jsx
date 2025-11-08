@@ -138,7 +138,8 @@ function App() {
       
       {selectedNode && (
         <NodeDetailsPanel 
-          node={selectedNode} 
+          node={selectedNode}
+          graphData={graphData}
           onClose={() => setSelectedNode(null)} 
         />
       )}

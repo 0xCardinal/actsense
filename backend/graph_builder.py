@@ -22,13 +22,16 @@ class GraphBuilder:
 
     def add_edge(self, source: str, target: str, edge_type: str = "uses"):
         """Add an edge to the graph."""
-        edge = {
-            "source": source,
-            "target": target,
-            "type": edge_type
-        }
-        if edge not in self.edges:
-            self.edges.append(edge)
+        # Check if edge already exists by comparing source and target
+        edge_key = (source, target)
+        existing_edge_keys = {(e["source"], e["target"]) for e in self.edges}
+        
+        if edge_key not in existing_edge_keys:
+            self.edges.append({
+                "source": source,
+                "target": target,
+                "type": edge_type
+            })
 
     def add_issues_to_node(self, node_id: str, issues: List[Dict[str, Any]]):
         """Add security issues to a node."""

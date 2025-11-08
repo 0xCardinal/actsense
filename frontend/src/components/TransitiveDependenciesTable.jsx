@@ -54,9 +54,7 @@ const AccordionItem = ({
       </div>
       {isExpanded ? (
         <div 
-          key={`content-${rowId}-${isExpanded}`}
           className="accordion-content"
-          style={{ display: 'block' }}
         >
           {row.path && Array.isArray(row.path) && row.path.length > 0 ? (
             <div className="dependency-chain">
@@ -105,7 +103,7 @@ AccordionItem.displayName = 'AccordionItem'
 function TransitiveDependenciesTable({ graphData, onNodeSelect, filter }) {
   const [expandedPaths, setExpandedPaths] = useState([])
   const expandedPathsRef = useRef(new Set()) // Keep ref in sync for fast lookups
-  const [forceUpdate, setForceUpdate] = useState(0)
+  const accordionRef = useRef(null)
   const graphDataRef = useRef(null)
   
   // Track when graphData actually changes (not just length)
@@ -120,8 +118,6 @@ function TransitiveDependenciesTable({ graphData, onNodeSelect, filter }) {
   // Keep ref in sync with state
   React.useEffect(() => {
     expandedPathsRef.current = new Set(expandedPaths)
-    // Force a re-render to ensure all components see the update
-    setForceUpdate(prev => prev + 1)
   }, [expandedPaths])
 
   // Build a map of node ID to node data
@@ -288,6 +284,10 @@ function TransitiveDependenciesTable({ graphData, onNodeSelect, filter }) {
   const togglePath = useCallback((pathId) => {
     const pathIdStr = String(pathId) // Ensure pathId is a string
     
+    // Save current scroll position before state update
+    const scrollContainer = accordionRef.current
+    const scrollTop = scrollContainer?.scrollTop || 0
+    
     // Use functional update
     setExpandedPaths(prev => {
       const isCurrentlyExpanded = prev.some(id => String(id) === pathIdStr)
@@ -296,6 +296,16 @@ function TransitiveDependenciesTable({ graphData, onNodeSelect, filter }) {
       return isCurrentlyExpanded 
         ? prev.filter(id => String(id) !== pathIdStr)
         : [...prev, pathIdStr]
+    })
+    
+    // Restore scroll position after DOM update
+    // Use double requestAnimationFrame to ensure it runs after React's render
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (scrollContainer) {
+          scrollContainer.scrollTop = scrollTop
+        }
+      })
     })
   }, [tableRows])
 
@@ -357,7 +367,7 @@ function TransitiveDependenciesTable({ graphData, onNodeSelect, filter }) {
           <p>No dependencies found</p>
         </div>
       ) : (
-        <div className="dependencies-accordion" key={`accordion-${forceUpdate}`}>
+        <div className="dependencies-accordion" ref={accordionRef}>
           {tableRows.map((row, index) => {
             // Use array directly to ensure React detects changes
             // Ensure both are strings for comparison
@@ -368,17 +378,17 @@ function TransitiveDependenciesTable({ graphData, onNodeSelect, filter }) {
             const isExpanded = isExpandedInState || isExpandedInRef
             
             return (
-                  <AccordionItem
-                    key={`${rowIdStr}-${isExpanded}-${forceUpdate}`}
-                    rowId={rowIdStr}
-                    row={row}
-                    isExpanded={isExpanded}
-                    onToggle={togglePath}
-                    onNodeClick={handleNodeClick}
-                    getNodeTypeIcon={getNodeTypeIconMemo}
-                    getSeverityColor={getSeverityColorMemo}
-                  />
-                )
+              <AccordionItem
+                key={rowIdStr}
+                rowId={rowIdStr}
+                row={row}
+                isExpanded={isExpanded}
+                onToggle={togglePath}
+                onNodeClick={handleNodeClick}
+                getNodeTypeIcon={getNodeTypeIconMemo}
+                getSeverityColor={getSeverityColorMemo}
+              />
+            )
           })}
         </div>
       )}

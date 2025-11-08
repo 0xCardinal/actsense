@@ -1,4 +1,5 @@
 import React from 'react'
+import { filterNodes } from '../utils/nodeFilters'
 import './NodesTable.css'
 
 function NodesTable({ graphData, filter, onNodeSelect }) {
@@ -30,39 +31,10 @@ function NodesTable({ graphData, filter, onNodeSelect }) {
     }
   }
 
-  // Filter nodes based on filter criteria
+  // Filter nodes based on filter criteria - use shared filtering logic
   const filteredNodes = React.useMemo(() => {
-    if (!graphData?.nodes || !Array.isArray(graphData.nodes)) {
-      return []
-    }
-    
-    if (!filter) {
-      return graphData.nodes
-    }
-    
-    if (filter.type === 'has_issues') {
-      return graphData.nodes.filter(node => (node.issue_count || 0) > 0)
-    }
-    
-    if (filter.type === 'has_dependencies') {
-      const nodesWithEdges = new Set()
-      if (graphData?.edges) {
-        graphData.edges.forEach(edge => {
-          nodesWithEdges.add(edge.source)
-        })
-      }
-      return graphData.nodes.filter(node => nodesWithEdges.has(node.id))
-    }
-    
-    if (filter.type === 'severity' && filter.severity) {
-      return graphData.nodes.filter(node => {
-        const issues = node.issues || []
-        return issues.some(issue => issue.severity === filter.severity)
-      })
-    }
-    
-    return graphData.nodes
-  }, [graphData?.nodes, graphData?.edges, filter])
+    return filterNodes(graphData, filter)
+  }, [graphData, filter])
 
   const handleRowClick = (node) => {
     if (onNodeSelect) {
