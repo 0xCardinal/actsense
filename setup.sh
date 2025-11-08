@@ -119,7 +119,7 @@ cd frontend || exit 1
 # Install npm dependencies
 if [ ! -d "node_modules" ]; then
     print_status "Installing npm dependencies (this may take a few minutes)..."
-    npm install --silent
+    npm install --ignore-scripts --silent
     
     if [ $? -ne 0 ]; then
         print_error "Failed to install npm dependencies"
