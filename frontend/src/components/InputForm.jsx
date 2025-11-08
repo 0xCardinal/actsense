@@ -120,9 +120,20 @@ function InputForm({ onAudit, loading }) {
         </div>
       )}
 
-      <button type="submit" disabled={loading} className="submit-button">
-        {loading ? 'Auditing...' : 'Audit'}
-      </button>
+          <button type="submit" disabled={loading} className="submit-button">
+            {loading ? (
+              <span className="loading-container">
+                <span className="loading-dots">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </span>
+                <span className="loading-text">Auditing</span>
+              </span>
+            ) : (
+              'Audit'
+            )}
+          </button>
     </form>
   )
 }

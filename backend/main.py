@@ -59,27 +59,90 @@ async def resolve_action_dependencies(
     visited.add(action_ref)
     
     # Parse action reference
-    owner, repo, ref = client.parse_action_reference(action_ref)
+    owner, repo, ref, subdir = client.parse_action_reference(action_ref)
     if not owner or not repo:
         return
     
+    # Skip workflow files - they shouldn't be treated as actions
+    if subdir and (".github/workflows" in subdir or subdir.endswith((".yml", ".yaml"))):
+        return
+    
     # Add node to graph
+    display_name = f"{owner}/{repo}"
+    if subdir:
+        display_name = f"{display_name}/{subdir}"
+    display_name = f"{display_name}@{ref}"
+    
     graph.add_node(
         action_ref,
-        f"{owner}/{repo}@{ref}",
+        display_name,
         "action",
-        {"owner": owner, "repo": repo, "ref": ref}
+        {"owner": owner, "repo": repo, "ref": ref, "subdir": subdir}
     )
     
-    # Audit the action
-    issues = auditor.audit_action(action_ref)
-    graph.add_issues_to_node(action_ref, issues)
-    
-    # Get action metadata
+    # Get action metadata first (needed for comprehensive auditing)
+    action_yml = None
+    action_content = None
+    js_action_code = None
+    dockerfile_content = None
     try:
-        action_metadata = await client.get_action_metadata(owner, repo, ref)
+        action_metadata = await client.get_action_metadata(owner, repo, ref, subdir)
         if action_metadata:
             action_yml = parser.parse_action_yml(action_metadata["content"])
+            action_content = action_metadata["content"]
+            
+            runs = action_yml.get("runs", {})
+            
+            # For JavaScript actions, try to get the main entry point code
+            if runs.get("using") in ["node12", "node16", "node20"]:
+                main_file = runs.get("main", "index.js")
+                if subdir:
+                    main_path = f"{subdir.rstrip('/')}/{main_file}"
+                else:
+                    main_path = main_file
+                
+                try:
+                    js_action_code = await client.get_file_content(owner, repo, main_path)
+                except Exception:
+                    # If main file doesn't exist, try dist/index.js or index.js in root
+                    for alt_path in [f"{subdir.rstrip('/')}/dist/index.js" if subdir else "dist/index.js", "index.js"]:
+                        try:
+                            js_action_code = await client.get_file_content(owner, repo, alt_path)
+                            break
+                        except Exception:
+                            continue
+            
+            # For Docker actions, try to get Dockerfile content if Dockerfile path is specified
+            elif runs.get("using") == "docker":
+                dockerfile_path = runs.get("image", "")
+                if dockerfile_path and not dockerfile_path.startswith("docker://") and ":" not in dockerfile_path:
+                    # This is likely a Dockerfile path
+                    if subdir:
+                        dockerfile_full_path = f"{subdir.rstrip('/')}/{dockerfile_path}"
+                    else:
+                        dockerfile_full_path = dockerfile_path
+                    
+                    try:
+                        dockerfile_content = await client.get_file_content(owner, repo, dockerfile_full_path)
+                    except Exception:
+                        # Try common Dockerfile names
+                        for alt_name in ["Dockerfile", "dockerfile", f"{subdir.rstrip('/')}/Dockerfile" if subdir else "Dockerfile"]:
+                            try:
+                                dockerfile_content = await client.get_file_content(owner, repo, alt_name)
+                                break
+                            except Exception:
+                                continue
+    except Exception as e:
+        # Silently skip if action.yml doesn't exist (e.g., for Docker-only actions)
+        pass
+    
+    # Audit the action (with metadata if available)
+    issues = auditor.audit_action(action_ref, action_yml, js_action_code, dockerfile_content)
+    graph.add_issues_to_node(action_ref, issues)
+    
+    # Resolve dependencies if action_yml is available
+    if action_yml:
+        try:
             dependencies = parser.extract_action_dependencies(action_yml)
             
             for dep in dependencies:
@@ -87,8 +150,9 @@ async def resolve_action_dependencies(
                 await resolve_action_dependencies(
                     client, dep, graph, visited, depth + 1, max_depth
                 )
-    except Exception as e:
-        print(f"Error resolving {action_ref}: {e}")
+        except Exception as e:
+            # Silently skip if there's an error resolving dependencies
+            pass
 
 
 async def audit_repository(

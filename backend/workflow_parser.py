@@ -25,6 +25,9 @@ class WorkflowParser:
             # Skip local paths, docker images, and URLs
             if value.startswith(("./", "docker://", "http://", "https://")):
                 return False
+            # Skip workflow file paths
+            if ".github/workflows" in value or value.endswith((".yml", ".yaml")):
+                return False
             # Action references typically have owner/repo@ref format
             if "/" in value and "@" in value:
                 parts = value.split("@")

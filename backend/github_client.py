@@ -69,18 +69,31 @@ class GitHubClient:
                     )
             raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {str(e)}")
 
-    async def get_action_metadata(self, owner: str, repo: str, ref: str = "main") -> Optional[Dict[str, Any]]:
-        """Get action.yml or action.yaml from a repository."""
+    async def get_action_metadata(self, owner: str, repo: str, ref: str = "main", subdir: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get action.yml or action.yaml from a repository, optionally from a subdirectory."""
+        # Construct the path to action.yml
+        if subdir:
+            # For subdirectory actions, look in the subdirectory
+            base_path = subdir.rstrip("/")
+        else:
+            # For root actions, look in the root
+            base_path = ""
+        
         for filename in ["action.yml", "action.yaml"]:
             try:
-                content = await self.get_file_content(owner, repo, filename)
-                return {"content": content, "path": filename}
-            except httpx.HTTPStatusError:
+                if base_path:
+                    file_path = f"{base_path}/{filename}"
+                else:
+                    file_path = filename
+                content = await self.get_file_content(owner, repo, file_path)
+                return {"content": content, "path": file_path}
+            except (httpx.HTTPStatusError, ValueError, HTTPException):
+                # 404 or other errors - try next filename
                 continue
         return None
 
     def parse_action_reference(self, action_ref: str) -> tuple:
-        """Parse action reference like 'owner/repo@v1' or 'owner/repo@ref'."""
+        """Parse action reference like 'owner/repo@v1', 'owner/repo/path@v1', or 'owner/repo@ref'."""
         if "@" in action_ref:
             repo_part, ref = action_ref.rsplit("@", 1)
         else:
@@ -90,6 +103,12 @@ class GitHubClient:
         if "/" in repo_part:
             parts = repo_part.split("/", 1)
             if len(parts) == 2:
-                return parts[0], parts[1], ref
-        return None, None, ref
+                owner = parts[0]
+                repo_path = parts[1]
+                # Split repo and optional subdirectory path
+                repo_path_parts = repo_path.split("/", 1)
+                repo = repo_path_parts[0]
+                subdir = repo_path_parts[1] if len(repo_path_parts) > 1 else None
+                return owner, repo, ref, subdir
+        return None, None, ref, None
 
