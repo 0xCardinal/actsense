@@ -7,6 +7,7 @@ import ReactFlow, {
   useEdgesState,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import dagre from 'dagre'
 import NodeDetailsPanel from './NodeDetailsPanel'
 import CustomNode from './CustomNode'
 import { filterNodes } from '../utils/nodeFilters'
@@ -18,6 +19,7 @@ const nodeTypes = {
 
 function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
   const [selectedNode, setSelectedNode] = useState(null)
+  const [hoveredNodeId, setHoveredNodeId] = useState(null)
 
   const getSeverityColor = (severity) => {
     switch (severity) {
@@ -120,53 +122,103 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
       })
     
     // Layout constants
-    const GROUP_HORIZONTAL_SPACING = 350
-    const GROUP_VERTICAL_SPACING = 200
-    const NODE_VERTICAL_SPACING = 100
+    const GROUP_HORIZONTAL_SPACING = 400
     const START_X = 100
     const START_Y = 100
+    const nodeWidth = 200
+    const nodeHeight = 60
     
-    // Position nodes in groups - each node gets its own column
+    // Position nodes in groups using dagre for each group
     const positionedNodes = []
     
     nodeGroups.forEach((group, groupIndex) => {
+      // Create a dagre graph for this group
+      const g = new dagre.graphlib.Graph()
+      g.setDefaultEdgeLabel(() => ({}))
+      g.setGraph({ 
+        rankdir: 'LR', // Left to right
+        nodesep: 60,   // Vertical spacing between nodes (reduced)
+        ranksep: 100,  // Horizontal spacing between ranks (reduced)
+        align: 'UL',   // Align nodes to upper left
+        acyclicer: 'greedy',
+        ranker: 'tight-tree'
+      })
+
+      // Add root node
+      g.setNode(group.root.id, { 
+        width: nodeWidth, 
+        height: nodeHeight
+      })
+
+      // Add dependency nodes
+      group.dependencies.forEach(dep => {
+        g.setNode(dep.id, { 
+          width: nodeWidth, 
+          height: nodeHeight
+        })
+        // Add edge from root to dependency
+        g.setEdge(group.root.id, dep.id)
+      })
+
+      // Run dagre layout for this group
+      dagre.layout(g)
+
+      // Calculate group offset
       const groupX = START_X + groupIndex * GROUP_HORIZONTAL_SPACING
-      let currentY = START_Y
       
       // Position root node
+      const rootDagreNode = g.node(group.root.id)
       positionedNodes.push({
         ...group.root,
-        position: { x: groupX, y: currentY }
+        position: {
+          x: groupX + rootDagreNode.x - nodeWidth / 2,
+          y: START_Y + rootDagreNode.y - nodeHeight / 2
+        }
       })
-      
-      // Position dependencies below root
-      if (group.dependencies.length > 0) {
-        currentY += GROUP_VERTICAL_SPACING
-        
-        group.dependencies.forEach((dep, depIndex) => {
-          positionedNodes.push({
-            ...dep,
-            position: { x: groupX, y: currentY + depIndex * NODE_VERTICAL_SPACING }
-          })
+
+      // Position dependency nodes
+      group.dependencies.forEach(dep => {
+        const depDagreNode = g.node(dep.id)
+        positionedNodes.push({
+          ...dep,
+          position: {
+            x: groupX + depDagreNode.x - nodeWidth / 2,
+            y: START_Y + depDagreNode.y - nodeHeight / 2
+          }
         })
-      }
+      })
     })
     
     return positionedNodes
   }
   
-  // Hierarchical layout for non-dependency views
+  // Hierarchical layout using dagre to minimize edge crossings
   const calculateHierarchicalLayout = (nodes, edges) => {
-    // Build adjacency lists (deduplicated)
-    const children = new Map()
-    const parents = new Map()
+    // Create a new dagre graph
+    const g = new dagre.graphlib.Graph()
+    g.setDefaultEdgeLabel(() => ({}))
+      g.setGraph({ 
+        rankdir: 'LR', // Left to right
+        nodesep: 80,   // Vertical spacing between nodes (reduced)
+        ranksep: 120, // Horizontal spacing between ranks (reduced)
+        align: 'UL',   // Align nodes to upper left
+        acyclicer: 'greedy', // Handle cycles
+        ranker: 'tight-tree' // Use tight-tree ranking for better clustering
+      })
+
+    // Add nodes to dagre graph with estimated width/height
+    // ReactFlow nodes are typically around 200px wide and 60px tall
+    const nodeWidth = 200
+    const nodeHeight = 60
     
     nodes.forEach(node => {
-      children.set(node.id, [])
-      parents.set(node.id, [])
+      g.setNode(node.id, { 
+        width: nodeWidth, 
+        height: nodeHeight
+      })
     })
-    
-    // Deduplicate edges when building adjacency lists
+
+    // Deduplicate edges and add to dagre graph
     const edgeSet = new Set()
     if (edges && edges.length > 0) {
       edges.forEach(edge => {
@@ -174,127 +226,101 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
           const edgeKey = `${edge.source}->${edge.target}`
           if (!edgeSet.has(edgeKey)) {
             edgeSet.add(edgeKey)
-            children.get(edge.source)?.push(edge.target)
-            parents.get(edge.target)?.push(edge.source)
+            g.setEdge(edge.source, edge.target)
           }
         }
       })
     }
-    
-    // Find root nodes (nodes with no parents, or repositories/workflows)
-    const roots = []
-    
-    // First, prioritize repositories and workflows as roots
-    nodes.forEach(node => {
-      if (node.type === 'repository') {
-        roots.push(node)
-      }
-    })
-    
-    // Then add workflows that aren't already included
-    nodes.forEach(node => {
-      if (node.type === 'workflow' && !roots.find(r => r.id === node.id)) {
-        const nodeParents = parents.get(node.id) || []
-        // Only add if it's a direct child of a repository or has no parents
-        const hasRepoParent = nodeParents.some(parentId => {
-          const parentNode = nodes.find(n => n.id === parentId)
-          return parentNode && parentNode.type === 'repository'
-        })
-        if (hasRepoParent || nodeParents.length === 0) {
-          roots.push(node)
-        }
-      }
-    })
-    
-    // Finally, add any nodes with no parents that aren't already included
-    if (roots.length === 0) {
-      nodes.forEach(node => {
-        const nodeParents = parents.get(node.id) || []
-        if (nodeParents.length === 0 && !roots.find(r => r.id === node.id)) {
-          roots.push(node)
-        }
-      })
-    }
-    
-    // Calculate depth for each node using BFS for better handling of multiple parents
-    const depths = new Map()
-    const visited = new Set()
-    const queue = []
-    
-    // Initialize roots at depth 0
-    roots.forEach(root => {
-      depths.set(root.id, 0)
-      visited.add(root.id)
-      queue.push({ id: root.id, depth: 0 })
-    })
-    
-    // BFS to calculate depths
-    while (queue.length > 0) {
-      const { id, depth } = queue.shift()
-      const nodeChildren = children.get(id) || []
-      
-      nodeChildren.forEach(childId => {
-        if (!visited.has(childId)) {
-          visited.add(childId)
-          depths.set(childId, depth + 1)
-          queue.push({ id: childId, depth: depth + 1 })
-        } else {
-          // If already visited, use the minimum depth
-          const currentDepth = depths.get(childId) || 0
-          depths.set(childId, Math.min(currentDepth, depth + 1))
-        }
-      })
-    }
-    
-    // Set depth 0 for any unvisited nodes (orphans)
-    nodes.forEach(node => {
-      if (!depths.has(node.id)) {
-        depths.set(node.id, 0)
-      }
-    })
-    
-    // Group nodes by depth
-    const nodesByDepth = new Map()
-    nodes.forEach(node => {
-      const depth = depths.get(node.id) || 0
-      if (!nodesByDepth.has(depth)) {
-        nodesByDepth.set(depth, [])
-      }
-      nodesByDepth.get(depth).push(node)
-    })
-    
-    // Calculate positions with better distribution
-    const HORIZONTAL_SPACING = 250
-    const VERTICAL_SPACING = 180
-    const START_Y = 80
-    
-    // Calculate max depth and max nodes per depth for centering
-    const depthValues = Array.from(depths.values())
-    const maxDepth = depthValues.length > 0 ? Math.max(...depthValues) : 0
-    const maxNodesInDepth = Math.max(...Array.from(nodesByDepth.values()).map(arr => arr.length), 1)
-    const centerX = (maxNodesInDepth - 1) * HORIZONTAL_SPACING / 2
-    
+
+    // Run dagre layout algorithm
+    dagre.layout(g)
+
+    // Extract positions from dagre and map back to nodes
     const positionedNodes = nodes.map(node => {
-      const depth = depths.get(node.id) || 0
-      const depthNodes = nodesByDepth.get(depth) || []
-      const indexInDepth = depthNodes.findIndex(n => n.id === node.id)
-      const totalInDepth = depthNodes.length
-      
-      // Center nodes horizontally within their depth
-      const totalWidth = (totalInDepth - 1) * HORIZONTAL_SPACING
-      const startX = centerX - totalWidth / 2
-      
-      const x = startX + indexInDepth * HORIZONTAL_SPACING
-      const y = START_Y + depth * VERTICAL_SPACING
-      
+      const dagreNode = g.node(node.id)
       return {
         ...node,
-        position: { x, y }
+        position: {
+          x: dagreNode.x - nodeWidth / 2, // Center the node
+          y: dagreNode.y - nodeHeight / 2
+        }
+      }
+    })
+
+    return positionedNodes
+  }
+
+  // Calculate path from root to a given node (including all ancestors and descendants)
+  const calculatePathToNode = useCallback((nodeId, nodes, edges) => {
+    if (!nodeId || !nodes || !edges) return new Set()
+    
+    // Build parent map (reverse of edges) and children map
+    const parents = new Map()
+    const children = new Map()
+    edges.forEach(edge => {
+      if (edge.source && edge.target) {
+        // Build parent map
+        if (!parents.has(edge.target)) {
+          parents.set(edge.target, [])
+        }
+        parents.get(edge.target).push(edge.source)
+        
+        // Build children map
+        if (!children.has(edge.source)) {
+          children.set(edge.source, [])
+        }
+        children.get(edge.source).push(edge.target)
       }
     })
     
-    return positionedNodes
-  }
+    // Find all ancestors using BFS
+    const pathNodes = new Set([nodeId])
+    const queue = [nodeId]
+    const visited = new Set([nodeId])
+    
+    // First, find all ancestors (parents)
+    while (queue.length > 0) {
+      const currentId = queue.shift()
+      const nodeParents = parents.get(currentId) || []
+      
+      nodeParents.forEach(parentId => {
+        if (!visited.has(parentId)) {
+          visited.add(parentId)
+          pathNodes.add(parentId)
+          queue.push(parentId)
+        }
+      })
+    }
+    
+    // Then, find all descendants (children)
+    const childrenQueue = [nodeId]
+    const childrenVisited = new Set([nodeId])
+    
+    while (childrenQueue.length > 0) {
+      const currentId = childrenQueue.shift()
+      const nodeChildren = children.get(currentId) || []
+      
+      nodeChildren.forEach(childId => {
+        if (!childrenVisited.has(childId)) {
+          childrenVisited.add(childId)
+          pathNodes.add(childId)
+          childrenQueue.push(childId)
+        }
+      })
+    }
+    
+    return pathNodes
+  }, [])
+
+  // Handle node hover
+  const handleNodeHover = useCallback((nodeId) => {
+    setHoveredNodeId(nodeId)
+  }, [])
+
+  // Handle node unhover
+  const handleNodeUnhover = useCallback(() => {
+    setHoveredNodeId(null)
+  }, [])
 
   // Handle node click - using custom node component
   const handleNodeClick = useCallback((nodeData) => {
@@ -369,8 +395,11 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
           issues: node.issues || [],
           nodeType: node.type,
           nodeLabel: node.label,
-          originalId: node.id, // Keep original ID for reference
+          nodeId: node.id, // Pass node ID for hover handler
+          originalId: node.id, // Keep reference to original
           onNodeClick: handleNodeClick,
+          onNodeHover: handleNodeHover,
+          onNodeUnhover: handleNodeUnhover,
         },
         draggable: false,
         selectable: true,
@@ -393,6 +422,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
               data: {
                 ...originalNode.data,
                 nodeLabel: originalNode.data.label,
+                nodeId: node.id, // Use the duplicated node's ID for hover
               }
             }
           }
@@ -402,7 +432,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     }
     
     return positionedNodes
-  }, [filteredNodes, filteredEdges, filter, handleNodeClick])
+  }, [filteredNodes, filteredEdges, filter, handleNodeClick, handleNodeHover, handleNodeUnhover])
 
   const computedEdges = useMemo(() => {
     if (filteredEdges.length === 0) {
@@ -434,7 +464,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
             id: `${edge.source}-${duplicatedTargetId}`,
             source: edge.source,
             target: duplicatedTargetId,
-            type: 'straight',
+            type: 'smoothstep',
             animated: false,
             style: {
               stroke: '#9ca3af',
@@ -475,27 +505,54 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     }))
   }, [filteredEdges, filter])
 
-  // Update state when computed values change with smooth transition
+  // Calculate highlighted path nodes (after computedEdges is defined)
+  const highlightedPathNodes = useMemo(() => {
+    if (!hoveredNodeId || !computedNodes || !computedEdges) return new Set()
+    // Use computedEdges which includes the correct edge structure for dependency view
+    return calculatePathToNode(hoveredNodeId, computedNodes, computedEdges)
+  }, [hoveredNodeId, computedNodes, computedEdges, calculatePathToNode])
+
+  // Update state when computed values change with smooth transition and highlighting
   useEffect(() => {
-    // Add transition class for smooth animation
-    setNodes(computedNodes.map(node => ({
-      ...node,
-      style: {
-        ...node.style,
-        transition: 'opacity 0.3s ease, transform 0.3s ease',
+    // Add transition class and highlighting for nodes
+    setNodes(computedNodes.map(node => {
+      const isHighlighted = highlightedPathNodes.has(node.id)
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          isHighlighted: isHighlighted,
+        },
+        style: {
+          ...node.style,
+          transition: 'opacity 0.3s ease, transform 0.3s ease',
+          opacity: isHighlighted ? 1 : (hoveredNodeId ? 0.3 : 1),
+          zIndex: isHighlighted ? 20 : 10, // Always above edges (edges default to 0)
+        }
       }
-    })))
-  }, [computedNodes, setNodes])
+    }))
+  }, [computedNodes, highlightedPathNodes, hoveredNodeId, setNodes])
 
   useEffect(() => {
-    setEdges(computedEdges.map(edge => ({
-      ...edge,
-      style: {
-        ...edge.style,
-        transition: 'opacity 0.3s ease',
+    setEdges(computedEdges.map(edge => {
+      const isHighlighted = highlightedPathNodes.has(edge.source) && highlightedPathNodes.has(edge.target)
+      return {
+        ...edge,
+        style: {
+          ...edge.style,
+          transition: 'opacity 0.3s ease, stroke-width 0.3s ease',
+          stroke: isHighlighted ? '#3b82f6' : '#9ca3af',
+          strokeWidth: isHighlighted ? 3 : (edge.style?.strokeWidth || 1.5),
+          strokeOpacity: isHighlighted ? 1 : (hoveredNodeId ? 0.2 : (edge.style?.strokeOpacity || 0.5)),
+          zIndex: 0, // Edges should be below nodes
+        },
+        markerEnd: {
+          ...edge.markerEnd,
+          color: isHighlighted ? '#3b82f6' : '#9ca3af',
+        }
       }
-    })))
-  }, [computedEdges, setEdges])
+    }))
+  }, [computedEdges, highlightedPathNodes, hoveredNodeId, setEdges])
   
   // Auto-fit view when filter changes - ReactFlow will handle this via fitView prop
   // The key prop on ReactFlow will force a re-render when filter changes
@@ -570,6 +627,10 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
         fitViewOptions={{ padding: 0.2, maxZoom: 1.5, duration: 500 }}
         attributionPosition="bottom-left"
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+        defaultEdgeOptions={{
+          type: 'smoothstep',
+          animated: false,
+        }}
         key={`graph-${filter ? JSON.stringify(filter) : 'no-filter'}-${computedEdges.length}-${computedNodes.length}`}
       >
         <Background color="#f9fafb" gap={16} />

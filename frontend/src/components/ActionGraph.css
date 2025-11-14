@@ -13,6 +13,8 @@
 .custom-node {
   cursor: pointer !important;
   transition: all 0.2s ease;
+  position: relative;
+  z-index: 10 !important; /* Ensure nodes are above edges */
 }
 
 .custom-node:hover {
