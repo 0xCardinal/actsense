@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import './Statistics.css'
 
-function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode }) {
+function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode, currentFilter }) {
   const [viewMode, setViewMode] = useState(currentViewMode || 'graph') // 'graph' or 'table'
   
   // Sync local state with prop
@@ -10,6 +10,9 @@ function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode })
       setViewMode(currentViewMode)
     }
   }, [currentViewMode])
+
+  // Check if current filter requires table view (dependencies or security issues)
+  const requiresTableView = currentFilter?.type === 'has_dependencies' || currentFilter?.type === 'has_issues'
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'critical':
@@ -33,6 +36,8 @@ function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode })
           className="stat-item clickable" 
           onClick={() => {
             onFilterChange && onFilterChange(null)
+            // Reset to graph view when clearing filter
+            onViewModeChange && onViewModeChange('graph')
           }}
           title="Click to view nodes"
         >
@@ -43,6 +48,8 @@ function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode })
           className="stat-item clickable"
           onClick={() => {
             onFilterChange && onFilterChange({ type: 'has_dependencies' })
+            // Automatically switch to table view for dependencies
+            onViewModeChange && onViewModeChange('table')
           }}
           title="Click to view dependencies"
         >
@@ -53,6 +60,8 @@ function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode })
           className="stat-item clickable"
           onClick={() => {
             onFilterChange && onFilterChange({ type: 'has_issues' })
+            // Automatically switch to table view for security issues
+            onViewModeChange && onViewModeChange('table')
           }}
           title="Click to view security issues"
         >
@@ -65,18 +74,26 @@ function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode })
         <button
           className={(currentViewMode || viewMode) === 'graph' ? 'active' : ''}
           onClick={() => {
-            setViewMode('graph')
-            onViewModeChange && onViewModeChange('graph')
+            if (!requiresTableView) {
+              setViewMode('graph')
+              onViewModeChange && onViewModeChange('graph')
+            }
           }}
+          disabled={requiresTableView}
+          style={{ opacity: requiresTableView ? 0.5 : 1, cursor: requiresTableView ? 'not-allowed' : 'pointer' }}
         >
           Graph View
         </button>
         <button
           className={(currentViewMode || viewMode) === 'table' ? 'active' : ''}
           onClick={() => {
-            setViewMode('table')
-            onViewModeChange && onViewModeChange('table')
+            if (!requiresTableView) {
+              setViewMode('table')
+              onViewModeChange && onViewModeChange('table')
+            }
           }}
+          disabled={requiresTableView}
+          style={{ opacity: requiresTableView ? 0.5 : 1, cursor: requiresTableView ? 'not-allowed' : 'pointer' }}
         >
           Table View
         </button>

@@ -1,6 +1,6 @@
 """Parse GitHub Actions workflows and action.yml files."""
 import yaml
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import re
 
 
@@ -9,9 +9,50 @@ class WorkflowParser:
     def parse_workflow(content: str) -> Dict[str, Any]:
         """Parse a workflow YAML file."""
         try:
-            return yaml.safe_load(content) or {}
+            parsed = yaml.safe_load(content)
+            # Ensure we return a dict, not a string or other type
+            if isinstance(parsed, dict):
+                return parsed
+            elif parsed is None:
+                return {}
+            else:
+                # If YAML parsed to a non-dict type (string, list, etc.), return empty dict
+                return {}
         except yaml.YAMLError as e:
             return {"error": str(e)}
+    
+    @staticmethod
+    def find_line_number(content: str, search_pattern: str, context: Optional[str] = None) -> Optional[int]:
+        """Find the line number where a pattern appears in the content."""
+        lines = content.split('\n')
+        for i, line in enumerate(lines, 1):
+            if re.search(search_pattern, line, re.IGNORECASE):
+                # If context is provided, verify it's in the same area
+                if context:
+                    # Check surrounding lines for context
+                    start = max(0, i - 3)
+                    end = min(len(lines), i + 3)
+                    context_lines = '\n'.join(lines[start:end])
+                    if context.lower() in context_lines.lower():
+                        return i
+                else:
+                    return i
+        return None
+    
+    @staticmethod
+    def find_key_line_number(content: str, key_path: str) -> Optional[int]:
+        """Find the line number for a YAML key path (e.g., 'jobs.build.steps.0.uses')."""
+        lines = content.split('\n')
+        path_parts = key_path.split('.')
+        
+        # Simple approach: search for the key in the content
+        # This is approximate but should work for most cases
+        for i, line in enumerate(lines, 1):
+            # Check if this line contains the last part of the path
+            if path_parts[-1] in line and ':' in line:
+                return i
+        
+        return None
 
     @staticmethod
     def extract_actions(workflow: Dict[str, Any]) -> List[str]:

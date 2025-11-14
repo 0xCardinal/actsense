@@ -183,8 +183,12 @@ async def audit_repository(
                     content = cloner.get_file_content(clone_path, workflow_file["path"])
                     workflow = parser.parse_workflow(content)
                     
-                    # Audit workflow
-                    workflow_issues = auditor.audit_workflow(workflow)
+                    # Skip if workflow is not a dict or has an error
+                    if not isinstance(workflow, dict) or "error" in workflow:
+                        continue
+                    
+                    # Audit workflow with content for line number tracking
+                    workflow_issues = auditor.audit_workflow(workflow, content=content)
                     workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
                     graph.add_node(
                         workflow_node_id,
@@ -216,8 +220,12 @@ async def audit_repository(
                     content = await client.get_file_content(owner, repo, workflow_file["path"])
                     workflow = parser.parse_workflow(content)
                     
-                    # Audit workflow
-                    workflow_issues = auditor.audit_workflow(workflow)
+                    # Skip if workflow is not a dict or has an error
+                    if not isinstance(workflow, dict) or "error" in workflow:
+                        continue
+                    
+                    # Audit workflow with content for line number tracking
+                    workflow_issues = auditor.audit_workflow(workflow, content=content)
                     workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
                     graph.add_node(
                         workflow_node_id,

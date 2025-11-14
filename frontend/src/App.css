@@ -40,7 +40,14 @@
   font-size: 1.75rem;
   font-weight: 600;
   letter-spacing: -0.025em;
-  font-family: 'Inter', sans-serif;
+  font-family: "Stack Sans Notch", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar-header h1:hover {
+  opacity: 0.7;
 }
 
 .sidebar-header p {
@@ -67,6 +74,7 @@
 
 .empty-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
@@ -74,6 +82,26 @@
   text-align: center;
   padding: 3rem;
   min-height: 400px;
+}
+
+.empty-state .logo-text {
+  color: #111827;
+  margin: 0 0 1.5rem 0;
+  font-size: 3rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  font-family: "Stack Sans Notch", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  background: #d1d1d1;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  transition: opacity 0.2s ease;
+}
+
+.empty-state .logo-text:hover {
+  opacity: 0.7;
 }
 
 .empty-state code {

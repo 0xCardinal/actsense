@@ -1,15 +1,51 @@
-import React, { useState } from 'react'
+import React, { useState, useImperativeHandle, forwardRef } from 'react'
 import './InputForm.css'
 
-function InputForm({ onAudit, loading }) {
-  const [repository, setRepository] = useState('')
-  const [action, setAction] = useState('')
+const InputForm = forwardRef(({ onAudit, loading }, ref) => {
+  const [input, setInput] = useState('')
   const [githubToken, setGithubToken] = useState('')
-  const [inputType, setInputType] = useState('repository')
   const [useClone, setUseClone] = useState(false)
+
+  // Detect if input is an action or repository
+  const detectInputType = (value) => {
+    if (!value || !value.trim()) {
+      return 'repository' // Default to repository
+    }
+    
+    const trimmed = value.trim()
+    
+    // Check if it's an action reference (has @ symbol and owner/repo@ref format)
+    if (trimmed.includes('@')) {
+      const parts = trimmed.split('@')
+      if (parts.length === 2 && parts[0].includes('/')) {
+        // Check if it's not a GitHub URL
+        if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+          return 'action'
+        }
+      }
+    }
+    
+    // Default to repository
+    return 'repository'
+  }
+
+  // Expose setRepository function to parent via ref
+  useImperativeHandle(ref, () => ({
+    setRepository: (value) => {
+      setInput(value)
+    }
+  }))
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    
+    if (!input.trim()) {
+      alert('Please enter a repository or action reference')
+      return
+    }
+    
+    const inputType = detectInputType(input)
+    const trimmedInput = input.trim()
     
     const data = {
       github_token: githubToken || undefined,
@@ -17,75 +53,36 @@ function InputForm({ onAudit, loading }) {
     }
     
     if (inputType === 'repository') {
-      if (!repository.trim()) {
-        alert('Please enter a repository')
-        return
-      }
-      data.repository = repository.trim()
+      data.repository = trimmedInput
     } else {
-      if (!action.trim()) {
-        alert('Please enter an action reference')
-        return
-      }
-      data.action = action.trim()
+      data.action = trimmedInput
     }
     
     onAudit(data)
   }
 
+  const inputType = detectInputType(input)
+  const placeholder = inputType === 'action' 
+    ? 'owner/repo@v1 or owner/repo@main' 
+    : 'owner/repo or https://github.com/owner/repo'
+  const example = inputType === 'action'
+    ? 'Example: actions/checkout@v3'
+    : 'Example: actions/checkout or microsoft/vscode'
+
   return (
     <form className="input-form" onSubmit={handleSubmit}>
       <div className="form-group">
-        <label>Input Type</label>
-        <div className="radio-group">
-          <label>
-            <input
-              type="radio"
-              value="repository"
-              checked={inputType === 'repository'}
-              onChange={(e) => setInputType(e.target.value)}
-            />
-            Repository
-          </label>
-          <label>
-            <input
-              type="radio"
-              value="action"
-              checked={inputType === 'action'}
-              onChange={(e) => setInputType(e.target.value)}
-            />
-            Action
-          </label>
-        </div>
+        <label htmlFor="input">Repository or Action</label>
+        <input
+          id="input"
+          type="text"
+          placeholder={placeholder}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={loading}
+        />
+        <small>{example}</small>
       </div>
-
-      {inputType === 'repository' ? (
-        <div className="form-group">
-          <label htmlFor="repository">Repository</label>
-          <input
-            id="repository"
-            type="text"
-            placeholder="owner/repo or https://github.com/owner/repo"
-            value={repository}
-            onChange={(e) => setRepository(e.target.value)}
-            disabled={loading}
-          />
-          <small>Example: actions/checkout or microsoft/vscode</small>
-        </div>
-      ) : (
-        <div className="form-group">
-          <label htmlFor="action">Action Reference</label>
-          <input
-            id="action"
-            type="text"
-            placeholder="owner/repo@v1 or owner/repo@main"
-            value={action}
-            onChange={(e) => setAction(e.target.value)}
-            disabled={loading}
-          />
-          <small>Example: actions/checkout@v3</small>
-        </div>
-      )}
 
       <div className="form-group">
         <label htmlFor="token">GitHub Token (Recommended)</label>
@@ -136,7 +133,9 @@ function InputForm({ onAudit, loading }) {
           </button>
     </form>
   )
-}
+})
+
+InputForm.displayName = 'InputForm'
 
 export default InputForm
 

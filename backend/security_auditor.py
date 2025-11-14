@@ -924,66 +924,217 @@ class SecurityAuditor:
         return issues
 
     @staticmethod
-    def audit_workflow(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _find_line_number(content: str, search_text: str, context: Optional[str] = None) -> Optional[int]:
+        """Helper to find line number in content."""
+        if not content:
+            return None
+        lines = content.split('\n')
+        for i, line in enumerate(lines, 1):
+            if search_text.lower() in line.lower():
+                if context:
+                    # Check surrounding lines for context
+                    start = max(0, i - 5)
+                    end = min(len(lines), i + 5)
+                    context_area = '\n'.join(lines[start:end]).lower()
+                    if context.lower() in context_area:
+                        return i
+                else:
+                    return i
+        return None
+    
+    @staticmethod
+    def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Audit a workflow file for security issues."""
         issues = []
         
         # Check permissions
-        issues.extend(SecurityAuditor.check_permissions(workflow))
+        perm_issues = SecurityAuditor.check_permissions(workflow)
+        if content and perm_issues:
+            for issue in perm_issues:
+                line_num = SecurityAuditor._find_line_number(content, "permissions")
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(perm_issues)
         
         # Check GITHUB_TOKEN permissions
-        issues.extend(SecurityAuditor.check_github_token_permissions(workflow))
+        token_issues = SecurityAuditor.check_github_token_permissions(workflow)
+        if content and token_issues:
+            for issue in token_issues:
+                line_num = SecurityAuditor._find_line_number(content, "permissions", issue.get("message", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(token_issues)
         
         # Check for secrets
-        issues.extend(SecurityAuditor.check_secrets_in_workflow(workflow))
+        secret_issues = SecurityAuditor.check_secrets_in_workflow(workflow)
+        if content and secret_issues:
+            for issue in secret_issues:
+                # Try to find the secret pattern in content
+                if issue.get("path"):
+                    line_num = SecurityAuditor._find_line_number(content, issue["path"].split(".")[-1])
+                    if line_num:
+                        issue["line_number"] = line_num
+        issues.extend(secret_issues)
         
         # Check self-hosted runners
-        issues.extend(SecurityAuditor.check_self_hosted_runners(workflow))
+        runner_issues = SecurityAuditor.check_self_hosted_runners(workflow)
+        if content and runner_issues:
+            for issue in runner_issues:
+                line_num = SecurityAuditor._find_line_number(content, "self-hosted", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(runner_issues)
         
         # Check dangerous events
-        issues.extend(SecurityAuditor.check_dangerous_events(workflow))
+        event_issues = SecurityAuditor.check_dangerous_events(workflow)
+        if content and event_issues:
+            for issue in event_issues:
+                event_name = issue.get("event", "")
+                line_num = SecurityAuditor._find_line_number(content, event_name)
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(event_issues)
         
         # Check checkout actions
-        issues.extend(SecurityAuditor.check_checkout_actions(workflow))
+        checkout_issues = SecurityAuditor.check_checkout_actions(workflow)
+        if content and checkout_issues:
+            for issue in checkout_issues:
+                line_num = SecurityAuditor._find_line_number(content, "actions/checkout", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(checkout_issues)
         
         # Check script injection
-        issues.extend(SecurityAuditor.check_script_injection(workflow))
+        script_issues = SecurityAuditor.check_script_injection(workflow)
+        if content and script_issues:
+            for issue in script_issues:
+                line_num = SecurityAuditor._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(script_issues)
         
         # Check artifact retention
-        issues.extend(SecurityAuditor.check_artifact_retention(workflow))
+        artifact_issues = SecurityAuditor.check_artifact_retention(workflow)
+        if content and artifact_issues:
+            for issue in artifact_issues:
+                line_num = SecurityAuditor._find_line_number(content, "upload-artifact", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(artifact_issues)
         
         # Check matrix strategy
-        issues.extend(SecurityAuditor.check_matrix_strategy(workflow))
+        matrix_issues = SecurityAuditor.check_matrix_strategy(workflow)
+        if content and matrix_issues:
+            for issue in matrix_issues:
+                line_num = SecurityAuditor._find_line_number(content, "matrix:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(matrix_issues)
         
         # Check workflow_dispatch inputs
-        issues.extend(SecurityAuditor.check_workflow_dispatch_inputs(workflow))
+        dispatch_issues = SecurityAuditor.check_workflow_dispatch_inputs(workflow)
+        if content and dispatch_issues:
+            for issue in dispatch_issues:
+                line_num = SecurityAuditor._find_line_number(content, "workflow_dispatch", issue.get("input", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(dispatch_issues)
         
         # Check environment secrets
-        issues.extend(SecurityAuditor.check_environment_secrets(workflow))
+        env_issues = SecurityAuditor.check_environment_secrets(workflow)
+        if content and env_issues:
+            for issue in env_issues:
+                line_num = SecurityAuditor._find_line_number(content, "environment:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(env_issues)
         
-        # Check for untrusted third-party actions (GitHub Actions Goat #5)
-        issues.extend(SecurityAuditor.check_untrusted_third_party_actions(workflow))
+        # Check for untrusted third-party actions
+        untrusted_issues = SecurityAuditor.check_untrusted_third_party_actions(workflow)
+        if content and untrusted_issues:
+            for issue in untrusted_issues:
+                action_ref = issue.get("action", "")
+                if action_ref:
+                    # Extract action name
+                    action_name = action_ref.split("@")[0].split("/")[-1] if "@" in action_ref else action_ref
+                    line_num = SecurityAuditor._find_line_number(content, action_name)
+                    if line_num:
+                        issue["line_number"] = line_num
+        issues.extend(untrusted_issues)
         
-        # Check for long-term credentials (GitHub Actions Goat #4)
-        issues.extend(SecurityAuditor.check_long_term_credentials(workflow))
+        # Check for long-term credentials
+        cred_issues = SecurityAuditor.check_long_term_credentials(workflow)
+        if content and cred_issues:
+            for issue in cred_issues:
+                # Look for credential keys
+                cred_keys = ["AWS_ACCESS_KEY", "AZURE_CLIENT", "GOOGLE_APPLICATION", "GCP_SA_KEY"]
+                for key in cred_keys:
+                    line_num = SecurityAuditor._find_line_number(content, key, issue.get("job", ""))
+                    if line_num:
+                        issue["line_number"] = line_num
+                        break
+        issues.extend(cred_issues)
         
-        # Check for network traffic filtering (GitHub Actions Goat #1)
-        issues.extend(SecurityAuditor.check_network_traffic_filtering(workflow))
+        # Check for network traffic filtering
+        network_issues = SecurityAuditor.check_network_traffic_filtering(workflow)
+        if content and network_issues:
+            for issue in network_issues:
+                line_num = SecurityAuditor._find_line_number(content, "curl", issue.get("job", ""))
+                if not line_num:
+                    line_num = SecurityAuditor._find_line_number(content, "wget", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(network_issues)
         
-        # Check for file tampering protection (GitHub Actions Goat #2)
-        issues.extend(SecurityAuditor.check_file_tampering_protection(workflow))
+        # Check for file tampering protection
+        tamper_issues = SecurityAuditor.check_file_tampering_protection(workflow)
+        if content and tamper_issues:
+            for issue in tamper_issues:
+                line_num = SecurityAuditor._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(tamper_issues)
         
-        # Check for audit logging (GitHub Actions Goat #3)
-        issues.extend(SecurityAuditor.check_audit_logging(workflow))
+        # Check for audit logging
+        audit_issues = SecurityAuditor.check_audit_logging(workflow)
+        if content and audit_issues:
+            for issue in audit_issues:
+                line_num = SecurityAuditor._find_line_number(content, issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(audit_issues)
         
         # Check for branch protection bypass
-        issues.extend(SecurityAuditor.check_branch_protection_bypass(workflow))
+        branch_issues = SecurityAuditor.check_branch_protection_bypass(workflow)
+        if content and branch_issues:
+            for issue in branch_issues:
+                line_num = SecurityAuditor._find_line_number(content, "gh pr", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(branch_issues)
         
         # Check for code injection via workflow inputs
-        issues.extend(SecurityAuditor.check_code_injection_via_workflow_inputs(workflow))
+        injection_issues = SecurityAuditor.check_code_injection_via_workflow_inputs(workflow)
+        if content and injection_issues:
+            for issue in injection_issues:
+                input_name = issue.get("input", "")
+                if input_name:
+                    line_num = SecurityAuditor._find_line_number(content, f"inputs.{input_name}")
+                    if line_num:
+                        issue["line_number"] = line_num
+        issues.extend(injection_issues)
         
         # Check for hash pinning (commit SHA) instead of tags
-        issues.extend(SecurityAuditor.check_hash_pinning(workflow))
+        hash_issues = SecurityAuditor.check_hash_pinning(workflow)
+        if content and hash_issues:
+            for issue in hash_issues:
+                action_ref = issue.get("action", "")
+                if action_ref:
+                    action_name = action_ref.split("@")[0].split("/")[-1] if "@" in action_ref else action_ref
+                    line_num = SecurityAuditor._find_line_number(content, action_name)
+                    if line_num:
+                        issue["line_number"] = line_num
+        issues.extend(hash_issues)
         
         return issues
 

@@ -20,18 +20,53 @@ class GraphBuilder:
                 "issues": []
             }
 
+    def _is_reachable(self, source: str, target: str, exclude_edge: Optional[tuple] = None) -> bool:
+        """Check if target is reachable from source through existing edges."""
+        if source == target:
+            return False
+        
+        # Build adjacency list for DFS
+        children = defaultdict(list)
+        for edge in self.edges:
+            if exclude_edge and edge["source"] == exclude_edge[0] and edge["target"] == exclude_edge[1]:
+                continue
+            children[edge["source"]].append(edge["target"])
+        
+        # DFS to check reachability
+        visited = set()
+        stack = [source]
+        
+        while stack:
+            node = stack.pop()
+            if node == target:
+                return True
+            if node in visited:
+                continue
+            visited.add(node)
+            for child in children.get(node, []):
+                if child not in visited:
+                    stack.append(child)
+        
+        return False
+    
     def add_edge(self, source: str, target: str, edge_type: str = "uses"):
-        """Add an edge to the graph."""
-        # Check if edge already exists by comparing source and target
+        """Add an edge to the graph, avoiding redundant transitive edges."""
+        # Check if edge already exists
         edge_key = (source, target)
         existing_edge_keys = {(e["source"], e["target"]) for e in self.edges}
         
-        if edge_key not in existing_edge_keys:
-            self.edges.append({
-                "source": source,
-                "target": target,
-                "type": edge_type
-            })
+        if edge_key in existing_edge_keys:
+            return
+        
+        # Note: We don't check for redundancy here during edge addition
+        # because the graph is built incrementally and we don't know all paths yet.
+        # Redundancy removal happens in get_graph_data() after the graph is complete.
+        
+        self.edges.append({
+            "source": source,
+            "target": target,
+            "type": edge_type
+        })
 
     def add_issues_to_node(self, node_id: str, issues: List[Dict[str, Any]]):
         """Add security issues to a node."""
@@ -39,8 +74,32 @@ class GraphBuilder:
             self.nodes[node_id]["issues"].extend(issues)
             self.issues[node_id].extend(issues)
 
+    def _remove_redundant_edges(self):
+        """Remove edges that are redundant (target is reachable through other paths)."""
+        if not self.edges:
+            return
+        
+        # Find redundant edges
+        redundant_edges = set()
+        for edge in self.edges:
+            source = edge["source"]
+            target = edge["target"]
+            
+            # Check if target is still reachable from source without this edge
+            if self._is_reachable(source, target, exclude_edge=(source, target)):
+                redundant_edges.add((source, target))
+        
+        # Remove redundant edges
+        self.edges = [
+            edge for edge in self.edges
+            if (edge["source"], edge["target"]) not in redundant_edges
+        ]
+    
     def get_graph_data(self) -> Dict[str, Any]:
         """Get graph data in format suitable for visualization."""
+        # Remove redundant edges before returning graph data
+        self._remove_redundant_edges()
+        
         # Calculate issue counts and severity for nodes
         for node_id, node in self.nodes.items():
             issues = node.get("issues", [])
