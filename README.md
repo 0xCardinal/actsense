@@ -19,6 +19,8 @@ actsense performs comprehensive security audits including:
 ### Action Pinning & Immutability
 - Unpinned action versions
 - Hash pinning (commit SHA) vs tags
+- Older action versions (tags and commit hashes)
+- Inconsistent action versions across workflows
 - Unpinnable Docker actions (mutable tags)
 - Unpinnable composite actions
 - Unpinnable JavaScript actions
@@ -132,12 +134,14 @@ A GitHub Personal Access Token increases rate limits from 60/hour to 5,000/hour.
 
 actsense detects issues including:
 - Unpinned action versions
+- Older action versions (checks against latest from GitHub)
+- Inconsistent action versions across workflows
 - Hardcoded secrets
 - Overly permissive permissions
 - Unpinnable actions (Docker, composite, JavaScript)
 - Script injection vulnerabilities
 - Untrusted third-party actions
-- And 20+ more security issues
+- And 30+ more security issues
 
 ## Contributing
 

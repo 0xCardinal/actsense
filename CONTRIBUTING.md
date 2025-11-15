@@ -214,6 +214,7 @@ Delete an analysis by ID.
 ### Medium Severity
 
 - **no_hash_pinning**: Uses tag instead of commit SHA
+- **older_action_version**: Action uses older version (tag or commit hash) compared to latest
 - **unpinned_dockerfile_dependencies**: Dockerfile installs unpinned packages
 - **unpinned_dockerfile_resources**: Dockerfile downloads without checksums
 - **unpinned_npm_packages**: NPM packages without version locking
@@ -232,6 +233,7 @@ Delete an analysis by ID.
 ### Low Severity
 
 - **short_hash_pinning**: Uses short SHA (7+ chars) instead of full 40-char SHA
+- **inconsistent_action_version**: Same action used with different versions across multiple workflows
 - **checkout_full_history**: Fetches full git history
 - **long_artifact_retention**: Artifact retention > 90 days
 - **large_matrix**: Matrix with > 100 combinations
