@@ -234,6 +234,14 @@ function App() {
     setGraphData(analysis.graph)
     setStatistics(analysis.statistics)
     setError(null)
+    
+    // Fill the input field with the repository/action name
+    if (inputFormRef.current) {
+      const repositoryName = analysis.repository || analysis.action || ''
+      if (repositoryName) {
+        inputFormRef.current.setRepository(repositoryName)
+      }
+    }
   }
 
   const handleAudit = async (data) => {

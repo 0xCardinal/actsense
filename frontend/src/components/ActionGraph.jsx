@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect, useState, useCallback } from 'react'
 import ReactFlow, {
   Background,
+  BackgroundVariant,
   Controls,
   MarkerType,
   useNodesState,
@@ -48,6 +49,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
         return '•'
     }
   }
+
 
   // Calculate layout based on filter type
   const calculateLayout = (nodes, edges, currentFilter) => {
@@ -137,8 +139,8 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
       g.setDefaultEdgeLabel(() => ({}))
       g.setGraph({ 
         rankdir: 'LR', // Left to right
-        nodesep: 60,   // Vertical spacing between nodes (reduced)
-        ranksep: 100,  // Horizontal spacing between ranks (reduced)
+        nodesep: 30,   // Vertical spacing between nodes (further reduced)
+        ranksep: 100,  // Horizontal spacing between ranks
         align: 'UL',   // Align nodes to upper left
         acyclicer: 'greedy',
         ranker: 'tight-tree'
@@ -199,8 +201,8 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     g.setDefaultEdgeLabel(() => ({}))
       g.setGraph({ 
         rankdir: 'LR', // Left to right
-        nodesep: 80,   // Vertical spacing between nodes (reduced)
-        ranksep: 120, // Horizontal spacing between ranks (reduced)
+        nodesep: 40,   // Vertical spacing between nodes (further reduced)
+        ranksep: 120, // Horizontal spacing between ranks
         align: 'UL',   // Align nodes to upper left
         acyclicer: 'greedy', // Handle cycles
         ranker: 'tight-tree' // Use tight-tree ranking for better clustering
@@ -622,10 +624,13 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
         elementsSelectable={true}
         selectNodesOnDrag={false}
         panOnDrag={true}
+        panOnScroll={true}
         zoomOnScroll={true}
+        zoomOnPinch={true}
+        zoomOnDoubleClick={true}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1.5, duration: 500 }}
-        attributionPosition="bottom-left"
+        proOptions={{ hideAttribution: true }}
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
         defaultEdgeOptions={{
           type: 'smoothstep',
@@ -633,7 +638,13 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
         }}
         key={`graph-${filter ? JSON.stringify(filter) : 'no-filter'}-${computedEdges.length}-${computedNodes.length}`}
       >
-        <Background color="#f9fafb" gap={16} />
+        <Background 
+          variant={BackgroundVariant.Dots}
+          gap={16}
+          size={1}
+          color="#e5e7eb"
+          bgColor="#ffffff"
+        />
         <Controls />
       </ReactFlow>
       
