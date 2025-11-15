@@ -1,4 +1,6 @@
 # actsense
+<img width="1484" height="917" alt="image" src="https://github.com/user-attachments/assets/f83358db-abf2-4da9-97a5-4f7fbac98773" />
+
 
 A security auditor for GitHub Actions that analyzes workflows and their dependencies to identify security vulnerabilities.
 
