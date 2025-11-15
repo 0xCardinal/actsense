@@ -92,6 +92,126 @@ class GitHubClient:
                 continue
         return None
 
+    async def get_latest_tag(self, owner: str, repo: str) -> Optional[str]:
+        """Get the latest tag/release version from a repository."""
+        try:
+            # Try releases API first (more reliable for versioned releases)
+            url = f"{self.base_url}/repos/{owner}/{repo}/releases/latest"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=self.headers)
+                if response.status_code == 200:
+                    release = response.json()
+                    tag_name = release.get("tag_name", "")
+                    if tag_name:
+                        return tag_name
+        except (httpx.HTTPStatusError, Exception):
+            # If releases API fails, try tags API
+            pass
+        
+        try:
+            # Fallback to tags API - get all tags and find the latest version
+            url = f"{self.base_url}/repos/{owner}/{repo}/tags"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=self.headers)
+                if response.status_code == 200:
+                    tags = response.json()
+                    if tags and len(tags) > 0:
+                        # Find the highest version number
+                        import re
+                        
+                        def parse_version(version_str: str) -> tuple:
+                            """Parse version string into tuple for comparison (major, minor, patch)."""
+                            # Remove 'v' prefix if present
+                            if version_str.startswith("v"):
+                                version_str = version_str[1:]
+                            
+                            # Match semantic version: major.minor.patch
+                            match = re.match(r'^(\d+)\.?(\d*)?\.?(\d*)?', version_str)
+                            if match:
+                                major = int(match.group(1))
+                                minor = int(match.group(2)) if match.group(2) else 0
+                                patch = int(match.group(3)) if match.group(3) else 0
+                                return (major, minor, patch)
+                            return (0, 0, 0)
+                        
+                        version_tags = []
+                        for tag in tags:
+                            tag_name = tag.get("name", "")
+                            # Check if it looks like a version number
+                            if re.match(r'^v?\d+\.?\d*', tag_name):
+                                ver_tuple = parse_version(tag_name)
+                                version_tags.append((ver_tuple, tag_name))
+                        
+                        if version_tags:
+                            # Sort by version tuple (highest first)
+                            version_tags.sort(key=lambda x: x[0], reverse=True)
+                            return version_tags[0][1]
+                        
+                        # If no version tags found, return the first tag
+                        return tags[0].get("name", "")
+        except (httpx.HTTPStatusError, Exception):
+            pass
+        
+        return None
+
+    async def get_commit_date(self, owner: str, repo: str, sha: str) -> Optional[str]:
+        """Get the commit date for a specific SHA."""
+        try:
+            url = f"{self.base_url}/repos/{owner}/{repo}/commits/{sha}"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=self.headers)
+                if response.status_code == 200:
+                    commit = response.json()
+                    commit_info = commit.get("commit", {})
+                    author_info = commit_info.get("author", {})
+                    return author_info.get("date")  # ISO 8601 format
+        except (httpx.HTTPStatusError, Exception):
+            pass
+        return None
+
+    async def get_latest_tag_commit_date(self, owner: str, repo: str) -> Optional[str]:
+        """Get the commit date of the latest tag."""
+        latest_tag = await self.get_latest_tag(owner, repo)
+        if not latest_tag:
+            return None
+        
+        # Get the commit SHA for the latest tag
+        try:
+            url = f"{self.base_url}/repos/{owner}/{repo}/git/refs/tags/{latest_tag}"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=self.headers)
+                if response.status_code == 200:
+                    ref_data = response.json()
+                    # The ref might point to a tag object or directly to a commit
+                    object_sha = ref_data.get("object", {}).get("sha")
+                    if object_sha:
+                        # Check if it's a tag object (needs another API call) or direct commit
+                        tag_url = f"{self.base_url}/repos/{owner}/{repo}/git/tags/{object_sha}"
+                        tag_response = await client.get(tag_url, headers=self.headers)
+                        if tag_response.status_code == 200:
+                            tag_data = tag_response.json()
+                            commit_sha = tag_data.get("object", {}).get("sha")
+                        else:
+                            # Direct commit reference
+                            commit_sha = object_sha
+                        
+                        if commit_sha:
+                            return await self.get_commit_date(owner, repo, commit_sha)
+        except (httpx.HTTPStatusError, Exception):
+            # Fallback: try to get commit from releases API
+            try:
+                url = f"{self.base_url}/repos/{owner}/{repo}/releases/latest"
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url, headers=self.headers)
+                    if response.status_code == 200:
+                        release = response.json()
+                        commit_sha = release.get("target_commitish")
+                        if commit_sha:
+                            return await self.get_commit_date(owner, repo, commit_sha)
+            except (httpx.HTTPStatusError, Exception):
+                pass
+        return None
+
     def parse_action_reference(self, action_ref: str) -> tuple:
         """Parse action reference like 'owner/repo@v1', 'owner/repo/path@v1', or 'owner/repo@ref'."""
         if "@" in action_ref:

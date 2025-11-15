@@ -169,6 +169,7 @@ async def audit_repository(
     graph.add_node(repo_node_id, repo_node_id, "repository", {"owner": owner, "repo": repo})
     
     clone_path = None
+    workflow_actions_data = []  # Collect actions from all workflows for inconsistency checking
     
     try:
         if use_clone:
@@ -188,7 +189,7 @@ async def audit_repository(
                         continue
                     
                     # Audit workflow with content for line number tracking
-                    workflow_issues = auditor.audit_workflow(workflow, content=content)
+                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client)
                     workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
                     graph.add_node(
                         workflow_node_id,
@@ -201,6 +202,13 @@ async def audit_repository(
                     
                     # Extract actions
                     actions = parser.extract_actions(workflow)
+                    
+                    # Collect actions for inconsistency checking
+                    workflow_actions_data.append({
+                        'workflow_name': workflow_file['name'],
+                        'workflow_path': workflow_file['path'],
+                        'actions': actions
+                    })
                     
                     for action_ref in actions:
                         graph.add_edge(workflow_node_id, action_ref)
@@ -225,7 +233,7 @@ async def audit_repository(
                         continue
                     
                     # Audit workflow with content for line number tracking
-                    workflow_issues = auditor.audit_workflow(workflow, content=content)
+                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client)
                     workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
                     graph.add_node(
                         workflow_node_id,
@@ -239,6 +247,13 @@ async def audit_repository(
                     # Extract actions
                     actions = parser.extract_actions(workflow)
                     
+                    # Collect actions for inconsistency checking
+                    workflow_actions_data.append({
+                        'workflow_name': workflow_file['name'],
+                        'workflow_path': workflow_file['path'],
+                        'actions': actions
+                    })
+                    
                     for action_ref in actions:
                         graph.add_edge(workflow_node_id, action_ref)
                         await resolve_action_dependencies(
@@ -246,6 +261,12 @@ async def audit_repository(
                         )
                 except Exception as e:
                     print(f"Error processing workflow {workflow_file['name']}: {e}")
+        
+        # Check for inconsistent action versions across workflows
+        if len(workflow_actions_data) > 1:  # Only check if there are multiple workflows
+            inconsistency_issues = auditor.check_inconsistent_action_versions(workflow_actions_data)
+            if inconsistency_issues:
+                graph.add_issues_to_node(repo_node_id, inconsistency_issues)
     finally:
         # Cleanup cloned repository
         if clone_path:

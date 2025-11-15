@@ -157,6 +157,14 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
       'unsafe_shell': {
         description: 'This workflow uses bash without the -e flag, which means errors may not be caught.',
         mitigation: 'Add -e flag to bash commands (set -e) or use set -euo pipefail for better error handling.'
+      },
+      'older_action_version': {
+        description: 'This workflow uses an older version of a GitHub Action (v1 or v2). Older versions may contain security vulnerabilities that have been fixed in newer releases.',
+        mitigation: 'Check the action repository for newer versions (typically v3+ or v4+). Review the changelog for security fixes and breaking changes. Update to the latest stable version that maintains compatibility with your workflow. Always test updates in a non-production environment first.'
+      },
+      'inconsistent_action_version': {
+        description: 'This action is used with different versions across multiple workflow files in the repository. This inconsistency can lead to unpredictable behavior, security vulnerabilities, and maintenance challenges.',
+        mitigation: 'Standardize on a single version of this action across all workflows. Review all workflow files and update them to use the same version (preferably the latest stable version). This ensures consistent behavior and makes it easier to apply security updates across the entire repository.'
       }
     }
 
@@ -189,6 +197,31 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
             <h4>Mitigation Strategy</h4>
             <p>{issueInfo.mitigation}</p>
           </div>
+
+          {issue.type === 'inconsistent_action_version' && issue.workflows && issue.workflows.length > 0 && (
+            <div className="issue-modal-section">
+              <h4>Versions Found ({issue.version_count || issue.versions?.length || 0})</h4>
+              <div className="other-instances-list">
+                {issue.versions && issue.versions.map((version, idx) => {
+                  const workflowsForVersion = issue.workflows.filter(w => w.version === version)
+                  return (
+                    <div key={idx} className="instance-item">
+                      <div className="instance-node">
+                        <strong>Version {version}</strong> - Found in {workflowsForVersion.length} workflow{workflowsForVersion.length !== 1 ? 's' : ''}
+                      </div>
+                      <div style={{ marginTop: '0.5rem' }}>
+                        {workflowsForVersion.map((wf, wfIdx) => (
+                          <div key={wfIdx} className="instance-message" style={{ marginBottom: '0.25rem' }}>
+                            • {wf.workflow_name} ({wf.workflow_path})
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {otherInstances && otherInstances.length > 0 && (
             <div className="issue-modal-section">

@@ -1,6 +1,7 @@
 """Security issue detection for GitHub Actions."""
 from typing import List, Dict, Any, Optional
 import re
+from github_client import GitHubClient
 
 
 class SecurityAuditor:
@@ -98,6 +99,249 @@ class SecurityAuditor:
                         "sha": ref,
                         "recommendation": "Use full 40-character commit SHA for maximum security and immutability"
                     })
+        
+        return issues
+
+    @staticmethod
+    async def check_older_action_versions(workflow: Dict[str, Any], client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
+        """Check if actions in workflow use older versions (tags or commit hashes) that may have security vulnerabilities."""
+        issues = []
+        
+        jobs = workflow.get("jobs", {})
+        actions_used = set()
+        
+        # Extract all action references from workflow
+        def extract_actions_from_value(value):
+            if isinstance(value, dict):
+                if "uses" in value:
+                    uses_value = value.get("uses", "")
+                    if isinstance(uses_value, str) and "/" in uses_value and "@" in uses_value:
+                        actions_used.add(uses_value)
+                for v in value.values():
+                    extract_actions_from_value(v)
+            elif isinstance(value, list):
+                for item in value:
+                    extract_actions_from_value(item)
+        
+        extract_actions_from_value(workflow)
+        
+        def parse_version(version_str: str) -> Optional[tuple]:
+            """Parse version string into tuple for comparison (major, minor, patch)."""
+            # Remove 'v' prefix if present
+            if version_str.startswith("v"):
+                version_str = version_str[1:]
+            
+            # Match semantic version: major.minor.patch
+            match = re.match(r'^(\d+)\.?(\d*)?\.?(\d*)?', version_str)
+            if match:
+                major = int(match.group(1))
+                minor = int(match.group(2)) if match.group(2) else 0
+                patch = int(match.group(3)) if match.group(3) else 0
+                return (major, minor, patch)
+            return None
+        
+        def is_sha(ref: str) -> bool:
+            """Check if reference is a commit SHA (full or short)."""
+            return len(ref) >= 7 and re.match(r'^[a-f0-9]+$', ref)
+        
+        def days_between_dates(date1_str: str, date2_str: str) -> Optional[int]:
+            """Calculate days between two ISO 8601 date strings."""
+            try:
+                from datetime import datetime
+                date1 = datetime.fromisoformat(date1_str.replace('Z', '+00:00'))
+                date2 = datetime.fromisoformat(date2_str.replace('Z', '+00:00'))
+                delta = abs((date2 - date1).days)
+                return delta
+            except Exception:
+                return None
+        
+        # Check each action for older versions
+        for action_ref in actions_used:
+            if "@" not in action_ref:
+                continue
+                
+            ref = action_ref.split("@")[-1]
+            owner, repo, _, subdir = client.parse_action_reference(action_ref) if client else (None, None, None, None)
+            
+            # Check if it's a SHA-based reference
+            if is_sha(ref):
+                if not client or not owner or not repo:
+                    continue  # Can't check SHA age without client
+                
+                try:
+                    # Get commit date for the SHA
+                    commit_date = await client.get_commit_date(owner, repo, ref)
+                    if not commit_date:
+                        continue  # Couldn't fetch commit date
+                    
+                    # Get latest tag's commit date for comparison
+                    latest_tag_commit_date = await client.get_latest_tag_commit_date(owner, repo)
+                    
+                    if latest_tag_commit_date:
+                        # Compare commit dates
+                        days_old = days_between_dates(commit_date, latest_tag_commit_date)
+                        if days_old and days_old > 365:  # More than 1 year old
+                            issues.append({
+                                "type": "older_action_version",
+                                "severity": "medium",
+                                "message": f"Action '{action_ref}' uses commit SHA '{ref[:7]}...' which is over {days_old} days old compared to the latest tag. Consider upgrading to a newer version for security fixes and improvements.",
+                                "action": action_ref,
+                                "version": ref,
+                                "commit_date": commit_date,
+                                "days_old": days_old,
+                                "recommendation": f"Upgrade to the latest tag or a more recent commit. This commit is significantly older than the latest release and may contain security vulnerabilities that have been fixed."
+                            })
+                    else:
+                        # Fallback: flag commits older than 1 year from now
+                        from datetime import datetime, timezone
+                        try:
+                            commit_dt = datetime.fromisoformat(commit_date.replace('Z', '+00:00'))
+                            now = datetime.now(timezone.utc)
+                            days_old = (now - commit_dt).days
+                            if days_old > 365:  # More than 1 year old
+                                issues.append({
+                                    "type": "older_action_version",
+                                    "severity": "medium",
+                                    "message": f"Action '{action_ref}' uses commit SHA '{ref[:7]}...' which is over {days_old} days old. Consider upgrading to a newer version for security fixes and improvements.",
+                                    "action": action_ref,
+                                    "version": ref,
+                                    "commit_date": commit_date,
+                                    "days_old": days_old,
+                                    "recommendation": f"Upgrade to the latest tag or a more recent commit. This commit is over a year old and may contain security vulnerabilities that have been fixed."
+                                })
+                        except Exception:
+                            pass
+                except Exception:
+                    # If we can't fetch commit info, skip
+                    pass
+                continue
+            
+            # Check version tags
+            current_version = parse_version(ref)
+            if not current_version:
+                continue  # Not a version tag we can parse
+            
+            # If we have a client, check the latest version from GitHub
+            version_checked = False
+            if client and owner and repo:
+                try:
+                    # For subdirectory actions, we check the parent repo
+                    latest_tag = await client.get_latest_tag(owner, repo)
+                    if latest_tag:
+                        latest_version = parse_version(latest_tag)
+                        if latest_version:
+                            version_checked = True
+                            # Compare versions
+                            if current_version < latest_version:
+                                issues.append({
+                                    "type": "older_action_version",
+                                    "severity": "medium",
+                                    "message": f"Action '{action_ref}' uses version '{ref}', but the latest version is '{latest_tag}'. Consider upgrading for security fixes and improvements.",
+                                    "action": action_ref,
+                                    "version": ref,
+                                    "latest_version": latest_tag,
+                                    "recommendation": f"Upgrade to version '{latest_tag}' or the latest stable version. Older versions may contain security vulnerabilities that have been fixed in newer releases."
+                                })
+                except Exception:
+                    # If we can't fetch the latest version, fall back to heuristic
+                    pass
+            
+            # Fallback heuristic: Flag v1 and v2 as potentially outdated
+            # This is only used when we can't fetch the latest version or client is not available
+            if not version_checked and current_version[0] <= 2:
+                issues.append({
+                    "type": "older_action_version",
+                    "severity": "medium",
+                    "message": f"Action '{action_ref}' uses version '{ref}' which may be outdated. Consider checking for newer versions for security fixes and improvements.",
+                    "action": action_ref,
+                    "version": ref,
+                    "major_version": current_version[0],
+                    "recommendation": f"Check for newer versions of this action (v3+ or v4+). Older versions may contain security vulnerabilities that have been fixed in newer releases."
+                })
+        
+        return issues
+
+    @staticmethod
+    def check_inconsistent_action_versions(workflow_actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Check for actions that are used with different versions across multiple workflows.
+        
+        Args:
+            workflow_actions: List of dicts with keys:
+                - 'workflow_name': Name of the workflow file
+                - 'workflow_path': Path to the workflow file
+                - 'actions': List of action references (e.g., 'owner/repo@v1')
+        
+        Returns:
+            List of issues for each inconsistent action
+        """
+        issues = []
+        
+        # Build a map: action_name -> {version: [workflow_info]}
+        # action_name is without version (e.g., 'owner/repo' or 'owner/repo/path')
+        action_versions_map = {}
+        
+        for workflow_info in workflow_actions:
+            workflow_name = workflow_info.get('workflow_name', '')
+            workflow_path = workflow_info.get('workflow_path', '')
+            actions = workflow_info.get('actions', [])
+            
+            for action_ref in actions:
+                if "@" not in action_ref:
+                    continue
+                
+                # Split action name and version
+                action_name, version = action_ref.rsplit("@", 1)
+                
+                # Normalize action name (remove any subdirectory for comparison)
+                # We want to detect if actions/checkout@v2 and actions/checkout@v3 are used
+                if action_name not in action_versions_map:
+                    action_versions_map[action_name] = {}
+                
+                if version not in action_versions_map[action_name]:
+                    action_versions_map[action_name][version] = []
+                
+                action_versions_map[action_name][version].append({
+                    'workflow_name': workflow_name,
+                    'workflow_path': workflow_path,
+                    'full_action_ref': action_ref
+                })
+        
+        # Check for actions with multiple versions
+        for action_name, versions_dict in action_versions_map.items():
+            if len(versions_dict) > 1:
+                # This action is used with multiple versions
+                versions_list = list(versions_dict.keys())
+                all_workflows = []
+                
+                # Collect all workflows using this action
+                for version, workflows in versions_dict.items():
+                    for workflow in workflows:
+                        all_workflows.append({
+                            'version': version,
+                            'workflow_name': workflow['workflow_name'],
+                            'workflow_path': workflow['workflow_path'],
+                            'full_action_ref': workflow['full_action_ref']
+                        })
+                
+                # Create an issue for each version found (so users can see all instances)
+                # But we'll create one main issue with details about all versions
+                versions_str = ', '.join(sorted(versions_list))
+                workflow_details = []
+                for workflow in all_workflows:
+                    workflow_details.append(f"{workflow['workflow_name']} (v{workflow['version']})")
+                
+                issues.append({
+                    "type": "inconsistent_action_version",
+                    "severity": "low",
+                    "message": f"Action '{action_name}' is used with different versions ({versions_str}) across multiple workflows. This can lead to inconsistent behavior and security vulnerabilities.",
+                    "action": action_name,
+                    "versions": versions_list,
+                    "version_count": len(versions_list),
+                    "workflows": all_workflows,
+                    "workflow_count": len(all_workflows),
+                    "recommendation": f"Standardize on a single version of '{action_name}' across all workflows. Consider using the latest stable version. Update all workflows to use the same version for consistency and security."
+                })
         
         return issues
 
@@ -943,7 +1187,7 @@ class SecurityAuditor:
         return None
     
     @staticmethod
-    def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None, client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
         """Audit a workflow file for security issues."""
         issues = []
         
@@ -1135,6 +1379,18 @@ class SecurityAuditor:
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(hash_issues)
+        
+        # Check for older action versions
+        version_issues = await SecurityAuditor.check_older_action_versions(workflow, client)
+        if content and version_issues:
+            for issue in version_issues:
+                action_ref = issue.get("action", "")
+                if action_ref:
+                    action_name = action_ref.split("@")[0].split("/")[-1] if "@" in action_ref else action_ref
+                    line_num = SecurityAuditor._find_line_number(content, action_name)
+                    if line_num:
+                        issue["line_number"] = line_num
+        issues.extend(version_issues)
         
         return issues
 
