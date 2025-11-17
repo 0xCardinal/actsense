@@ -181,7 +181,17 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
       <div className="issue-modal-backdrop" onClick={onClose} />
       <div className="issue-modal">
         <div className="issue-modal-header">
-          <h3>{issue.type || 'Security Issue'}</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <h3>{issue.type || 'Security Issue'}</h3>
+            {issue.type === 'trufflehog_secret_detected' && issue.evidence && (
+              <span 
+                className={`verification-pill ${issue.evidence.verified ? 'verified' : 'unverified'}`}
+                title={issue.evidence.verified ? 'This secret has been verified by TruffleHog' : 'This secret pattern was detected but not verified'}
+              >
+                {issue.evidence.verified ? '✓ Verified' : '⚠ Unverified'}
+              </span>
+            )}
+          </div>
           <button className="issue-modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
@@ -191,11 +201,119 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
           <div className="issue-modal-section">
             <h4>Description</h4>
             <p>{issueInfo.description}</p>
+            {issue.evidence && issue.evidence.vulnerability && (
+              <div className="vulnerability-details">
+                {issue.evidence.vulnerability.split('\n').map((line, idx) => (
+                  <React.Fragment key={idx}>
+                    {line}
+                    {idx < issue.evidence.vulnerability.split('\n').length - 1 && <br />}
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="issue-modal-section">
             <h4>Mitigation Strategy</h4>
-            <p>{issueInfo.mitigation}</p>
+            
+            {issue.message && (
+              <div className="mitigation-message">
+                {issue.message}
+              </div>
+            )}
+
+            {issue.evidence && (
+              <div className="mitigation-evidence">
+                <h5>Evidence</h5>
+                <div className="evidence-container">
+                  {issue.evidence.action_reference && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">Action Reference:</span>
+                      <span className="evidence-value">{issue.evidence.action_reference}</span>
+                    </div>
+                  )}
+                  {issue.evidence.action_name && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">Action Name:</span>
+                      <span className="evidence-value">{issue.evidence.action_name}</span>
+                    </div>
+                  )}
+                  {issue.evidence.reference_type && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">Reference Type:</span>
+                      <span className="evidence-value">{issue.evidence.reference_type}</span>
+                    </div>
+                  )}
+                  {issue.evidence.reference_value && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">Reference Value:</span>
+                      <span className="evidence-value">{issue.evidence.reference_value}</span>
+                    </div>
+                  )}
+                  {issue.evidence.current_pinning && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">Current Pinning:</span>
+                      <span className="evidence-value">{issue.evidence.current_pinning}</span>
+                    </div>
+                  )}
+                  {issue.evidence.sha_length && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">SHA Length:</span>
+                      <span className="evidence-value">{issue.evidence.sha_length} characters</span>
+                    </div>
+                  )}
+                  {issue.evidence.tag && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">Tag:</span>
+                      <span className="evidence-value">{issue.evidence.tag}</span>
+                    </div>
+                  )}
+                  {issue.evidence.sha && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">SHA:</span>
+                      <span className="evidence-value">{issue.evidence.sha}</span>
+                    </div>
+                  )}
+                  {issue.evidence.detector && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">Detector:</span>
+                      <span className="evidence-value">{issue.evidence.detector}</span>
+                    </div>
+                  )}
+                  {issue.evidence.verified !== undefined && (
+                    <div className="evidence-item">
+                      <span className="evidence-label">Verification Status:</span>
+                      <span className="evidence-value">
+                        <span 
+                          className={`verification-pill ${issue.evidence.verified ? 'verified' : 'unverified'}`}
+                          style={{ marginLeft: '0.5rem' }}
+                        >
+                          {issue.evidence.verified ? '✓ Verified' : '⚠ Unverified'}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {issue.recommendation && (
+              <div className="mitigation-recommendation">
+                <h5>Recommendation</h5>
+                <div className="recommendation-text">
+                  {issue.recommendation.split('\n').map((line, idx) => (
+                    <React.Fragment key={idx}>
+                      {line}
+                      {idx < issue.recommendation.split('\n').length - 1 && <br />}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!issue.message && !issue.evidence && !issue.recommendation && (
+              <p>{issueInfo.mitigation}</p>
+            )}
           </div>
 
           {issue.type === 'inconsistent_action_version' && issue.workflows && issue.workflows.length > 0 && (

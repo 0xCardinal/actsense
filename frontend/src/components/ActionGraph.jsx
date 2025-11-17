@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState, useCallback } from 'react'
+import React, { useMemo, useEffect, useState, useCallback, useRef } from 'react'
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -21,6 +21,9 @@ const nodeTypes = {
 function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
   const [selectedNode, setSelectedNode] = useState(null)
   const [hoveredNodeId, setHoveredNodeId] = useState(null)
+  const [collapsedNodes, setCollapsedNodes] = useState(new Set())
+  const [nodePositions, setNodePositions] = useState(new Map())
+  const prevFilterForLayoutRef = useRef(filter)
 
   const getSeverityColor = (severity) => {
     switch (severity) {
@@ -324,6 +327,23 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     setHoveredNodeId(null)
   }, [])
 
+  // Handle node collapse/expand
+  const handleNodeToggleCollapse = useCallback((nodeId, e) => {
+    if (e) {
+      e.stopPropagation()
+      e.preventDefault()
+    }
+    setCollapsedNodes(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId)
+      } else {
+        newSet.add(nodeId)
+      }
+      return newSet
+    })
+  }, [])
+
   // Handle node click - using custom node component
   const handleNodeClick = useCallback((nodeData) => {
     console.log('Node clicked via handler:', nodeData)
@@ -343,11 +363,119 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
   const [edgesState, setEdges, onEdgesChange] = useEdgesState([])
 
   // Filter nodes based on filter criteria - use shared filtering logic
-  const filteredNodes = useMemo(() => {
+  const filteredNodesBase = useMemo(() => {
     return filterNodes(graphData, filter)
   }, [graphData, filter])
   
-  // Filter edges to only include edges between filtered nodes
+  // Build children map for collapse functionality (before collapse filtering)
+  const childrenMapBase = useMemo(() => {
+    const map = new Map()
+    if (!graphData?.edges || !Array.isArray(graphData.edges)) {
+      return map
+    }
+    
+    graphData.edges.forEach(edge => {
+      if (edge.source && edge.target) {
+        if (!map.has(edge.source)) {
+          map.set(edge.source, [])
+        }
+        map.get(edge.source).push(edge.target)
+      }
+    })
+    
+    return map
+  }, [graphData?.edges])
+
+  // Build parent map (reverse of children map) to track which nodes have multiple parents
+  const parentMapBase = useMemo(() => {
+    const map = new Map()
+    if (!graphData?.edges || !Array.isArray(graphData.edges)) {
+      return map
+    }
+    
+    graphData.edges.forEach(edge => {
+      if (edge.source && edge.target) {
+        if (!map.has(edge.target)) {
+          map.set(edge.target, [])
+        }
+        map.get(edge.target).push(edge.source)
+      }
+    })
+    
+    return map
+  }, [graphData?.edges])
+
+  // Get all descendant node IDs (recursive)
+  const getDescendantIds = useCallback((nodeId, childrenMap) => {
+    const descendants = new Set()
+    const queue = [nodeId]
+    
+    while (queue.length > 0) {
+      const current = queue.shift()
+      const children = childrenMap.get(current) || []
+      children.forEach(childId => {
+        if (!descendants.has(childId)) {
+          descendants.add(childId)
+          queue.push(childId)
+        }
+      })
+    }
+    
+    return descendants
+  }, [])
+
+  // Filter out nodes that are descendants of collapsed nodes
+  // But keep nodes visible if they have at least one visible (non-collapsed) parent
+  const filteredNodes = useMemo(() => {
+    if (collapsedNodes.size === 0) {
+      return filteredNodesBase
+    }
+    
+    // Build a set of all nodes that are descendants of collapsed nodes
+    const descendantsOfCollapsed = new Set()
+    collapsedNodes.forEach(collapsedId => {
+      const descendants = getDescendantIds(collapsedId, childrenMapBase)
+      descendants.forEach(descId => descendantsOfCollapsed.add(descId))
+    })
+    
+    // For each node that is a descendant of a collapsed node,
+    // check if it has at least one parent that is NOT collapsed
+    // If it does, keep it visible
+    const nodesToKeep = new Set()
+    
+    filteredNodesBase.forEach(node => {
+      // If node is not a descendant of any collapsed node, keep it
+      if (!descendantsOfCollapsed.has(node.id)) {
+        nodesToKeep.add(node.id)
+        return
+      }
+      
+      // Node is a descendant of a collapsed node
+      // Check if it has any visible (non-collapsed) parents
+      const parents = parentMapBase.get(node.id) || []
+      if (parents.length === 0) {
+        // No parents - this is a root node that's a descendant of collapsed, hide it
+        return
+      }
+      
+      // Check if at least one parent is not collapsed
+      for (const parentId of parents) {
+        if (!collapsedNodes.has(parentId)) {
+          // This parent is not collapsed, so keep this node visible
+          nodesToKeep.add(node.id)
+          return
+        }
+      }
+      
+      // All parents are collapsed, so this node should be hidden
+    })
+    
+    // Return only nodes that should be kept visible
+    return filteredNodesBase.filter(node => nodesToKeep.has(node.id))
+  }, [filteredNodesBase, collapsedNodes, childrenMapBase, parentMapBase, getDescendantIds])
+  
+  
+  // Filter edges to only include edges between filtered nodes (including collapse filtering)
   const filteredEdges = useMemo(() => {
     if (!graphData?.edges || !Array.isArray(graphData.edges)) {
       return []
@@ -365,15 +493,14 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     })
     const uniqueEdges = Array.from(edgeMap.values())
     
-    if (!filter) {
-      return uniqueEdges
-    }
+    // Get visible node IDs (after collapse filtering)
+    const visibleNodeIds = new Set(filteredNodes.map(n => n.id))
     
-    const filteredNodeIds = new Set(filteredNodes.map(n => n.id))
+    // Filter edges to only those between visible nodes
     return uniqueEdges.filter(edge =>
-      filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
+      visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
     )
-  }, [graphData?.edges, filteredNodes, filter])
+  }, [graphData?.edges, filteredNodes])
 
   // Compute nodes and edges with animation
   const computedNodes = useMemo(() => {
@@ -384,6 +511,8 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
       const severity = node.severity || 'none'
       const color = getSeverityColor(severity)
       const hasIssues = node.issue_count > 0
+      const hasChildren = (childrenMapBase.get(node.id) || []).length > 0
+      const isCollapsed = collapsedNodes.has(node.id)
       
       return {
         id: node.id,
@@ -399,9 +528,12 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
           nodeLabel: node.label,
           nodeId: node.id, // Pass node ID for hover handler
           originalId: node.id, // Keep reference to original
+          hasChildren: hasChildren,
+          isCollapsed: isCollapsed,
           onNodeClick: handleNodeClick,
           onNodeHover: handleNodeHover,
           onNodeUnhover: handleNodeUnhover,
+          onToggleCollapse: handleNodeToggleCollapse,
         },
         draggable: false,
         selectable: true,
@@ -410,7 +542,33 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
       }
     })
     
-    const positionedNodes = calculateLayout(baseNodes, filteredEdges, filter)
+    // Check if filter changed (need to recalculate layout)
+    const filterChanged = JSON.stringify(prevFilterForLayoutRef.current) !== JSON.stringify(filter)
+    const shouldRecalculateLayout = filterChanged || nodePositions.size === 0
+    
+    let positionedNodes
+    if (shouldRecalculateLayout) {
+      // Calculate new layout
+      positionedNodes = calculateLayout(baseNodes, filteredEdges, filter)
+      // Store positions for future collapse/expand operations
+      const newPositions = new Map()
+      positionedNodes.forEach(node => {
+        if (node.position) {
+          newPositions.set(node.id, { x: node.position.x, y: node.position.y })
+        }
+      })
+      setNodePositions(newPositions)
+      prevFilterForLayoutRef.current = filter
+    } else {
+      // Use stored positions for visible nodes (preserve positions when collapsing/expanding)
+      positionedNodes = baseNodes.map(node => {
+        const storedPos = nodePositions.get(node.id)
+        return {
+          ...node,
+          position: storedPos || { x: 0, y: 0 }
+        }
+      })
+    }
     
     // For dependency view, ensure duplicated nodes have correct data
     if (filter?.type === 'has_dependencies') {
@@ -434,7 +592,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     }
     
     return positionedNodes
-  }, [filteredNodes, filteredEdges, filter, handleNodeClick, handleNodeHover, handleNodeUnhover])
+  }, [filteredNodes, filteredEdges, filter, handleNodeClick, handleNodeHover, handleNodeUnhover, handleNodeToggleCollapse, childrenMapBase, collapsedNodes])
 
   const computedEdges = useMemo(() => {
     if (filteredEdges.length === 0) {
@@ -529,7 +687,6 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
           ...node.style,
           transition: 'opacity 0.3s ease, transform 0.3s ease',
           opacity: isHighlighted ? 1 : (hoveredNodeId ? 0.3 : 1),
-          zIndex: isHighlighted ? 20 : 10, // Always above edges (edges default to 0)
         }
       }
     }))
@@ -546,7 +703,6 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
           stroke: isHighlighted ? '#3b82f6' : '#9ca3af',
           strokeWidth: isHighlighted ? 3 : (edge.style?.strokeWidth || 1.5),
           strokeOpacity: isHighlighted ? 1 : (hoveredNodeId ? 0.2 : (edge.style?.strokeOpacity || 0.5)),
-          zIndex: 0, // Edges should be below nodes
         },
         markerEnd: {
           ...edge.markerEnd,
@@ -610,6 +766,25 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
         )
       }
 
+  // Only fit view when filter changes, not when nodes collapse
+  const [shouldFitView, setShouldFitView] = useState(false)
+  const prevFilterRef = useRef(filter)
+  
+  useEffect(() => {
+    if (JSON.stringify(prevFilterRef.current) !== JSON.stringify(filter)) {
+      setShouldFitView(true)
+      prevFilterRef.current = filter
+    }
+  }, [filter])
+  
+  useEffect(() => {
+    if (shouldFitView) {
+      // Reset after a brief delay to allow ReactFlow to update
+      const timer = setTimeout(() => setShouldFitView(false), 100)
+      return () => clearTimeout(timer)
+    }
+  }, [shouldFitView])
+
   return (
     <div className="action-graph">
       <ReactFlow
@@ -628,7 +803,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
         zoomOnScroll={true}
         zoomOnPinch={true}
         zoomOnDoubleClick={true}
-        fitView
+        fitView={shouldFitView}
         fitViewOptions={{ padding: 0.2, maxZoom: 1.5, duration: 500 }}
         proOptions={{ hideAttribution: true }}
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
@@ -636,7 +811,9 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
           type: 'smoothstep',
           animated: false,
         }}
-        key={`graph-${filter ? JSON.stringify(filter) : 'no-filter'}-${computedEdges.length}-${computedNodes.length}`}
+        nodesFocusable={false}
+        edgesFocusable={false}
+        key={`graph-${filter ? JSON.stringify(filter) : 'no-filter'}`}
       >
         <Background 
           variant={BackgroundVariant.Dots}

@@ -28,6 +28,16 @@ function CustomNode({ data, selected }) {
   }
 
   const isHighlighted = data?.isHighlighted || false
+  const hasChildren = data?.hasChildren || false
+  const isCollapsed = data?.isCollapsed || false
+
+  const handleCollapseClick = (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (data?.onToggleCollapse && data?.nodeId) {
+      data.onToggleCollapse(data.nodeId, e)
+    }
+  }
 
   return (
     <div
@@ -52,6 +62,7 @@ function CustomNode({ data, selected }) {
           : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
         transition: 'all 0.15s ease',
         transform: isHighlighted ? 'scale(1.05)' : 'scale(1)',
+        position: 'relative',
       }}
       className="custom-node"
     >
@@ -62,6 +73,42 @@ function CustomNode({ data, selected }) {
           <span className="node-badge" style={{ backgroundColor: data.color }}>
             {data.issueCount}
           </span>
+        )}
+        {hasChildren && (
+          <button
+            onClick={handleCollapseClick}
+            className="node-collapse-button"
+            title={isCollapsed ? 'Expand' : 'Collapse'}
+            style={{
+              background: 'transparent',
+              border: '1px solid #d1d5db',
+              cursor: 'pointer',
+              padding: '0',
+              marginLeft: '6px',
+              fontSize: '0.75rem',
+              fontWeight: '600',
+              color: '#6b7280',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              width: '20px',
+              height: '20px',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#f3f4f6'
+              e.currentTarget.style.borderColor = '#9ca3af'
+              e.currentTarget.style.color = '#374151'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.borderColor = '#d1d5db'
+              e.currentTarget.style.color = '#6b7280'
+            }}
+          >
+            {isCollapsed ? '+' : '−'}
+          </button>
         )}
       </div>
       <Handle type="target" position={Position.Left} />
