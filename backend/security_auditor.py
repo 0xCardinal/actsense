@@ -1,265 +1,33 @@
 """Security issue detection for GitHub Actions."""
 from typing import List, Dict, Any, Optional
-import re
 from github_client import GitHubClient
+
+# Import rules from rules module
+from rules import security as security_rules
+from rules import best_practices as best_practices_rules
 
 
 class SecurityAuditor:
     @staticmethod
     def check_pinned_version(action_ref: str) -> Dict[str, Any]:
-        """Check if action uses pinned version (tag or SHA)."""
-        issue = {
-            "type": "unpinned_version",
-            "severity": "high",
-            "message": "",
-            "action": action_ref
-        }
+        """
+        Check if action uses pinned version (tag or SHA).
         
-        if "@" not in action_ref:
-            issue["message"] = "Action reference missing version/tag"
-            return issue
-        
-        ref = action_ref.split("@")[-1]
-        
-        # Check if it's a branch (not pinned)
-        if not ref.startswith("v") and len(ref) < 7:
-            issue["message"] = f"Action uses branch reference '{ref}' instead of pinned version"
-            return issue
-        
-        # Check if it's a SHA (40 chars for full SHA, 7+ for short)
-        if len(ref) >= 7 and re.match(r'^[a-f0-9]+$', ref):
-            return None  # Pinned with SHA
-        
-        # Check if it's a version tag
-        if ref.startswith("v") or re.match(r'^\d+\.\d+', ref):
-            return None  # Pinned with version tag
-        
-        issue["message"] = f"Action may use unpinned reference '{ref}'"
-        return issue
-
+        Returns detailed vulnerability information with evidence and mitigation steps.
+        """
+        return best_practices_rules.check_pinned_version(action_ref)
     @staticmethod
     def check_hash_pinning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Check if actions in workflow use hash pinning (commit SHA) instead of tags."""
-        issues = []
+        """
+        Check if actions in workflow use hash pinning (commit SHA) instead of tags.
         
-        jobs = workflow.get("jobs", {})
-        actions_used = set()
-        
-        # Extract all action references from workflow
-        def extract_actions_from_value(value):
-            if isinstance(value, dict):
-                if "uses" in value:
-                    uses_value = value.get("uses", "")
-                    if isinstance(uses_value, str) and "/" in uses_value and "@" in uses_value:
-                        actions_used.add(uses_value)
-                for v in value.values():
-                    extract_actions_from_value(v)
-            elif isinstance(value, list):
-                for item in value:
-                    extract_actions_from_value(item)
-        
-        extract_actions_from_value(workflow)
-        
-        # Check each action for hash pinning
-        for action_ref in actions_used:
-            if "@" in action_ref:
-                ref = action_ref.split("@")[-1]
-                
-                # Check if it's a full commit SHA (40 characters)
-                is_full_sha = len(ref) == 40 and re.match(r'^[a-f0-9]+$', ref)
-                
-                # Check if it's a short SHA (7+ characters)
-                is_short_sha = len(ref) >= 7 and len(ref) < 40 and re.match(r'^[a-f0-9]+$', ref)
-                
-                # Check if it's a tag (starts with v or is a version number)
-                is_tag = ref.startswith("v") or re.match(r'^\d+\.\d+', ref)
-                
-                # If it's neither a SHA nor a tag, it might be a branch
-                if not (is_full_sha or is_short_sha or is_tag):
-                    # Likely a branch or unpinned
-                    continue
-                
-                # If it's a tag but not a SHA, flag it
-                if is_tag and not (is_full_sha or is_short_sha):
-                    issues.append({
-                        "type": "no_hash_pinning",
-                        "severity": "medium",
-                        "message": f"Action '{action_ref}' uses tag '{ref}' instead of commit SHA hash",
-                        "action": action_ref,
-                        "tag": ref,
-                        "recommendation": "Pin actions to full commit SHA (40 characters) for maximum security. Tags can be moved or overwritten."
-                    })
-                elif is_short_sha:
-                    # Short SHA is acceptable but full SHA is preferred
-                    issues.append({
-                        "type": "short_hash_pinning",
-                        "severity": "low",
-                        "message": f"Action '{action_ref}' uses short SHA '{ref}' instead of full 40-character commit SHA",
-                        "action": action_ref,
-                        "sha": ref,
-                        "recommendation": "Use full 40-character commit SHA for maximum security and immutability"
-                    })
-        
-        return issues
-
+        Returns detailed vulnerability information with evidence and mitigation steps.
+        """
+        return best_practices_rules.check_hash_pinning(workflow)
     @staticmethod
     async def check_older_action_versions(workflow: Dict[str, Any], client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
         """Check if actions in workflow use older versions (tags or commit hashes) that may have security vulnerabilities."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        actions_used = set()
-        
-        # Extract all action references from workflow
-        def extract_actions_from_value(value):
-            if isinstance(value, dict):
-                if "uses" in value:
-                    uses_value = value.get("uses", "")
-                    if isinstance(uses_value, str) and "/" in uses_value and "@" in uses_value:
-                        actions_used.add(uses_value)
-                for v in value.values():
-                    extract_actions_from_value(v)
-            elif isinstance(value, list):
-                for item in value:
-                    extract_actions_from_value(item)
-        
-        extract_actions_from_value(workflow)
-        
-        def parse_version(version_str: str) -> Optional[tuple]:
-            """Parse version string into tuple for comparison (major, minor, patch)."""
-            # Remove 'v' prefix if present
-            if version_str.startswith("v"):
-                version_str = version_str[1:]
-            
-            # Match semantic version: major.minor.patch
-            match = re.match(r'^(\d+)\.?(\d*)?\.?(\d*)?', version_str)
-            if match:
-                major = int(match.group(1))
-                minor = int(match.group(2)) if match.group(2) else 0
-                patch = int(match.group(3)) if match.group(3) else 0
-                return (major, minor, patch)
-            return None
-        
-        def is_sha(ref: str) -> bool:
-            """Check if reference is a commit SHA (full or short)."""
-            return len(ref) >= 7 and re.match(r'^[a-f0-9]+$', ref)
-        
-        def days_between_dates(date1_str: str, date2_str: str) -> Optional[int]:
-            """Calculate days between two ISO 8601 date strings."""
-            try:
-                from datetime import datetime
-                date1 = datetime.fromisoformat(date1_str.replace('Z', '+00:00'))
-                date2 = datetime.fromisoformat(date2_str.replace('Z', '+00:00'))
-                delta = abs((date2 - date1).days)
-                return delta
-            except Exception:
-                return None
-        
-        # Check each action for older versions
-        for action_ref in actions_used:
-            if "@" not in action_ref:
-                continue
-                
-            ref = action_ref.split("@")[-1]
-            owner, repo, _, subdir = client.parse_action_reference(action_ref) if client else (None, None, None, None)
-            
-            # Check if it's a SHA-based reference
-            if is_sha(ref):
-                if not client or not owner or not repo:
-                    continue  # Can't check SHA age without client
-                
-                try:
-                    # Get commit date for the SHA
-                    commit_date = await client.get_commit_date(owner, repo, ref)
-                    if not commit_date:
-                        continue  # Couldn't fetch commit date
-                    
-                    # Get latest tag's commit date for comparison
-                    latest_tag_commit_date = await client.get_latest_tag_commit_date(owner, repo)
-                    
-                    if latest_tag_commit_date:
-                        # Compare commit dates
-                        days_old = days_between_dates(commit_date, latest_tag_commit_date)
-                        if days_old and days_old > 365:  # More than 1 year old
-                            issues.append({
-                                "type": "older_action_version",
-                                "severity": "medium",
-                                "message": f"Action '{action_ref}' uses commit SHA '{ref[:7]}...' which is over {days_old} days old compared to the latest tag. Consider upgrading to a newer version for security fixes and improvements.",
-                                "action": action_ref,
-                                "version": ref,
-                                "commit_date": commit_date,
-                                "days_old": days_old,
-                                "recommendation": f"Upgrade to the latest tag or a more recent commit. This commit is significantly older than the latest release and may contain security vulnerabilities that have been fixed."
-                            })
-                    else:
-                        # Fallback: flag commits older than 1 year from now
-                        from datetime import datetime, timezone
-                        try:
-                            commit_dt = datetime.fromisoformat(commit_date.replace('Z', '+00:00'))
-                            now = datetime.now(timezone.utc)
-                            days_old = (now - commit_dt).days
-                            if days_old > 365:  # More than 1 year old
-                                issues.append({
-                                    "type": "older_action_version",
-                                    "severity": "medium",
-                                    "message": f"Action '{action_ref}' uses commit SHA '{ref[:7]}...' which is over {days_old} days old. Consider upgrading to a newer version for security fixes and improvements.",
-                                    "action": action_ref,
-                                    "version": ref,
-                                    "commit_date": commit_date,
-                                    "days_old": days_old,
-                                    "recommendation": f"Upgrade to the latest tag or a more recent commit. This commit is over a year old and may contain security vulnerabilities that have been fixed."
-                                })
-                        except Exception:
-                            pass
-                except Exception:
-                    # If we can't fetch commit info, skip
-                    pass
-                continue
-            
-            # Check version tags
-            current_version = parse_version(ref)
-            if not current_version:
-                continue  # Not a version tag we can parse
-            
-            # If we have a client, check the latest version from GitHub
-            version_checked = False
-            if client and owner and repo:
-                try:
-                    # For subdirectory actions, we check the parent repo
-                    latest_tag = await client.get_latest_tag(owner, repo)
-                    if latest_tag:
-                        latest_version = parse_version(latest_tag)
-                        if latest_version:
-                            version_checked = True
-                            # Compare versions
-                            if current_version < latest_version:
-                                issues.append({
-                                    "type": "older_action_version",
-                                    "severity": "medium",
-                                    "message": f"Action '{action_ref}' uses version '{ref}', but the latest version is '{latest_tag}'. Consider upgrading for security fixes and improvements.",
-                                    "action": action_ref,
-                                    "version": ref,
-                                    "latest_version": latest_tag,
-                                    "recommendation": f"Upgrade to version '{latest_tag}' or the latest stable version. Older versions may contain security vulnerabilities that have been fixed in newer releases."
-                                })
-                except Exception:
-                    # If we can't fetch the latest version, fall back to heuristic
-                    pass
-            
-            # Fallback heuristic: Flag v1 and v2 as potentially outdated
-            # This is only used when we can't fetch the latest version or client is not available
-            if not version_checked and current_version[0] <= 2:
-                issues.append({
-                    "type": "older_action_version",
-                    "severity": "medium",
-                    "message": f"Action '{action_ref}' uses version '{ref}' which may be outdated. Consider checking for newer versions for security fixes and improvements.",
-                    "action": action_ref,
-                    "version": ref,
-                    "major_version": current_version[0],
-                    "recommendation": f"Check for newer versions of this action (v3+ or v4+). Older versions may contain security vulnerabilities that have been fixed in newer releases."
-                })
-        
-        return issues
+        return await best_practices_rules.check_older_action_versions(workflow, client)
 
     @staticmethod
     def check_inconsistent_action_versions(workflow_actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -275,865 +43,177 @@ class SecurityAuditor:
         Returns:
             List of issues for each inconsistent action
         """
-        issues = []
-        
-        # Build a map: action_name -> {version: [workflow_info]}
-        # action_name is without version (e.g., 'owner/repo' or 'owner/repo/path')
-        action_versions_map = {}
-        
-        for workflow_info in workflow_actions:
-            workflow_name = workflow_info.get('workflow_name', '')
-            workflow_path = workflow_info.get('workflow_path', '')
-            actions = workflow_info.get('actions', [])
-            
-            for action_ref in actions:
-                if "@" not in action_ref:
-                    continue
-                
-                # Split action name and version
-                action_name, version = action_ref.rsplit("@", 1)
-                
-                # Normalize action name (remove any subdirectory for comparison)
-                # We want to detect if actions/checkout@v2 and actions/checkout@v3 are used
-                if action_name not in action_versions_map:
-                    action_versions_map[action_name] = {}
-                
-                if version not in action_versions_map[action_name]:
-                    action_versions_map[action_name][version] = []
-                
-                action_versions_map[action_name][version].append({
-                    'workflow_name': workflow_name,
-                    'workflow_path': workflow_path,
-                    'full_action_ref': action_ref
-                })
-        
-        # Check for actions with multiple versions
-        for action_name, versions_dict in action_versions_map.items():
-            if len(versions_dict) > 1:
-                # This action is used with multiple versions
-                versions_list = list(versions_dict.keys())
-                all_workflows = []
-                
-                # Collect all workflows using this action
-                for version, workflows in versions_dict.items():
-                    for workflow in workflows:
-                        all_workflows.append({
-                            'version': version,
-                            'workflow_name': workflow['workflow_name'],
-                            'workflow_path': workflow['workflow_path'],
-                            'full_action_ref': workflow['full_action_ref']
-                        })
-                
-                # Create an issue for each version found (so users can see all instances)
-                # But we'll create one main issue with details about all versions
-                versions_str = ', '.join(sorted(versions_list))
-                workflow_details = []
-                for workflow in all_workflows:
-                    workflow_details.append(f"{workflow['workflow_name']} (v{workflow['version']})")
-                
-                issues.append({
-                    "type": "inconsistent_action_version",
-                    "severity": "low",
-                    "message": f"Action '{action_name}' is used with different versions ({versions_str}) across multiple workflows. This can lead to inconsistent behavior and security vulnerabilities.",
-                    "action": action_name,
-                    "versions": versions_list,
-                    "version_count": len(versions_list),
-                    "workflows": all_workflows,
-                    "workflow_count": len(all_workflows),
-                    "recommendation": f"Standardize on a single version of '{action_name}' across all workflows. Consider using the latest stable version. Update all workflows to use the same version for consistency and security."
-                })
-        
-        return issues
+        return best_practices_rules.check_inconsistent_action_versions(workflow_actions)
+    @staticmethod
+    def _run_trufflehog(content: str) -> List[Dict[str, Any]]:
+        """Run TruffleHog on workflow content to detect secrets."""
+        return security_rules._run_trufflehog(content)
 
     @staticmethod
-    def check_secrets_in_workflow(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Check for potential secret exposure issues."""
-        issues = []
-        
-        def check_value(value, path=""):
-            if isinstance(value, str):
-                # Check for hardcoded secrets patterns
-                if re.search(r'(password|secret|token|key|api[_-]?key)\s*[:=]\s*["\']?[a-zA-Z0-9]{20,}', value, re.IGNORECASE):
-                    issues.append({
-                        "type": "potential_hardcoded_secret",
-                        "severity": "critical",
-                        "message": f"Potential hardcoded secret found at {path}",
-                        "path": path
-                    })
-            elif isinstance(value, dict):
-                for k, v in value.items():
-                    check_value(v, f"{path}.{k}" if path else k)
-            elif isinstance(value, list):
-                for i, item in enumerate(value):
-                    check_value(item, f"{path}[{i}]" if path else f"[{i}]")
-        
-        check_value(workflow)
-        return issues
-
+    def check_secrets_in_workflow(workflow: Dict[str, Any], content: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Check for potential secret exposure issues and long-term credentials."""
+        return security_rules.check_secrets_in_workflow(workflow, content)
     @staticmethod
     def check_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for overly permissive workflow permissions."""
-        issues = []
-        
-        permissions = workflow.get("permissions", {})
-        if permissions == "write-all" or permissions.get("contents") == "write":
-            issues.append({
-                "type": "overly_permissive",
-                "severity": "medium",
-                "message": "Workflow has write permissions to contents",
-                "permissions": permissions
-            })
-        
-        if permissions.get("actions") == "write":
-            issues.append({
-                "type": "overly_permissive",
-                "severity": "high",
-                "message": "Workflow has write permissions to actions",
-                "permissions": permissions
-            })
-        
-        return issues
+        return best_practices_rules.check_permissions(workflow)
+    @staticmethod
+    def check_self_hosted_runners(workflow: Dict[str, Any], is_public_repo: bool = False) -> List[Dict[str, Any]]:
+        """Check for use of self-hosted runners and related security issues."""
+        return security_rules.check_self_hosted_runners(workflow, is_public_repo)
+    @staticmethod
+    def check_runner_label_confusion(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for runner label confusion attacks."""
+        return security_rules.check_runner_label_confusion(workflow)
 
     @staticmethod
-    def check_self_hosted_runners(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Check for use of self-hosted runners."""
-        issues = []
-        
-        runs_on = workflow.get("on", {}).get("workflow_run", {})
-        jobs = workflow.get("jobs", {})
-        
-        for job_name, job in jobs.items():
-            runs_on_value = job.get("runs-on", "")
-            if isinstance(runs_on_value, str) and runs_on_value != "ubuntu-latest" and "self-hosted" in runs_on_value.lower():
-                issues.append({
-                    "type": "self_hosted_runner",
-                    "severity": "medium",
-                    "message": f"Job '{job_name}' uses self-hosted runner",
-                    "job": job_name,
-                    "runs-on": runs_on_value
-                })
-        
-        return issues
-
+    def check_self_hosted_runner_secrets(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for secrets management issues with self-hosted runners."""
+        return security_rules.check_self_hosted_runner_secrets(workflow)
+    
+    @staticmethod
+    def check_runner_environment_security(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for environment-specific security issues with self-hosted runners."""
+        return security_rules.check_runner_environment_security(workflow)
+    
+    @staticmethod
+    def check_repository_visibility_risks(workflow: Dict[str, Any], is_public_repo: bool = False) -> List[Dict[str, Any]]:
+        """Check for risks based on repository visibility with self-hosted runners."""
+        return security_rules.check_repository_visibility_risks(workflow, is_public_repo)
     @staticmethod
     def check_github_token_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for GITHUB_TOKEN permissions that are too permissive."""
-        issues = []
-        
-        permissions = workflow.get("permissions", {})
-        jobs = workflow.get("jobs", {})
-        
-        # Check top-level permissions
-        if permissions == "write-all":
-            issues.append({
-                "type": "github_token_write_all",
-                "severity": "high",
-                "message": "Workflow uses write-all permissions for GITHUB_TOKEN",
-                "permissions": permissions
-            })
-        elif isinstance(permissions, dict):
-            write_permissions = [k for k, v in permissions.items() if v == "write"]
-            if write_permissions:
-                issues.append({
-                    "type": "github_token_write_permissions",
-                    "severity": "medium",
-                    "message": f"GITHUB_TOKEN has write permissions: {', '.join(write_permissions)}",
-                    "permissions": permissions
-                })
-        
-        # Check job-level permissions
-        for job_name, job in jobs.items():
-            job_permissions = job.get("permissions", {})
-            if job_permissions == "write-all":
-                issues.append({
-                    "type": "github_token_write_all",
-                    "severity": "high",
-                    "message": f"Job '{job_name}' uses write-all permissions for GITHUB_TOKEN",
-                    "job": job_name,
-                    "permissions": job_permissions
-                })
-            elif isinstance(job_permissions, dict):
-                write_perms = [k for k, v in job_permissions.items() if v == "write"]
-                if write_perms:
-                    issues.append({
-                        "type": "github_token_write_permissions",
-                        "severity": "medium",
-                        "message": f"Job '{job_name}' GITHUB_TOKEN has write permissions: {', '.join(write_perms)}",
-                        "job": job_name,
-                        "permissions": job_permissions
-                    })
-        
-        return issues
+        return best_practices_rules.check_github_token_permissions(workflow)
 
     @staticmethod
     def check_dangerous_events(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for dangerous workflow trigger events."""
-        issues = []
-        
-        on_events = workflow.get("on", {})
-        
-        # Check for pull_request_target (can be dangerous)
-        if "pull_request_target" in on_events:
-            issues.append({
-                "type": "dangerous_event",
-                "severity": "high",
-                "message": "Workflow uses pull_request_target event which can be exploited by PRs from forks",
-                "event": "pull_request_target"
-            })
-        
-        # Check for workflow_run (can be chained)
-        if "workflow_run" in on_events:
-            issues.append({
-                "type": "dangerous_event",
-                "severity": "medium",
-                "message": "Workflow uses workflow_run event which can create dependency chains",
-                "event": "workflow_run"
-            })
-        
-        # Check for workflow_call without proper validation
-        if "workflow_call" in on_events:
-            inputs = on_events.get("workflow_call", {}).get("inputs", {})
-            for input_name, input_def in inputs.items():
-                if isinstance(input_def, dict):
-                    if input_def.get("type") == "string" and not input_def.get("required", False):
-                        # Check if input might be used in dangerous ways
-                        issues.append({
-                            "type": "unvalidated_workflow_input",
-                            "severity": "medium",
-                            "message": f"Workflow_call has optional input '{input_name}' without validation",
-                            "input": input_name
-                        })
-        
-        return issues
-
+        return security_rules.check_dangerous_events(workflow)
     @staticmethod
     def check_checkout_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for unsafe checkout action usage."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        
-        for job_name, job in jobs.items():
-            steps = job.get("steps", [])
-            for step in steps:
-                uses = step.get("uses", "")
-                if "actions/checkout" in uses:
-                    with_params = step.get("with", {})
-                    
-                    # Check for persist-credentials
-                    if with_params.get("persist-credentials") == "true":
-                        issues.append({
-                            "type": "unsafe_checkout",
-                            "severity": "high",
-                            "message": f"Job '{job_name}' uses checkout with persist-credentials=true",
-                            "job": job_name,
-                            "step": step.get("name", "unnamed")
-                        })
-                    
-                    # Check for ref without proper validation
-                    ref = with_params.get("ref")
-                    if ref and not ref.startswith("refs/"):
-                        # Check if it's a variable that could be manipulated
-                        if "${{" in str(ref):
-                            issues.append({
-                                "type": "unsafe_checkout_ref",
-                                "severity": "medium",
-                                "message": f"Job '{job_name}' uses checkout with potentially unsafe ref: {ref}",
-                                "job": job_name,
-                                "ref": ref
-                            })
-                    
-                    # Check for fetch-depth
-                    fetch_depth = with_params.get("fetch-depth")
-                    if fetch_depth == 0:
-                        issues.append({
-                            "type": "checkout_full_history",
-                            "severity": "low",
-                            "message": f"Job '{job_name}' fetches full git history (fetch-depth: 0)",
-                            "job": job_name
-                        })
-        
-        return issues
-
+        return security_rules.check_checkout_actions(workflow)
     @staticmethod
     def check_script_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Check for potential script injection vulnerabilities."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        
-        for job_name, job in jobs.items():
-            steps = job.get("steps", [])
-            for step in steps:
-                run = step.get("run", "")
-                if isinstance(run, str):
-                    # Check for unsafe shell usage
-                    shell = step.get("shell", "")
-                    if shell and "bash" in shell.lower() and "-e" not in shell:
-                        issues.append({
-                            "type": "unsafe_shell",
-                            "severity": "medium",
-                            "message": f"Job '{job_name}' uses bash without -e flag (errors not caught)",
-                            "job": job_name,
-                            "step": step.get("name", "unnamed")
-                        })
-                    
-                    # Check for direct variable interpolation in commands
-                    if "${{" in run and "github.event" in run:
-                        # Check if it's used in a potentially unsafe way
-                        if any(pattern in run.lower() for pattern in ["curl", "wget", "eval", "exec", "$("]):
-                            issues.append({
-                                "type": "potential_script_injection",
-                                "severity": "high",
-                                "message": f"Job '{job_name}' may have script injection risk with github.event variables",
-                                "job": job_name,
-                                "step": step.get("name", "unnamed")
-                            })
-        
-        return issues
+        """Check for potential script injection vulnerabilities with enhanced patterns."""
+        return security_rules.check_script_injection(workflow)
+    @staticmethod
+    def check_github_script_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for JavaScript injection vulnerabilities in github-script action."""
+        return security_rules.check_github_script_injection(workflow)
+    @staticmethod
+    def check_powershell_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for PowerShell injection vulnerabilities."""
+        return security_rules.check_powershell_injection(workflow)
+    @staticmethod
+    def check_malicious_curl_pipe_bash(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for curl/wget piped to bash/sh/zsh, which can execute malicious code."""
+        return security_rules.check_malicious_curl_pipe_bash(workflow)
+    
+    @staticmethod
+    def check_malicious_base64_decode(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for base64 decode execution patterns, which can hide malicious code."""
+        return security_rules.check_malicious_base64_decode(workflow)
+    
+    @staticmethod
+    def check_continue_on_error_critical_job(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for continue-on-error in critical jobs that should fail on error."""
+        return best_practices_rules.check_continue_on_error_critical_job(workflow)
+    @staticmethod
+    def check_obfuscation_detection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for code obfuscation patterns that may hide malicious code."""
+        return security_rules.check_obfuscation_detection(workflow)
+    @staticmethod
+    def check_artipacked_vulnerability(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for artifact packing vulnerabilities."""
+        return security_rules.check_artipacked_vulnerability(workflow)
+    @staticmethod
+    def check_token_permission_escalation(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for patterns that could lead to token permission escalation."""
+        return security_rules.check_token_permission_escalation(workflow)
+    @staticmethod
+    def check_cross_repository_access(workflow: Dict[str, Any], current_repo: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Check for unauthorized cross-repository access."""
+        return security_rules.check_cross_repository_access(workflow, current_repo)
+    
+    @staticmethod
+    def check_environment_bypass(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for potential environment protection bypass."""
+        return security_rules.check_environment_bypass(workflow)
+    @staticmethod
+    def check_secrets_access_untrusted(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for secrets passed to untrusted actions."""
+        return security_rules.check_secrets_access_untrusted(workflow)
+    
+    @staticmethod
+    def check_excessive_write_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for excessive write permissions on read-only workflows."""
+        return best_practices_rules.check_excessive_write_permissions(workflow)
 
     @staticmethod
     def check_artifact_retention(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for artifact retention settings."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        
-        for job_name, job in jobs.items():
-            steps = job.get("steps", [])
-            for step in steps:
-                uses = step.get("uses", "")
-                if "actions/upload-artifact" in uses:
-                    with_params = step.get("with", {})
-                    retention_days = with_params.get("retention-days")
-                    if retention_days and int(retention_days) > 90:
-                        issues.append({
-                            "type": "long_artifact_retention",
-                            "severity": "low",
-                            "message": f"Job '{job_name}' has artifact retention > 90 days ({retention_days} days)",
-                            "job": job_name,
-                            "retention-days": retention_days
-                        })
-        
-        return issues
-
+        return best_practices_rules.check_artifact_retention(workflow)
     @staticmethod
     def check_matrix_strategy(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for unsafe matrix strategy usage."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        
-        for job_name, job in jobs.items():
-            strategy = job.get("strategy", {})
-            matrix = strategy.get("matrix", {})
-            
-            if matrix:
-                # Check if secrets are used in matrix
-                matrix_str = str(matrix)
-                if "${{" in matrix_str and "secrets" in matrix_str:
-                    issues.append({
-                        "type": "secrets_in_matrix",
-                        "severity": "critical",
-                        "message": f"Job '{job_name}' uses secrets in matrix strategy (secrets exposed to all matrix jobs)",
-                        "job": job_name
-                    })
-                
-                # Check for large matrix sizes
-                matrix_sizes = [len(v) if isinstance(v, list) else 1 for v in matrix.values()]
-                total_combinations = 1
-                for size in matrix_sizes:
-                    total_combinations *= size
-                
-                if total_combinations > 100:
-                    issues.append({
-                        "type": "large_matrix",
-                        "severity": "low",
-                        "message": f"Job '{job_name}' has large matrix with {total_combinations} combinations",
-                        "job": job_name,
-                        "combinations": total_combinations
-                    })
-        
-        return issues
-
+        return best_practices_rules.check_matrix_strategy(workflow)
+    
     @staticmethod
     def check_workflow_dispatch_inputs(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for workflow_dispatch inputs without validation."""
-        issues = []
-        
-        on_events = workflow.get("on", {})
-        workflow_dispatch = on_events.get("workflow_dispatch", {})
-        
-        if workflow_dispatch:
-            inputs = workflow_dispatch.get("inputs", {})
-            for input_name, input_def in inputs.items():
-                if isinstance(input_def, dict):
-                    input_type = input_def.get("type", "string")
-                    required = input_def.get("required", False)
-                    
-                    # Check if input is used without validation
-                    if not required and input_type == "string":
-                        # Check if it's used in potentially unsafe contexts
-                        workflow_str = str(workflow)
-                        if f"${{{{ inputs.{input_name} }}}}" in workflow_str:
-                            # Check for unsafe usage patterns
-                            if any(pattern in workflow_str for pattern in [
-                                f"${{{{ inputs.{input_name} }}}}",
-                            ]):
-                                # Check if used in shell commands
-                                if "run:" in workflow_str:
-                                    issues.append({
-                                        "type": "unvalidated_workflow_input",
-                                        "severity": "medium",
-                                        "message": f"Workflow_dispatch input '{input_name}' may be used without validation",
-                                        "input": input_name
-                                    })
-        
-        return issues
-
+        return best_practices_rules.check_workflow_dispatch_inputs(workflow)
+    
     @staticmethod
     def check_environment_secrets(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for environment secrets usage patterns."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        
-        for job_name, job in jobs.items():
-            environment = job.get("environment", "")
-            if environment:
-                # Check if environment is used with secrets
-                if isinstance(environment, dict):
-                    env_name = environment.get("name", "")
-                    if env_name:
-                        # Check if secrets are accessed in this job
-                        job_str = str(job)
-                        if "secrets." in job_str:
-                            issues.append({
-                                "type": "environment_with_secrets",
-                                "severity": "low",
-                                "message": f"Job '{job_name}' uses environment '{env_name}' with secrets",
-                                "job": job_name,
-                                "environment": env_name
-                            })
-        
-        return issues
-
+        return best_practices_rules.check_environment_secrets(workflow)
+    
+    @staticmethod
+    def check_deprecated_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for usage of deprecated actions."""
+        return best_practices_rules.check_deprecated_actions(workflow)
+    
+    @staticmethod
+    def check_typosquatting_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for potential typosquatting in action names."""
+        return security_rules.check_typosquatting_actions(workflow)
     @staticmethod
     def check_untrusted_third_party_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Check for use of untrusted third-party GitHub Actions."""
-        issues = []
-        
-        # List of known trusted action publishers
-        trusted_publishers = {
-            "actions",  # GitHub official actions
-            "github",   # GitHub official
-        }
-        
-        jobs = workflow.get("jobs", {})
-        actions_used = set()
-        
-        for job_name, job in jobs.items():
-            steps = job.get("steps", [])
-            for step in steps:
-                uses = step.get("uses", "")
-                if isinstance(uses, str) and "/" in uses and "@" in uses:
-                    # Extract owner from action reference
-                    action_part = uses.split("@")[0]
-                    if "/" in action_part:
-                        owner = action_part.split("/")[0]
-                        actions_used.add((uses, owner))
-        
-        # Check each action
-        for action_ref, owner in actions_used:
-            if owner.lower() not in trusted_publishers:
-                # Check if it's pinned (has version tag or SHA)
-                if "@" in action_ref:
-                    ref = action_ref.split("@")[-1]
-                    # Check if it's a branch (unpinned)
-                    if not ref.startswith("v") and len(ref) < 7 and not re.match(r'^[a-f0-9]{7,}$', ref):
-                        issues.append({
-                            "type": "untrusted_action_unpinned",
-                            "severity": "high",
-                            "message": f"Untrusted third-party action '{action_ref}' is not pinned to a specific version",
-                            "action": action_ref,
-                            "owner": owner
-                        })
-                    else:
-                        issues.append({
-                            "type": "untrusted_third_party_action",
-                            "severity": "medium",
-                            "message": f"Workflow uses third-party action from untrusted publisher: '{action_ref}'",
-                            "action": action_ref,
-                            "owner": owner
-                        })
-        
-        return issues
-
-    @staticmethod
-    def check_long_term_credentials(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Check for use of long-term credentials instead of OIDC."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        
-        for job_name, job in jobs.items():
-            steps = job.get("steps", [])
-            for step in steps:
-                env = step.get("env", {})
-                run = step.get("run", "")
-                
-                # Check for AWS credentials
-                if any(key in env for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]):
-                    issues.append({
-                        "type": "long_term_aws_credentials",
-                        "severity": "high",
-                        "message": f"Job '{job_name}' uses long-term AWS credentials instead of OIDC",
-                        "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "recommendation": "Use GitHub OIDC to authenticate with AWS"
-                    })
-                
-                # Check for Azure credentials
-                if any(key in env for key in ["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"]):
-                    issues.append({
-                        "type": "long_term_azure_credentials",
-                        "severity": "high",
-                        "message": f"Job '{job_name}' uses long-term Azure credentials instead of OIDC",
-                        "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "recommendation": "Use GitHub OIDC to authenticate with Azure"
-                    })
-                
-                # Check for GCP credentials
-                if "GOOGLE_APPLICATION_CREDENTIALS" in env or "GCP_SA_KEY" in env:
-                    issues.append({
-                        "type": "long_term_gcp_credentials",
-                        "severity": "high",
-                        "message": f"Job '{job_name}' uses long-term GCP credentials instead of OIDC",
-                        "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "recommendation": "Use GitHub OIDC to authenticate with GCP"
-                    })
-                
-                # Check for hardcoded credentials in run commands
-                if isinstance(run, str):
-                    # Check for common credential patterns
-                    if re.search(r'(aws_access_key|aws_secret|azure_client_secret|gcp_key|service_account_key)', run, re.IGNORECASE):
-                        issues.append({
-                            "type": "potential_hardcoded_cloud_credentials",
-                            "severity": "critical",
-                            "message": f"Job '{job_name}' may contain hardcoded cloud credentials in run command",
-                            "job": job_name,
-                            "step": step.get("name", "unnamed")
-                        })
-        
-        return issues
-
+        """Check for use of untrusted third-party GitHub Actions with enhanced suspicious pattern detection."""
+        return security_rules.check_untrusted_third_party_actions(workflow)
     @staticmethod
     def check_network_traffic_filtering(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for potentially dangerous network operations that could exfiltrate data."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        
-        # Check for potentially dangerous network operations
-        for job_name, job in jobs.items():
-            steps = job.get("steps", [])
-            for step in steps:
-                run = step.get("run", "")
-                if isinstance(run, str):
-                    # Check for network operations that could exfiltrate data
-                    dangerous_patterns = [
-                        r'curl\s+.*(http|https)://',
-                        r'wget\s+.*(http|https)://',
-                        r'nc\s+.*\d+',
-                        r'ncat\s+.*\d+',
-                        r'ssh\s+.*@',
-                    ]
-                    for pattern in dangerous_patterns:
-                        if re.search(pattern, run, re.IGNORECASE):
-                            issues.append({
-                                "type": "unfiltered_network_traffic",
-                                "severity": "high",
-                                "message": f"Job '{job_name}' performs network operations that could exfiltrate credentials or data",
-                                "job": job_name,
-                                "step": step.get("name", "unnamed"),
-                                "recommendation": "Implement network segmentation and traffic filtering to prevent credential exfiltration"
-                            })
-                            break
-        
-        return issues
-
+        return security_rules.check_network_traffic_filtering(workflow)
     @staticmethod
     def check_file_tampering_protection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for build jobs that modify files, which could be tampered with."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        
-        # Check for build/deployment jobs that modify files
-        for job_name, job in jobs.items():
-            job_str = str(job).lower()
-            is_build_job = any(keyword in job_str for keyword in ["build", "deploy", "release", "publish", "package"])
-            
-            if is_build_job:
-                # Check for file modification operations
-                steps = job.get("steps", [])
-                for step in steps:
-                    run = step.get("run", "")
-                    if isinstance(run, str):
-                        # Check for file write operations
-                        if re.search(r'(>|>>|cp\s+|mv\s+|rm\s+|write|overwrite)', run, re.IGNORECASE):
-                            issues.append({
-                                "type": "no_file_tampering_protection",
-                                "severity": "medium",
-                                "message": f"Build job '{job_name}' modifies files, which could be tampered with during build",
-                                "job": job_name,
-                                "recommendation": "Implement endpoint detection and response (EDR) tools to detect source code or artifact tampering during build"
-                            })
-                            break
-        
-        return issues
-
+        return security_rules.check_file_tampering_protection(workflow)
     @staticmethod
     def check_audit_logging(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for sensitive operations that should have detailed audit logging."""
-        issues = []
-        
-        jobs = workflow.get("jobs", {})
-        
-        # Check for sensitive operations that should be logged
-        for job_name, job in jobs.items():
-            job_str = str(job).lower()
-            has_sensitive_ops = any(
-                keyword in job_str for keyword in [
-                    "secret", "credential", "token", "deploy", "publish",
-                    "registry", "artifact", "upload", "download"
-                ]
-            )
-            
-            if has_sensitive_ops:
-                issues.append({
-                    "type": "insufficient_audit_logging",
-                    "severity": "medium",
-                    "message": f"Job '{job_name}' performs sensitive operations that should have detailed audit logging",
-                    "job": job_name,
-                    "recommendation": "Keep detailed audit logs for CI/CD activities to enable forensic analysis"
-                })
-        
-        return issues
-
+        return best_practices_rules.check_audit_logging(workflow)
     @staticmethod
     def check_branch_protection_bypass(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for workflows that could bypass branch protection rules."""
-        issues = []
-        
-        on_events = workflow.get("on", {})
-        
-        # Check for workflows that auto-approve PRs
-        if "pull_request" in on_events or "pull_request_target" in on_events:
-            jobs = workflow.get("jobs", {})
-            for job_name, job in jobs.items():
-                steps = job.get("steps", [])
-                for step in steps:
-                    run = step.get("run", "")
-                    uses = step.get("uses", "")
-                    
-                    # Check for auto-approval or auto-merge
-                    if isinstance(run, str):
-                        if re.search(r'(gh\s+pr\s+(review|merge|approve)|approve|merge|bypass)', run, re.IGNORECASE):
-                            issues.append({
-                                "type": "branch_protection_bypass",
-                                "severity": "high",
-                                "message": f"Workflow may auto-approve/merge PRs, bypassing branch protection rules",
-                                "job": job_name,
-                                "step": step.get("name", "unnamed")
-                            })
-                    
-                    if isinstance(uses, str):
-                        if "auto-approve" in uses.lower() or "auto-merge" in uses.lower():
-                            issues.append({
-                                "type": "branch_protection_bypass",
-                                "severity": "high",
-                                "message": f"Workflow uses action that may auto-approve/merge PRs",
-                                "job": job_name,
-                                "action": uses
-                            })
-        
-        return issues
-
+        return security_rules.check_branch_protection_bypass(workflow)
     @staticmethod
     def check_code_injection_via_workflow_inputs(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for code injection via workflow inputs."""
-        issues = []
-        
-        on_events = workflow.get("on", {})
-        
-        # Check workflow_dispatch inputs
-        workflow_dispatch = on_events.get("workflow_dispatch", {})
-        if workflow_dispatch:
-            inputs = workflow_dispatch.get("inputs", {})
-            for input_name, input_def in inputs.items():
-                if isinstance(input_def, dict):
-                    input_type = input_def.get("type", "string")
-                    if input_type == "string":
-                        # Check if input is used in run commands without validation
-                        workflow_str = str(workflow)
-                        input_usage = f"${{{{ inputs.{input_name} }}}}"
-                        if input_usage in workflow_str:
-                            # Check if used in potentially dangerous contexts
-                            if "run:" in workflow_str:
-                                # Check for shell injection patterns
-                                if any(pattern in workflow_str for pattern in [
-                                    f"${{{{ inputs.{input_name} }}}}",
-                                    f"${{{{ inputs.{input_name} }}}}",
-                                ]):
-                                    issues.append({
-                                        "type": "code_injection_via_input",
-                                        "severity": "high",
-                                        "message": f"Workflow_dispatch input '{input_name}' may be vulnerable to code injection",
-                                        "input": input_name,
-                                        "recommendation": "Validate and sanitize workflow inputs before use in shell commands"
-                                    })
-        
-        return issues
-
+        return security_rules.check_code_injection_via_workflow_inputs(workflow)
     @staticmethod
     def check_unpinnable_docker_action(action_yml: Dict[str, Any], action_ref: str, dockerfile_content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Check for unpinnable Docker actions (using mutable tags instead of digests)."""
-        issues = []
-        
-        runs = action_yml.get("runs", {})
-        if runs.get("using") == "docker":
-            # Check for Docker image with mutable tag
-            image = runs.get("image", "")
-            if isinstance(image, str):
-                # Check if it uses a mutable tag (latest, v1, v2, etc.) instead of digest
-                if ":" in image:
-                    tag = image.split(":")[-1]
-                    # Check if it's a digest (sha256:... or just a long hex string)
-                    if not (tag.startswith("sha256:") or (len(tag) >= 40 and re.match(r'^[a-f0-9]+$', tag))):
-                        # It's a mutable tag
-                        issues.append({
-                            "type": "unpinnable_docker_image",
-                            "severity": "high",
-                            "message": f"Docker action uses mutable tag '{tag}' instead of immutable digest",
-                            "action": action_ref,
-                            "image": image,
-                            "recommendation": "Use Docker image digest (sha256:...) instead of tags to ensure immutability"
-                        })
-            
-            # Check Dockerfile for unpinned dependencies (if Dockerfile path is specified)
-            dockerfile_path = runs.get("image", "")
-            if dockerfile_path and not dockerfile_path.startswith("docker://") and ":" not in dockerfile_path:
-                # This is likely a Dockerfile path
-                content_to_check = dockerfile_content or ""
-                
-                # Check for unpinned Python packages
-                if re.search(r'pip\s+install\s+(?!.*==)', content_to_check, re.IGNORECASE):
-                    issues.append({
-                        "type": "unpinned_dockerfile_dependencies",
-                        "severity": "high",
-                        "message": f"Docker action Dockerfile installs Python packages without version pinning",
-                        "action": action_ref,
-                        "recommendation": "Pin all package versions in Dockerfile (e.g., pip install package==1.2.3)"
-                    })
-                
-                # Check for unpinned external resources
-                if re.search(r'(wget|curl)\s+.*http', content_to_check, re.IGNORECASE) and not re.search(r'(sha256|sha512|md5|checksum)', content_to_check, re.IGNORECASE):
-                    issues.append({
-                        "type": "unpinned_dockerfile_resources",
-                        "severity": "high",
-                        "message": f"Docker action Dockerfile downloads external resources without checksum verification",
-                        "action": action_ref,
-                        "recommendation": "Verify checksums for all downloaded external resources"
-                    })
-        
-        return issues
-
+        return best_practices_rules.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content)
     @staticmethod
     def check_unpinnable_composite_action(action_yml: Dict[str, Any], action_ref: str) -> List[Dict[str, Any]]:
         """Check for unpinnable composite actions (using unpinned sub-actions or dependencies)."""
-        issues = []
-        
-        runs = action_yml.get("runs", {})
-        if runs.get("using") == "composite":
-            steps = runs.get("steps", [])
-            if isinstance(steps, list):
-                for step in steps:
-                    if isinstance(step, dict):
-                        uses = step.get("uses", "")
-                        if isinstance(uses, str) and "/" in uses:
-                            # Check if sub-action is pinned to full commit SHA
-                            if "@" in uses:
-                                ref = uses.split("@")[-1]
-                                # Check if it's a full commit SHA (40 chars) or short SHA (7+ chars)
-                                if not (len(ref) >= 7 and re.match(r'^[a-f0-9]+$', ref)):
-                                    # It's using a tag or branch, not a commit SHA
-                                    issues.append({
-                                        "type": "unpinnable_composite_subaction",
-                                        "severity": "high",
-                                        "message": f"Composite action uses sub-action '{uses}' without full commit SHA pinning",
-                                        "action": action_ref,
-                                        "subaction": uses,
-                                        "recommendation": "Pin all sub-actions to full commit SHA for immutability"
-                                    })
-                        
-                        run = step.get("run", "")
-                        if isinstance(run, str):
-                            # Check for NPM install without version locking
-                            if re.search(r'npm\s+install\s+(?!.*@)', run, re.IGNORECASE) or re.search(r'npm\s+install\s+.*@latest', run, re.IGNORECASE):
-                                issues.append({
-                                    "type": "unpinned_npm_packages",
-                                    "severity": "high",
-                                    "message": f"Composite action installs NPM packages without version locking",
-                                    "action": action_ref,
-                                    "recommendation": "Lock NPM package versions (use package-lock.json or specify exact versions)"
-                                })
-                            
-                            # Check for pip install without version pinning
-                            if re.search(r'pip\s+install\s+(?!.*==)', run, re.IGNORECASE):
-                                issues.append({
-                                    "type": "unpinned_python_packages",
-                                    "severity": "high",
-                                    "message": f"Composite action installs Python packages without version pinning",
-                                    "action": action_ref,
-                                    "recommendation": "Pin all Python package versions (e.g., pip install package==1.2.3)"
-                                })
-                            
-                            # Check for downloading external resources without checksums
-                            if re.search(r'(wget|curl)\s+.*http', run, re.IGNORECASE) and not re.search(r'(sha256|sha512|md5|checksum)', run, re.IGNORECASE):
-                                issues.append({
-                                    "type": "unpinned_external_resources",
-                                    "severity": "high",
-                                    "message": f"Composite action downloads external resources without checksum verification",
-                                    "action": action_ref,
-                                    "recommendation": "Verify checksums for all downloaded external resources"
-                                })
-        
-        return issues
-
+        return best_practices_rules.check_unpinnable_composite_action(action_yml, action_ref)
     @staticmethod
     def check_unpinnable_javascript_action(action_yml: Dict[str, Any], action_ref: str, action_content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Check for unpinnable JavaScript actions (downloading external resources without checksums)."""
-        issues = []
-        
-        runs = action_yml.get("runs", {})
-        if runs.get("using") == "node12" or runs.get("using") == "node16" or runs.get("using") == "node20":
-            # Check action code if available
-            if action_content:
-                # Check for downloading external resources without checksums
-                if re.search(r'(wget|curl|fetch|download).*http', action_content, re.IGNORECASE) and not re.search(r'(sha256|sha512|md5|checksum|verify)', action_content, re.IGNORECASE):
-                    issues.append({
-                        "type": "unpinned_javascript_resources",
-                        "severity": "high",
-                        "message": f"JavaScript action downloads external resources without checksum verification",
-                        "action": action_ref,
-                        "recommendation": "Verify checksums for all downloaded external resources to ensure immutability"
-                    })
-        
-        return issues
-
+        return best_practices_rules.check_unpinnable_javascript_action(action_yml, action_ref, action_content)
     @staticmethod
     def audit_action(action_ref: str, action_yml: Optional[Dict[str, Any]] = None, action_content: Optional[str] = None, dockerfile_content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Audit a single action for security issues."""
@@ -1161,31 +241,16 @@ class SecurityAuditor:
                             })
             
             # Check for unpinnable actions (Palo Alto Networks research)
-            issues.extend(SecurityAuditor.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content))
-            issues.extend(SecurityAuditor.check_unpinnable_composite_action(action_yml, action_ref))
-            issues.extend(SecurityAuditor.check_unpinnable_javascript_action(action_yml, action_ref, action_content))
+            issues.extend(best_practices_rules.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content))
+            issues.extend(best_practices_rules.check_unpinnable_composite_action(action_yml, action_ref))
+            issues.extend(best_practices_rules.check_unpinnable_javascript_action(action_yml, action_ref, action_content))
         
         return issues
 
     @staticmethod
     def _find_line_number(content: str, search_text: str, context: Optional[str] = None) -> Optional[int]:
         """Helper to find line number in content."""
-        if not content:
-            return None
-        lines = content.split('\n')
-        for i, line in enumerate(lines, 1):
-            if search_text.lower() in line.lower():
-                if context:
-                    # Check surrounding lines for context
-                    start = max(0, i - 5)
-                    end = min(len(lines), i + 5)
-                    context_area = '\n'.join(lines[start:end]).lower()
-                    if context.lower() in context_area:
-                        return i
-                else:
-                    return i
-        return None
-    
+        return best_practices_rules._find_line_number(content, search_text, context)
     @staticmethod
     async def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None, client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
         """Audit a workflow file for security issues."""
@@ -1195,7 +260,7 @@ class SecurityAuditor:
         perm_issues = SecurityAuditor.check_permissions(workflow)
         if content and perm_issues:
             for issue in perm_issues:
-                line_num = SecurityAuditor._find_line_number(content, "permissions")
+                line_num = best_practices_rules._find_line_number(content, "permissions")
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(perm_issues)
@@ -1204,64 +269,154 @@ class SecurityAuditor:
         token_issues = SecurityAuditor.check_github_token_permissions(workflow)
         if content and token_issues:
             for issue in token_issues:
-                line_num = SecurityAuditor._find_line_number(content, "permissions", issue.get("message", ""))
+                line_num = best_practices_rules._find_line_number(content, "permissions", issue.get("message", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(token_issues)
         
-        # Check for secrets
-        secret_issues = SecurityAuditor.check_secrets_in_workflow(workflow)
+        # Check for secrets and long-term credentials
+        secret_issues = SecurityAuditor.check_secrets_in_workflow(workflow, content)
         if content and secret_issues:
             for issue in secret_issues:
                 # Try to find the secret pattern in content
                 if issue.get("path"):
-                    line_num = SecurityAuditor._find_line_number(content, issue["path"].split(".")[-1])
+                    line_num = best_practices_rules._find_line_number(content, issue["path"].split(".")[-1])
                     if line_num:
                         issue["line_number"] = line_num
+                # For long-term credential issues, look for credential keys
+                elif issue.get("type") in ["long_term_aws_credentials", "long_term_azure_credentials", "long_term_gcp_credentials", "potential_hardcoded_cloud_credentials"]:
+                    cred_keys = ["AWS_ACCESS_KEY", "AZURE_CLIENT", "GOOGLE_APPLICATION", "GCP_SA_KEY", "aws_access_key", "aws_secret", "azure_client_secret", "gcp_key", "service_account_key"]
+                    for key in cred_keys:
+                        line_num = best_practices_rules._find_line_number(content, key, issue.get("job", ""))
+                        if line_num:
+                            issue["line_number"] = line_num
+                            break
+                # For TruffleHog findings, try to find the detector name in content
+                elif issue.get("type") == "trufflehog_secret_detected":
+                    detector = issue.get("evidence", {}).get("detector", "")
+                    if detector:
+                        # Try to find the detector name or common patterns
+                        line_num = best_practices_rules._find_line_number(content, detector.lower().replace(" ", ""))
+                        if not line_num:
+                            # Try common secret patterns
+                            secret_patterns = ["secret", "password", "token", "key", "api_key", "credential"]
+                            for pattern in secret_patterns:
+                                line_num = best_practices_rules._find_line_number(content, pattern)
+                                if line_num:
+                                    break
+                        if line_num:
+                            issue["line_number"] = line_num
         issues.extend(secret_issues)
         
-        # Check self-hosted runners
-        runner_issues = SecurityAuditor.check_self_hosted_runners(workflow)
+        # Check self-hosted runners (with repository visibility context)
+        # Note: is_public_repo would need to be passed from the caller if available
+        # For now, we'll default to False (conservative approach)
+        runner_issues = SecurityAuditor.check_self_hosted_runners(workflow, is_public_repo=False)
         if content and runner_issues:
             for issue in runner_issues:
-                line_num = SecurityAuditor._find_line_number(content, "self-hosted", issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, "self-hosted", issue.get("job", ""))
+                if not line_num:
+                    line_num = best_practices_rules._find_line_number(content, "runs-on", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(runner_issues)
         
-        # Check dangerous events
+        # Check runner label confusion
+        label_confusion_issues = SecurityAuditor.check_runner_label_confusion(workflow)
+        if content and label_confusion_issues:
+            for issue in label_confusion_issues:
+                line_num = best_practices_rules._find_line_number(content, "runs-on", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(label_confusion_issues)
+        
+        # Check self-hosted runner secrets
+        runner_secrets_issues = SecurityAuditor.check_self_hosted_runner_secrets(workflow)
+        if content and runner_secrets_issues:
+            for issue in runner_secrets_issues:
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(runner_secrets_issues)
+        
+        # Check runner environment security
+        runner_env_issues = SecurityAuditor.check_runner_environment_security(workflow)
+        if content and runner_env_issues:
+            for issue in runner_env_issues:
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(runner_env_issues)
+        
+        # Check repository visibility risks
+        visibility_risks_issues = SecurityAuditor.check_repository_visibility_risks(workflow, is_public_repo=False)
+        if content and visibility_risks_issues:
+            for issue in visibility_risks_issues:
+                line_num = best_practices_rules._find_line_number(content, "runs-on")
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(visibility_risks_issues)
+        
+        # Check dangerous events (includes insecure_pull_request_target)
         event_issues = SecurityAuditor.check_dangerous_events(workflow)
         if content and event_issues:
             for issue in event_issues:
                 event_name = issue.get("event", "")
-                line_num = SecurityAuditor._find_line_number(content, event_name)
-                if line_num:
-                    issue["line_number"] = line_num
+                if event_name:
+                    line_num = best_practices_rules._find_line_number(content, event_name)
+                    if line_num:
+                        issue["line_number"] = line_num
+                # For insecure_pull_request_target, also try to find checkout line
+                if issue.get("type") == "insecure_pull_request_target":
+                    job_name = issue.get("job", "")
+                    line_num = best_practices_rules._find_line_number(content, "actions/checkout", job_name)
+                    if line_num:
+                        issue["line_number"] = line_num
         issues.extend(event_issues)
         
         # Check checkout actions
         checkout_issues = SecurityAuditor.check_checkout_actions(workflow)
         if content and checkout_issues:
             for issue in checkout_issues:
-                line_num = SecurityAuditor._find_line_number(content, "actions/checkout", issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, "actions/checkout", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(checkout_issues)
         
-        # Check script injection
+        # Check script injection (enhanced with specific patterns)
         script_issues = SecurityAuditor.check_script_injection(workflow)
         if content and script_issues:
             for issue in script_issues:
-                line_num = SecurityAuditor._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(script_issues)
+        
+        # Check JavaScript injection in github-script action
+        github_script_issues = SecurityAuditor.check_github_script_injection(workflow)
+        if content and github_script_issues:
+            for issue in github_script_issues:
+                line_num = best_practices_rules._find_line_number(content, "actions/github-script", issue.get("job", ""))
+                if not line_num:
+                    line_num = best_practices_rules._find_line_number(content, "script:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(github_script_issues)
+        
+        # Check PowerShell injection
+        powershell_issues = SecurityAuditor.check_powershell_injection(workflow)
+        if content and powershell_issues:
+            for issue in powershell_issues:
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(powershell_issues)
         
         # Check artifact retention
         artifact_issues = SecurityAuditor.check_artifact_retention(workflow)
         if content and artifact_issues:
             for issue in artifact_issues:
-                line_num = SecurityAuditor._find_line_number(content, "upload-artifact", issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, "upload-artifact", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(artifact_issues)
@@ -1270,7 +425,7 @@ class SecurityAuditor:
         matrix_issues = SecurityAuditor.check_matrix_strategy(workflow)
         if content and matrix_issues:
             for issue in matrix_issues:
-                line_num = SecurityAuditor._find_line_number(content, "matrix:", issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, "matrix:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(matrix_issues)
@@ -1279,7 +434,7 @@ class SecurityAuditor:
         dispatch_issues = SecurityAuditor.check_workflow_dispatch_inputs(workflow)
         if content and dispatch_issues:
             for issue in dispatch_issues:
-                line_num = SecurityAuditor._find_line_number(content, "workflow_dispatch", issue.get("input", ""))
+                line_num = best_practices_rules._find_line_number(content, "workflow_dispatch", issue.get("input", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(dispatch_issues)
@@ -1288,12 +443,30 @@ class SecurityAuditor:
         env_issues = SecurityAuditor.check_environment_secrets(workflow)
         if content and env_issues:
             for issue in env_issues:
-                line_num = SecurityAuditor._find_line_number(content, "environment:", issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, "environment:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(env_issues)
         
-        # Check for untrusted third-party actions
+        # Check deprecated actions
+        deprecated_issues = SecurityAuditor.check_deprecated_actions(workflow)
+        if content and deprecated_issues:
+            for issue in deprecated_issues:
+                line_num = best_practices_rules._find_line_number(content, issue.get("action", ""), issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(deprecated_issues)
+        
+        # Check typosquatting actions
+        typosquatting_issues = SecurityAuditor.check_typosquatting_actions(workflow)
+        if content and typosquatting_issues:
+            for issue in typosquatting_issues:
+                line_num = best_practices_rules._find_line_number(content, issue.get("action", ""), issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(typosquatting_issues)
+        
+        # Check untrusted third-party actions (enhanced with suspicious patterns)
         untrusted_issues = SecurityAuditor.check_untrusted_third_party_actions(workflow)
         if content and untrusted_issues:
             for issue in untrusted_issues:
@@ -1301,31 +474,20 @@ class SecurityAuditor:
                 if action_ref:
                     # Extract action name
                     action_name = action_ref.split("@")[0].split("/")[-1] if "@" in action_ref else action_ref
-                    line_num = SecurityAuditor._find_line_number(content, action_name)
+                    line_num = best_practices_rules._find_line_number(content, action_name)
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(untrusted_issues)
         
-        # Check for long-term credentials
-        cred_issues = SecurityAuditor.check_long_term_credentials(workflow)
-        if content and cred_issues:
-            for issue in cred_issues:
-                # Look for credential keys
-                cred_keys = ["AWS_ACCESS_KEY", "AZURE_CLIENT", "GOOGLE_APPLICATION", "GCP_SA_KEY"]
-                for key in cred_keys:
-                    line_num = SecurityAuditor._find_line_number(content, key, issue.get("job", ""))
-                    if line_num:
-                        issue["line_number"] = line_num
-                        break
-        issues.extend(cred_issues)
+        # Long-term credentials are now checked in check_secrets_in_workflow above
         
         # Check for network traffic filtering
         network_issues = SecurityAuditor.check_network_traffic_filtering(workflow)
         if content and network_issues:
             for issue in network_issues:
-                line_num = SecurityAuditor._find_line_number(content, "curl", issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, "curl", issue.get("job", ""))
                 if not line_num:
-                    line_num = SecurityAuditor._find_line_number(content, "wget", issue.get("job", ""))
+                    line_num = best_practices_rules._find_line_number(content, "wget", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(network_issues)
@@ -1334,7 +496,7 @@ class SecurityAuditor:
         tamper_issues = SecurityAuditor.check_file_tampering_protection(workflow)
         if content and tamper_issues:
             for issue in tamper_issues:
-                line_num = SecurityAuditor._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(tamper_issues)
@@ -1343,7 +505,7 @@ class SecurityAuditor:
         audit_issues = SecurityAuditor.check_audit_logging(workflow)
         if content and audit_issues:
             for issue in audit_issues:
-                line_num = SecurityAuditor._find_line_number(content, issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(audit_issues)
@@ -1352,7 +514,7 @@ class SecurityAuditor:
         branch_issues = SecurityAuditor.check_branch_protection_bypass(workflow)
         if content and branch_issues:
             for issue in branch_issues:
-                line_num = SecurityAuditor._find_line_number(content, "gh pr", issue.get("job", ""))
+                line_num = best_practices_rules._find_line_number(content, "gh pr", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(branch_issues)
@@ -1363,10 +525,57 @@ class SecurityAuditor:
             for issue in injection_issues:
                 input_name = issue.get("input", "")
                 if input_name:
-                    line_num = SecurityAuditor._find_line_number(content, f"inputs.{input_name}")
+                    line_num = best_practices_rules._find_line_number(content, f"inputs.{input_name}")
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(injection_issues)
+        
+        # Check for malicious curl pipe bash
+        curl_pipe_issues = SecurityAuditor.check_malicious_curl_pipe_bash(workflow)
+        if content and curl_pipe_issues:
+            for issue in curl_pipe_issues:
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(curl_pipe_issues)
+        
+        # Check for malicious base64 decode
+        base64_issues = SecurityAuditor.check_malicious_base64_decode(workflow)
+        if content and base64_issues:
+            for issue in base64_issues:
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(base64_issues)
+        
+        # Check for continue-on-error in critical jobs
+        continue_error_issues = SecurityAuditor.check_continue_on_error_critical_job(workflow)
+        if content and continue_error_issues:
+            for issue in continue_error_issues:
+                line_num = best_practices_rules._find_line_number(content, "continue-on-error", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(continue_error_issues)
+        
+        # Check for obfuscation patterns
+        obfuscation_issues = SecurityAuditor.check_obfuscation_detection(workflow)
+        if content and obfuscation_issues:
+            for issue in obfuscation_issues:
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(obfuscation_issues)
+        
+        # Check for artifact packing vulnerabilities
+        artipacked_issues = SecurityAuditor.check_artipacked_vulnerability(workflow)
+        if content and artipacked_issues:
+            for issue in artipacked_issues:
+                line_num = best_practices_rules._find_line_number(content, "upload-artifact", issue.get("job", ""))
+                if not line_num:
+                    line_num = best_practices_rules._find_line_number(content, "download-artifact", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(artipacked_issues)
         
         # Check for hash pinning (commit SHA) instead of tags
         hash_issues = SecurityAuditor.check_hash_pinning(workflow)
@@ -1375,7 +584,7 @@ class SecurityAuditor:
                 action_ref = issue.get("action", "")
                 if action_ref:
                     action_name = action_ref.split("@")[0].split("/")[-1] if "@" in action_ref else action_ref
-                    line_num = SecurityAuditor._find_line_number(content, action_name)
+                    line_num = best_practices_rules._find_line_number(content, action_name)
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(hash_issues)
@@ -1387,10 +596,69 @@ class SecurityAuditor:
                 action_ref = issue.get("action", "")
                 if action_ref:
                     action_name = action_ref.split("@")[0].split("/")[-1] if "@" in action_ref else action_ref
-                    line_num = SecurityAuditor._find_line_number(content, action_name)
+                    line_num = best_practices_rules._find_line_number(content, action_name)
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(version_issues)
+        
+        # Advanced privilege analysis checks
+        # Extract current repository from client if available
+        current_repo = None
+        if client:
+            # Try to infer from workflow path or other context
+            # For now, we'll pass None and let the check handle it
+            pass
+        
+        # Check token permission escalation
+        token_escalation_issues = SecurityAuditor.check_token_permission_escalation(workflow)
+        if content and token_escalation_issues:
+            for issue in token_escalation_issues:
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(token_escalation_issues)
+        
+        # Check cross-repository access
+        cross_repo_issues = SecurityAuditor.check_cross_repository_access(workflow, current_repo)
+        if content and cross_repo_issues:
+            for issue in cross_repo_issues:
+                if issue.get("type") == "cross_repository_access":
+                    line_num = best_practices_rules._find_line_number(content, "actions/checkout", issue.get("job", ""))
+                else:
+                    line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(cross_repo_issues)
+        
+        # Check environment bypass
+        env_bypass_issues = SecurityAuditor.check_environment_bypass(workflow)
+        if content and env_bypass_issues:
+            for issue in env_bypass_issues:
+                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(env_bypass_issues)
+        
+        # Check secrets access to untrusted actions
+        secrets_untrusted_issues = SecurityAuditor.check_secrets_access_untrusted(workflow)
+        if content and secrets_untrusted_issues:
+            for issue in secrets_untrusted_issues:
+                action = issue.get("action", "")
+                if action:
+                    action_name = action.split("@")[0].split("/")[-1] if "@" in action else action
+                    line_num = best_practices_rules._find_line_number(content, action_name)
+                    if line_num:
+                        issue["line_number"] = line_num
+        issues.extend(secrets_untrusted_issues)
+        
+        # Check excessive write permissions
+        excessive_write_issues = SecurityAuditor.check_excessive_write_permissions(workflow)
+        if content and excessive_write_issues:
+            for issue in excessive_write_issues:
+                line_num = best_practices_rules._find_line_number(content, "permissions", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(excessive_write_issues)
         
         return issues
 

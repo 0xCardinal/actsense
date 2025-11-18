@@ -82,14 +82,12 @@ async def resolve_action_dependencies(
     
     # Get action metadata first (needed for comprehensive auditing)
     action_yml = None
-    action_content = None
     js_action_code = None
     dockerfile_content = None
     try:
         action_metadata = await client.get_action_metadata(owner, repo, ref, subdir)
         if action_metadata:
             action_yml = parser.parse_action_yml(action_metadata["content"])
-            action_content = action_metadata["content"]
             
             runs = action_yml.get("runs", {})
             
@@ -137,6 +135,7 @@ async def resolve_action_dependencies(
         pass
     
     # Audit the action (with metadata if available)
+    # action_content parameter expects JavaScript code for JS actions, not action.yml content
     issues = auditor.audit_action(action_ref, action_yml, js_action_code, dockerfile_content)
     graph.add_issues_to_node(action_ref, issues)
     
