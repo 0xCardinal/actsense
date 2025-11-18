@@ -235,9 +235,10 @@ class TestSecurityAuditorIntegration:
         issues = SecurityAuditor.check_environment_secrets(workflow_with_environment_secrets)
         assert isinstance(issues, list)
     
-    def test_check_deprecated_actions(self, workflow_with_deprecated_action):
+    @pytest.mark.asyncio
+    async def test_check_deprecated_actions(self, workflow_with_deprecated_action):
         """Test check_deprecated_actions delegation."""
-        issues = SecurityAuditor.check_deprecated_actions(workflow_with_deprecated_action)
+        issues = await SecurityAuditor.check_deprecated_actions(workflow_with_deprecated_action)
         assert isinstance(issues, list)
     
     def test_check_typosquatting_actions(self, workflow_with_typosquatting):

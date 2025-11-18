@@ -175,6 +175,61 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
   }
 
   const issueInfo = getIssueDescription(issue.type)
+  
+  // Format issue type as title (convert snake_case to Title Case)
+  const formatTitle = (type) => {
+    if (!type) return 'Security Issue'
+    return type
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+  
+  // Get actsense.dev URL for this vulnerability
+  const getActsenseUrl = (type) => {
+    if (!type) return 'https://actsense.dev/vulnerabilities'
+    return `https://actsense.dev/vulnerabilities/${type}`
+  }
+  
+  // Format field names for display (convert snake_case to Title Case)
+  const formatFieldName = (key) => {
+    return key
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+  
+  // Format field values
+  const formatFieldValue = (key, value) => {
+    if (key === 'verified' && typeof value === 'boolean') {
+      return (
+        <span 
+          className={`verification-pill ${value ? 'verified' : 'unverified'}`}
+          style={{ marginLeft: '0.5rem' }}
+        >
+          {value ? '✓ Verified' : '⚠ Unverified'}
+        </span>
+      )
+    }
+    if (key === 'sha_length' && typeof value === 'number') {
+      return `${value} characters`
+    }
+    if (Array.isArray(value)) {
+      return value.join(', ')
+    }
+    if (typeof value === 'object' && value !== null) {
+      return JSON.stringify(value, null, 2)
+    }
+    return String(value)
+  }
+  
+  // Get evidence fields (excluding the "vulnerability" link field)
+  const getEvidenceFields = () => {
+    if (!issue.evidence) return []
+    return Object.entries(issue.evidence).filter(([key]) => key !== 'vulnerability')
+  }
+  
+  const evidenceFields = getEvidenceFields()
 
   return (
     <>
@@ -182,7 +237,7 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
       <div className="issue-modal">
         <div className="issue-modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <h3>{issue.type || 'Security Issue'}</h3>
+            <h3>{formatTitle(issue.type)}</h3>
             {issue.type === 'trufflehog_secret_detected' && issue.evidence && (
               <span 
                 className={`verification-pill ${issue.evidence.verified ? 'verified' : 'unverified'}`}
@@ -198,122 +253,69 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
         </div>
         
         <div className="issue-modal-content">
+          {/* Title */}
           <div className="issue-modal-section">
-            <h4>Description</h4>
-            <p>{issueInfo.description}</p>
-            {issue.evidence && issue.evidence.vulnerability && (
-              <div className="vulnerability-details">
-                {issue.evidence.vulnerability.split('\n').map((line, idx) => (
-                  <React.Fragment key={idx}>
-                    {line}
-                    {idx < issue.evidence.vulnerability.split('\n').length - 1 && <br />}
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
+            <h2 className="issue-title">{formatTitle(issue.type)}</h2>
           </div>
 
+          {/* Short Description */}
+          <div className="issue-modal-section">
+            <h4>Description</h4>
+            <p className="issue-description">{issueInfo.description}</p>
+          </div>
+
+          {/* Short Mitigation Strategy */}
           <div className="issue-modal-section">
             <h4>Mitigation Strategy</h4>
-            
-            {issue.message && (
+            <p className="issue-mitigation">{issueInfo.mitigation}</p>
+          </div>
+
+          {/* Evidence */}
+          {evidenceFields.length > 0 && (
+            <div className="issue-modal-section">
+              <h4>Evidence</h4>
+              <div className="evidence-container">
+                {evidenceFields.map(([key, value]) => {
+                  // Skip null, undefined, or empty string values
+                  if (value === null || value === undefined || value === '') {
+                    return null
+                  }
+                  
+                  return (
+                    <div key={key} className="evidence-item">
+                      <span className="evidence-label">{formatFieldName(key)}:</span>
+                      <span className="evidence-value">{formatFieldValue(key, value)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Additional Message if present */}
+          {issue.message && (
+            <div className="issue-modal-section">
               <div className="mitigation-message">
                 {issue.message}
               </div>
-            )}
+            </div>
+          )}
 
-            {issue.evidence && (
-              <div className="mitigation-evidence">
-                <h5>Evidence</h5>
-                <div className="evidence-container">
-                  {issue.evidence.action_reference && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">Action Reference:</span>
-                      <span className="evidence-value">{issue.evidence.action_reference}</span>
-                    </div>
-                  )}
-                  {issue.evidence.action_name && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">Action Name:</span>
-                      <span className="evidence-value">{issue.evidence.action_name}</span>
-                    </div>
-                  )}
-                  {issue.evidence.reference_type && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">Reference Type:</span>
-                      <span className="evidence-value">{issue.evidence.reference_type}</span>
-                    </div>
-                  )}
-                  {issue.evidence.reference_value && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">Reference Value:</span>
-                      <span className="evidence-value">{issue.evidence.reference_value}</span>
-                    </div>
-                  )}
-                  {issue.evidence.current_pinning && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">Current Pinning:</span>
-                      <span className="evidence-value">{issue.evidence.current_pinning}</span>
-                    </div>
-                  )}
-                  {issue.evidence.sha_length && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">SHA Length:</span>
-                      <span className="evidence-value">{issue.evidence.sha_length} characters</span>
-                    </div>
-                  )}
-                  {issue.evidence.tag && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">Tag:</span>
-                      <span className="evidence-value">{issue.evidence.tag}</span>
-                    </div>
-                  )}
-                  {issue.evidence.sha && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">SHA:</span>
-                      <span className="evidence-value">{issue.evidence.sha}</span>
-                    </div>
-                  )}
-                  {issue.evidence.detector && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">Detector:</span>
-                      <span className="evidence-value">{issue.evidence.detector}</span>
-                    </div>
-                  )}
-                  {issue.evidence.verified !== undefined && (
-                    <div className="evidence-item">
-                      <span className="evidence-label">Verification Status:</span>
-                      <span className="evidence-value">
-                        <span 
-                          className={`verification-pill ${issue.evidence.verified ? 'verified' : 'unverified'}`}
-                          style={{ marginLeft: '0.5rem' }}
-                        >
-                          {issue.evidence.verified ? '✓ Verified' : '⚠ Unverified'}
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {issue.recommendation && (
-              <div className="mitigation-recommendation">
-                <h5>Recommendation</h5>
-                <div className="recommendation-text">
-                  {issue.recommendation.split('\n').map((line, idx) => (
-                    <React.Fragment key={idx}>
-                      {line}
-                      {idx < issue.recommendation.split('\n').length - 1 && <br />}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!issue.message && !issue.evidence && !issue.recommendation && (
-              <p>{issueInfo.mitigation}</p>
-            )}
+          {/* Actsense.dev Reference Link */}
+          <div className="issue-modal-section">
+            <div className="actsense-reference">
+              <p className="actsense-reference-text">
+                For more details on the issue and mitigation, refer to the{' '}
+                <a 
+                  href={getActsenseUrl(issue.type)} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="actsense-link"
+                >
+                  actsense.dev documentation
+                </a>.
+              </p>
+            </div>
           </div>
 
           {issue.type === 'inconsistent_action_version' && issue.workflows && issue.workflows.length > 0 && (

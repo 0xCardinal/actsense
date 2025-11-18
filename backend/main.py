@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, Set
 import os
+import uvicorn
 
 from github_client import GitHubClient
 from workflow_parser import WorkflowParser
@@ -14,7 +15,7 @@ from graph_builder import GraphBuilder
 from repo_cloner import RepoCloner
 from analysis_storage import AnalysisStorage
 
-app = FastAPI(title="GitHub Actions Security Auditor")
+app = FastAPI(title="actsense - GitHub Actions Security Auditor")
 
 # CORS middleware
 app.add_middleware(
@@ -379,6 +380,5 @@ if os.path.exists(FRONTEND_BUILD_PATH):
 
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 

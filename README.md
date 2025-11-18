@@ -145,6 +145,31 @@ actsense detects issues including:
 - Untrusted third-party actions
 - And 30+ more security issues
 
+## Configuration
+
+### Trusted Action Publishers
+
+By default, actsense flags actions from unknown publishers when secrets are passed to them. You can configure which publishers are trusted by editing `backend/config.yaml`.
+
+**To add a trusted publisher:**
+
+1. Open `backend/config.yaml`
+2. Add the publisher prefix to the `trusted_publishers` list:
+
+```yaml
+trusted_publishers:
+  - "actions/"
+  - "github/"
+  # ... existing publishers ...
+  - "0xCardinal/"
+```
+
+3. Restart the application
+
+**Example:** To trust `elgohr/Publish-Docker-Github-Action@v5`, add `"elgohr/"` to the list. This will trust all actions from the `elgohr` organization.
+
+For more details, see [TRUSTED_PUBLISHERS.md](backend/TRUSTED_PUBLISHERS.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for technical details, API documentation, and development guidelines.

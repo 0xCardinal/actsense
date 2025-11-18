@@ -212,6 +212,20 @@ class GitHubClient:
                 pass
         return None
 
+    async def get_repository_info(self, owner: str, repo: str) -> Optional[Dict[str, Any]]:
+        """Get repository information including archived status."""
+        try:
+            url = f"{self.base_url}/repos/{owner}/{repo}"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=self.headers)
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 404:
+                    return None  # Repository doesn't exist or is private
+        except (httpx.HTTPStatusError, Exception):
+            pass
+        return None
+
     def parse_action_reference(self, action_ref: str) -> tuple:
         """Parse action reference like 'owner/repo@v1', 'owner/repo/path@v1', or 'owner/repo@ref'."""
         if "@" in action_ref:

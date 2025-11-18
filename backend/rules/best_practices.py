@@ -809,8 +809,8 @@ def check_environment_secrets(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     return issues
 
 
-def check_deprecated_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Check for usage of deprecated actions."""
+async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
+    """Check for usage of deprecated actions and archived repositories."""
     issues = []
 
     # Known deprecated actions with replacement recommendations
@@ -826,6 +826,7 @@ def check_deprecated_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     }
 
     jobs = workflow.get("jobs", {})
+    checked_repos = {}  # Cache for repository archived status
 
     for job_name, job in jobs.items():
         steps = job.get("steps", [])
@@ -833,6 +834,55 @@ def check_deprecated_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
             uses = step.get("uses", "")
             if not uses:
                 continue
+
+            # Extract action owner/repo for archived check
+            action_owner = None
+            action_repo = None
+            if "/" in uses:
+                action_part = uses.split("@")[0]  # Remove version/tag
+                parts = action_part.split("/", 1)
+                if len(parts) == 2:
+                    action_owner = parts[0]
+                    # Handle subdirectory actions (owner/repo/path)
+                    repo_part = parts[1]
+                    if "/" in repo_part:
+                        action_repo = repo_part.split("/")[0]
+                    else:
+                        action_repo = repo_part
+
+            # Check if repository is archived (if client is available)
+            if client and action_owner and action_repo:
+                repo_key = f"{action_owner}/{action_repo}"
+                if repo_key not in checked_repos:
+                    try:
+                        repo_info = await client.get_repository_info(action_owner, action_repo)
+                        if repo_info:
+                            checked_repos[repo_key] = repo_info.get("archived", False)
+                        else:
+                            checked_repos[repo_key] = None  # Couldn't fetch (private or doesn't exist)
+                    except Exception:
+                        checked_repos[repo_key] = None  # Error fetching, skip archived check
+                
+                is_archived = checked_repos.get(repo_key)
+                if is_archived is True:
+                    issues.append({
+                        "type": "deprecated_action",
+                        "severity": "high",
+                        "message": f"Job '{job_name}' uses action '{uses}' from archived repository '{repo_key}'. Archived repositories are no longer maintained and may have security vulnerabilities.",
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "action": uses,
+                        "evidence": {
+                            "job": job_name,
+                            "step": step.get("name", "unnamed"),
+                            "action": uses,
+                            "repository": repo_key,
+                            "archived": True,
+                            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/deprecated_action"
+                        },
+                        "recommendation": f"Replace '{uses}' with an actively maintained alternative. Archived repositories receive no security updates."
+                    })
+                    continue  # Skip other checks if archived
 
             # Check if action is in deprecated list
             if uses in deprecated_actions:

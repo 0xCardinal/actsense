@@ -182,9 +182,10 @@ class TestEnvironmentSecrets:
 class TestDeprecatedActions:
     """Tests for deprecated action detection."""
     
-    def test_deprecated_action(self, workflow_with_deprecated_action):
+    @pytest.mark.asyncio
+    async def test_deprecated_action(self, workflow_with_deprecated_action):
         """Test detection of deprecated actions."""
-        issues = best_practices_rules.check_deprecated_actions(workflow_with_deprecated_action)
+        issues = await best_practices_rules.check_deprecated_actions(workflow_with_deprecated_action)
         
         deprecated_issues = [i for i in issues if i.get("type") == "deprecated_action"]
         if len(deprecated_issues) > 0:

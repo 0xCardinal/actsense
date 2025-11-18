@@ -1,0 +1,41 @@
+# Trusted Action Publishers Configuration
+# 
+# This file defines which GitHub Action publishers are considered "trusted".
+# Actions from trusted publishers won't trigger warnings when secrets are passed to them.
+#
+# To add a new trusted publisher:
+#   1. Add the publisher prefix (e.g., "your-org/") to the trusted_publishers list below
+#   2. Restart the application
+#
+# Format:
+#   - Use the publisher prefix (owner name) followed by a slash
+#   - Example: "actions/" means all actions from the "actions" organization are trusted
+#   - Example: "elgohr/" means all actions from the "elgohr" user/org are trusted
+#
+# Note: The check uses prefix matching, so "actions/" will match:
+#   - actions/checkout@v3
+#   - actions/setup-node@v2
+#   - actions/cache@v3
+#   etc.
+
+trusted_publishers:
+  # GitHub Official Actions
+  - "actions/"              # GitHub official actions (actions/checkout, actions/setup-node, etc.)
+  - "github/"              # GitHub official organization
+  
+  # Major Cloud Providers
+  - "microsoft/"           # Microsoft
+  - "azure/"               # Azure
+  - "google-github-actions/"  # Google Cloud
+  - "aws-actions/"         # AWS
+  
+  # Infrastructure & DevOps Tools
+  - "docker/"              # Docker
+  - "hashicorp/"           # HashiCorp (Terraform, Vault, etc.)
+  - "step-security/"       # Step Security
+  
+  # Add your trusted publishers below:
+  # - "your-org/"          # Your organization
+  # - "another-trusted-publisher/"  # Another trusted publisher
+  # - "0xCardinal/"            # Example: Trust 0xCardinal/* actions
+

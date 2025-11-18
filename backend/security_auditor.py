@@ -170,9 +170,9 @@ class SecurityAuditor:
         return best_practices_rules.check_environment_secrets(workflow)
     
     @staticmethod
-    def check_deprecated_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
         """Check for usage of deprecated actions."""
-        return best_practices_rules.check_deprecated_actions(workflow)
+        return await best_practices_rules.check_deprecated_actions(workflow, client)
     
     @staticmethod
     def check_typosquatting_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -449,7 +449,7 @@ class SecurityAuditor:
         issues.extend(env_issues)
         
         # Check deprecated actions
-        deprecated_issues = SecurityAuditor.check_deprecated_actions(workflow)
+        deprecated_issues = await SecurityAuditor.check_deprecated_actions(workflow, client)
         if content and deprecated_issues:
             for issue in deprecated_issues:
                 line_num = best_practices_rules._find_line_number(content, issue.get("action", ""), issue.get("job", ""))

@@ -6,6 +6,12 @@ import tempfile
 import json
 import os
 from github_client import GitHubClient
+import sys
+from pathlib import Path
+
+# Add parent directory to path to import config_loader
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config_loader import get_trusted_publishers
 
 # Security vulnerability checks
 
@@ -1177,18 +1183,10 @@ def check_secrets_access_untrusted(workflow: Dict[str, Any]) -> List[Dict[str, A
     """Check for secrets passed to untrusted actions."""
     issues = []
 
-    # List of trusted action publishers
-    trusted_publishers = [
-        "actions/",
-        "github/",
-        "microsoft/",
-        "azure/",
-        "docker/",
-        "hashicorp/",
-        "google-github-actions/",
-        "aws-actions/",
-        "step-security/",
-    ]
+    # Load trusted publishers from config file
+    # Config file location: backend/config.yaml
+    # See config.yaml for instructions on adding trusted publishers
+    trusted_publishers = get_trusted_publishers()
 
     def is_untrusted_action(action_uses: str) -> bool:
         """Check if action is from untrusted publisher."""
@@ -1520,18 +1518,11 @@ def check_untrusted_third_party_actions(workflow: Dict[str, Any]) -> List[Dict[s
     """Check for use of untrusted third-party GitHub Actions with enhanced suspicious pattern detection."""
     issues = []
 
-    # List of known trusted action publishers
-    trusted_publishers = {
-        "actions",  # GitHub official actions
-        "github",   # GitHub official
-        "microsoft",  # Microsoft
-        "azure",     # Azure
-        "docker",    # Docker
-        "hashicorp", # HashiCorp
-        "google-github-actions", # Google
-        "aws-actions", # AWS
-        "step-security", # Step Security
-    }
+    # Load trusted publishers from config file (removes trailing "/" for set comparison)
+    # Config file location: backend/config.yaml
+    # See config.yaml for instructions on adding trusted publishers
+    trusted_publishers_list = get_trusted_publishers()
+    trusted_publishers = {p.rstrip("/") for p in trusted_publishers_list}  # Convert to set without "/"
 
     jobs = workflow.get("jobs", {})
     actions_used = set()
