@@ -7,6 +7,8 @@ import AnalysisHistory from './components/AnalysisHistory'
 import TransitiveDependenciesTable from './components/TransitiveDependenciesTable'
 import NodesTable from './components/NodesTable'
 import IssuesTable from './components/IssuesTable'
+import SearchOverlay from './components/SearchOverlay'
+import SearchResultsPage from './components/SearchResultsPage'
 import './App.css'
 
 function App() {
@@ -19,12 +21,32 @@ function App() {
   const [viewMode, setViewMode] = useState('graph')
   const [shareMode, setShareMode] = useState(false)
   const [repositoryAuditStatus, setRepositoryAuditStatus] = useState(null)
+  const [showSearchOverlay, setShowSearchOverlay] = useState(false)
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
   const inputFormRef = useRef(null)
 
   // Debug: Log when component mounts
   useEffect(() => {
     console.log('App component mounted')
   }, [])
+
+  // Handle Cmd+K / Ctrl+K keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Cmd+K on Mac, Ctrl+K on Windows/Linux
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        if (graphData) {
+          setShowSearchOverlay(true)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [graphData])
 
   // Reset application state
   const handleReset = () => {
@@ -326,51 +348,92 @@ function App() {
           <AnalysisHistory onLoadAnalysis={handleLoadAnalysis} />
         </div>
         
-        <div className="main-content">
-          {graphData ? (
-            viewMode === 'graph' ? (
-              <ActionGraph 
-                graphData={graphData} 
-                onNodeSelect={setSelectedNode}
-                filter={graphFilter}
-                onClearFilter={() => setGraphFilter(null)}
-              />
-            ) : (
-              // Table view: show different tables based on filter
-              graphFilter?.type === 'has_dependencies' ? (
-                <TransitiveDependenciesTable 
-                  graphData={graphData}
+        {showSearchResults ? (
+          <SearchResultsPage
+            searchQuery={searchQuery}
+            searchResults={searchResults}
+            graphData={graphData}
+            onNodeSelect={(node) => {
+              setSelectedNode(node)
+              setShowSearchResults(false)
+            }}
+            onClose={() => setShowSearchResults(false)}
+          />
+        ) : (
+          <div className="main-content">
+            {graphData && (
+              <button
+                className="floating-search-button"
+                onClick={() => setShowSearchOverlay(true)}
+                title="Search issues and assets (⌘K or Ctrl+K)"
+                aria-label="Search"
+              >
+                <svg 
+                  width="18" 
+                  height="18" 
+                  viewBox="0 0 16 16" 
+                  fill="none" 
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path 
+                    d="M11.5 10h-.79l-.28-.27C11.41 8.59 12 7.11 12 5.5 12 2.46 9.54 0 6.5 0S1 2.46 1 5.5 3.46 11 6.5 11c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L16.49 15l-4.99-5zm-5 0C4.01 10 2 7.99 2 5.5S4.01 1 6.5 1 11 3.01 11 5.5 8.99 10 6.5 10z" 
+                    fill="currentColor"
+                  />
+                </svg>
+                <span>Search</span>
+                <kbd>{navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘K' : 'Ctrl+K'}</kbd>
+              </button>
+            )}
+            {graphData ? (
+              viewMode === 'graph' ? (
+                <ActionGraph 
+                  graphData={graphData} 
                   onNodeSelect={setSelectedNode}
                   filter={graphFilter}
-                />
-              ) : graphFilter?.type === 'has_issues' ? (
-                <IssuesTable 
-                  graphData={graphData}
-                  onNodeSelect={setSelectedNode}
-                  filter={graphFilter}
+                  onClearFilter={() => setGraphFilter(null)}
                 />
               ) : (
-                <NodesTable 
-                  graphData={graphData}
-                  onNodeSelect={setSelectedNode}
-                  filter={graphFilter}
-                />
+                // Table view: show different tables based on filter
+                graphFilter?.type === 'has_dependencies' ? (
+                  <TransitiveDependenciesTable 
+                    graphData={graphData}
+                    onNodeSelect={setSelectedNode}
+                    filter={graphFilter}
+                  />
+                ) : graphFilter?.type === 'has_issues' ? (
+                  <IssuesTable 
+                    graphData={graphData}
+                    onNodeSelect={setSelectedNode}
+                    filter={graphFilter}
+                  />
+                ) : (
+                  <NodesTable 
+                    graphData={graphData}
+                    onNodeSelect={setSelectedNode}
+                    filter={graphFilter}
+                  />
+                )
               )
-            )
-          ) : (
-            <div className="empty-state">
-              <h1 
-                className="logo-text"
-                onClick={handleReset}
-                style={{ cursor: 'pointer' }}
-                title="Click to reset"
-              >
-                actsense
-              </h1>
-              <p>Enter a repository (e.g., <code>owner/repo</code>) or action reference to begin auditing</p>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="empty-state">
+                <h1 
+                  className="logo-text"
+                  onClick={handleReset}
+                  style={{ cursor: 'pointer' }}
+                  title="Click to reset"
+                >
+                  actsense
+                </h1>
+                <p>Enter a repository (e.g., <code>owner/repo</code>) or action reference to begin auditing</p>
+                {graphData && (
+                  <div className="empty-state-hint">
+                    <p className="hint-text">Tip: Press <kbd>{navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘K' : 'Ctrl+K'}</kbd> to search issues and assets</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       
       {selectedNode && (
@@ -395,6 +458,24 @@ function App() {
           }}
         />
       )}
+
+      {showSearchOverlay && graphData && (
+        <SearchOverlay
+          graphData={graphData}
+          onClose={() => setShowSearchOverlay(false)}
+          onNodeSelect={(node) => {
+            setSelectedNode(node)
+            setShowSearchOverlay(false)
+          }}
+          onViewAll={(query, results) => {
+            setSearchQuery(query)
+            setSearchResults(results)
+            setShowSearchOverlay(false)
+            setShowSearchResults(true)
+          }}
+        />
+      )}
+
     </div>
   )
 }
