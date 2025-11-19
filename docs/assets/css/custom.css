@@ -1,0 +1,297 @@
+/* shadcn/ui design language for actsense documentation */
+
+/* Color system - shadcn inspired */
+:root {
+  --primary: 0 0% 0%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 0 0% 0%;
+  --radius: 0.5rem;
+  
+  /* Page width - full width */
+  --hextra-max-page-width: 100%;
+  --hextra-max-navbar-width: 100%;
+  --hextra-max-footer-width: 100%;
+}
+
+/* Dark mode colors */
+:is(html[class~="dark"] *) {
+  --primary: 0 0% 100%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 217 33% 17%;
+  --accent-foreground: 210 40% 98%;
+  --border: 217 33% 17%;
+  --input: 217 33% 17%;
+  --ring: 0 0% 100%;
+}
+
+/* Typography - Inter font */
+.content {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.content h1 {
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.content h2 {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+.content h3 {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Hero section - shadcn style */
+.actsense-hero {
+  text-align: center;
+  padding: 4rem 1rem 3rem;
+  margin-bottom: 4rem;
+}
+
+.actsense-hero h1 {
+  font-family: "Stack Sans Notch", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  font-size: 3.5rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  line-height: 1.1;
+  letter-spacing: -0.05em;
+  color: hsl(var(--primary));
+}
+
+.actsense-hero p {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.25rem;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 2rem;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.7;
+  font-weight: 400;
+}
+
+/* CTA Button - shadcn button style */
+.actsense-cta {
+  font-family: 'Inter', sans-serif;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  text-decoration: none;
+  border-radius: var(--radius);
+  font-weight: 500;
+  font-size: 0.9375rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+}
+
+.actsense-cta:hover {
+  background-color: hsl(0 0% 10%);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.actsense-cta:active {
+  transform: translateY(0);
+}
+
+.actsense-cta:focus {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Secondary CTA button style */
+.actsense-cta[style*="transparent"] {
+  background-color: transparent !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--primary)) !important;
+}
+
+.actsense-cta[style*="transparent"]:hover {
+  background-color: hsl(var(--muted)) !important;
+  border-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary)) !important;
+}
+
+/* Cards - shadcn card style */
+.hextra-card {
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.hextra-card:hover {
+  border-color: hsl(var(--primary) / 0.5);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+/* Cards container */
+.hextra-cards {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .hextra-cards {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Callout - shadcn alert style */
+.hextra-callout {
+  border: 1px solid hsl(var(--border));
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background-color: hsl(var(--muted) / 0.5);
+  padding: 1rem;
+}
+
+/* Tabs - shadcn tabs style */
+.hextra-tabs-toggle {
+  border-radius: calc(var(--radius) * 0.75);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+}
+
+.hextra-tabs-toggle:hover {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.hextra-tabs-toggle[aria-selected="true"] {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: hsl(var(--primary));
+}
+
+/* Footer - shadcn style */
+.hextra-footer {
+  border-top: 1px solid hsl(var(--border));
+  padding-top: 2rem;
+  margin-top: 4rem;
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+/* Section spacing */
+.actsense-section {
+  margin: 2rem 0;
+}
+
+/* Links - shadcn style */
+.content a:not(.actsense-cta) {
+  font-family: 'Inter', sans-serif;
+  color: hsl(var(--primary));
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.content a:not(.actsense-cta):hover {
+  color: hsl(0 0% 20%);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Lists - shadcn style */
+.content ul, .content ol {
+  font-family: 'Inter', sans-serif;
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.content li {
+  font-family: 'Inter', sans-serif;
+  margin: 0.5rem 0;
+  color: hsl(var(--foreground));
+}
+
+.content li::marker {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .actsense-hero {
+    padding: 2.5rem 1rem 2rem;
+  }
+  
+  .actsense-hero h1 {
+    font-size: 2.25rem;
+  }
+  
+  .actsense-hero p {
+    font-size: 1.125rem;
+  }
+  
+  .actsense-cta {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+  }
+  
+  .hextra-cards {
+    gap: 1rem;
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus visible for accessibility */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: calc(var(--radius) * 0.5);
+}
+
+/* Selection color */
+::selection {
+  background-color: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary-foreground));
+}
+
+/* Navbar title - Stack Sans Notch font */
+.hextra-nav-container a span,
+.hextra-nav-container .hextra-nav-title {
+  font-family: "Stack Sans Notch", sans-serif !important;
+  font-optical-sizing: auto;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}

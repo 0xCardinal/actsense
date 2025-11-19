@@ -1,0 +1,109 @@
+baseURL: "https://actsense.dev"
+languageCode: "en-us"
+title: "actsense - GitHub Actions Security Auditor"
+description: "Comprehensive security documentation for GitHub Actions vulnerabilities"
+
+# Enable Git info for last modified dates
+enableGitInfo: true
+
+module:
+  imports:
+    - path: github.com/imfing/hextra
+
+# Menu configuration
+menu:
+  main:
+    - name: Home
+      pageRef: /
+      weight: 1
+    - name: Getting Started
+      pageRef: /getting-started
+      weight: 2
+    - name: Vulnerabilities
+      pageRef: /vulnerabilities
+      weight: 3
+    - name: Search
+      weight: 4
+      params:
+        type: search
+    - name: GitHub
+      weight: 5
+      url: "https://github.com/0xCardinal/actsense"
+      params:
+        icon: github
+  sidebar:
+    - name: More
+      params:
+        type: separator
+      weight: 1
+    - name: "GitHub Repository"
+      url: "https://github.com/0xCardinal/actsense"
+      weight: 2
+
+# Theme parameters
+params:
+  # Site metadata
+  description: "Comprehensive security documentation for GitHub Actions vulnerabilities"
+  author: "actsense"
+  
+  # Navbar
+  navbar:
+    displayTitle: true
+    displayLogo: false
+    title: "actsense"
+  
+  # Footer
+  footer:
+    enable: true
+  
+  # Theme
+  theme:
+    default: system
+    displayToggle: true
+  
+  # Page settings
+  page:
+    width: full
+  
+  # Display last modification date
+  displayUpdatedDate: true
+  dateFormat: "January 2, 2006"
+  
+  # Search configuration
+  search:
+    enable: true
+    type: flexsearch
+    flexsearch:
+      index: content
+      tokenize: forward
+  
+  # Edit URL
+  editURL:
+    enable: true
+    base: "https://github.com/0xCardinal/actsense/edit/main/docs"
+  
+  # External link decoration
+  externalLinkDecoration: true
+  
+  # Table of contents
+  toc:
+    displayTags: false
+
+# Markup configuration
+markup:
+  goldmark:
+    renderer:
+      unsafe: true  # Allow raw HTML to fix warnings
+  highlight:
+    style: github
+    codeFences: true
+    guessSyntax: true
+    lineNos: true
+    noClasses: false
+
+# Output formats
+outputs:
+  home: [html, rss]
+  page: [html]
+
+copyright: "© 2025 actsense"
