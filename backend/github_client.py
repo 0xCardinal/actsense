@@ -213,17 +213,48 @@ class GitHubClient:
         return None
 
     async def get_repository_info(self, owner: str, repo: str) -> Optional[Dict[str, Any]]:
-        """Get repository information including archived status."""
-        try:
-            url = f"{self.base_url}/repos/{owner}/{repo}"
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=self.headers)
+        """Get repository information including archived status.
+        
+        Returns:
+            Dict with repo info if exists and accessible, None if 404 (doesn't exist or private),
+            raises HTTPException for other errors (rate limits, network issues, etc.)
+        """
+        url = f"{self.base_url}/repos/{owner}/{repo}"
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url, headers=self.headers, timeout=10.0)
                 if response.status_code == 200:
                     return response.json()
                 elif response.status_code == 404:
-                    return None  # Repository doesn't exist or is private
-        except (httpx.HTTPStatusError, Exception):
-            pass
+                    return None  # Repository doesn't exist or is private/inaccessible
+                elif response.status_code == 403:
+                    # Check if it's a rate limit error
+                    rate_limit_remaining = response.headers.get("X-RateLimit-Remaining", "0")
+                    if rate_limit_remaining == "0":
+                        raise HTTPException(
+                            status_code=403,
+                            detail="GitHub API rate limit exceeded. Please provide a GitHub token to increase your rate limit from 60/hour to 5000/hour."
+                        )
+                    # For 403 without rate limit, it could be:
+                    # 1. Private repo we don't have access to (treat as inaccessible, return None)
+                    # 2. Some other permission issue
+                    # We'll treat as inaccessible rather than raising, to avoid false positives
+                    return None
+                else:
+                    # Other HTTP errors - raise to let caller handle
+                    response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                # Re-raise HTTP errors (except 404 which we handle above)
+                if e.response.status_code == 404:
+                    return None
+                # For other status errors, raise HTTPException
+                raise HTTPException(status_code=e.response.status_code, detail=f"GitHub API error: {str(e)}")
+            except httpx.TimeoutException:
+                # Timeout - don't assume repo doesn't exist
+                raise HTTPException(status_code=504, detail="GitHub API request timed out")
+            except Exception as e:
+                # Other errors - don't assume repo doesn't exist
+                raise HTTPException(status_code=500, detail=f"Error checking repository: {str(e)}")
         return None
 
     def parse_action_reference(self, action_ref: str) -> tuple:

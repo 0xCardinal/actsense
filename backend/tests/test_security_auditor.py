@@ -23,46 +23,33 @@ class TestSecurityAuditorIntegration:
     def test_audit_workflow_with_secrets(self, workflow_with_secrets):
         """Test workflow auditing with secrets."""
         import asyncio
-        try:
-            issues = asyncio.run(SecurityAuditor.audit_workflow(workflow_with_secrets))
-            
-            # Should detect secret issues (may require content string)
-            assert isinstance(issues, list)
-            secret_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "potential_hardcoded_secret"]
-            # Secret detection may require content string to work properly
-        except (AttributeError, TypeError) as e:
-            # May fail if workflow format doesn't match expected structure
-            pytest.skip(f"Workflow format issue: {e}")
+        issues = asyncio.run(SecurityAuditor.audit_workflow(workflow_with_secrets))
+        
+        # Should detect secret issues (may require content string)
+        assert isinstance(issues, list)
+        secret_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "potential_hardcoded_secret"]
     
     def test_audit_workflow_with_unpinned_actions(self, workflow_with_unpinned_actions):
         """Test workflow auditing with unpinned actions."""
         import asyncio
-        try:
-            issues = asyncio.run(SecurityAuditor.audit_workflow(workflow_with_unpinned_actions))
-            
-            # Should detect unpinned version issues
-            assert isinstance(issues, list)
-            unpinned_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "unpinned_version"]
-            # May or may not detect depending on how actions are parsed from workflow
-        except (AttributeError, TypeError) as e:
-            # May fail if workflow format doesn't match expected structure
-            pytest.skip(f"Workflow format issue: {e}")
+        issues = asyncio.run(SecurityAuditor.audit_workflow(workflow_with_unpinned_actions))
+        
+        # Should detect unpinned version issues
+        assert isinstance(issues, list)
+        unpinned_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "unpinned_version"]
+        # May or may not detect depending on how actions are parsed from workflow
     
     def test_audit_workflow_with_permissions(self, workflow_with_write_all_permissions):
         """Test workflow auditing with permissions."""
         import asyncio
-        try:
-            issues = asyncio.run(SecurityAuditor.audit_workflow(workflow_with_write_all_permissions))
-            
-            # Should detect permission issues
-            assert isinstance(issues, list)
-            perm_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "github_token_write_all"]
-            # May detect permission issues
-            if len(perm_issues) > 0:
-                assert perm_issues[0].get("severity") in ["high", "critical", "medium", "low"]
-        except (AttributeError, TypeError):
-            # May fail if there's a bug in check_permissions
-            pytest.skip("check_permissions has an issue with string permissions")
+        issues = asyncio.run(SecurityAuditor.audit_workflow(workflow_with_write_all_permissions))
+        
+        # Should detect permission issues
+        assert isinstance(issues, list)
+        perm_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "github_token_write_all"]
+        # May detect permission issues
+        if len(perm_issues) > 0:
+            assert perm_issues[0].get("severity") in ["high", "critical", "medium", "low"]
     
     def test_audit_workflow_with_self_hosted(self, workflow_with_self_hosted_runner):
         """Test workflow auditing with self-hosted runner."""
@@ -100,14 +87,9 @@ class TestSecurityAuditorIntegration:
     
     def test_check_permissions(self, workflow_with_write_all_permissions):
         """Test check_permissions delegation."""
-        try:
-            result = SecurityAuditor.check_permissions(workflow_with_write_all_permissions)
-            # check_permissions returns a list
-            assert isinstance(result, list)
-        except (AttributeError, TypeError):
-            # May fail if there's a bug in check_permissions with string permissions
-            # This is a known issue that should be fixed in the rules
-            pytest.skip("check_permissions has an issue with string permissions")
+        result = SecurityAuditor.check_permissions(workflow_with_write_all_permissions)
+        # check_permissions returns a list
+        assert isinstance(result, list)
     
     def test_check_github_token_permissions(self, workflow_with_write_all_permissions):
         """Test check_github_token_permissions delegation."""

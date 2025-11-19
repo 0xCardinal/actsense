@@ -6,6 +6,7 @@ import tempfile
 import json
 import os
 from github_client import GitHubClient
+from fastapi import HTTPException
 import sys
 from pathlib import Path
 
@@ -1400,8 +1401,13 @@ def check_code_injection_via_workflow_inputs(workflow: Dict[str, Any]) -> List[D
 
     on_events = workflow.get("on", {})
 
+    # Handle case where 'on' is a list (e.g., ["push", "pull_request"])
+    if isinstance(on_events, list):
+        # If 'on' is a list, workflow_dispatch won't be present
+        return issues
+
     # Check workflow_dispatch inputs
-    workflow_dispatch = on_events.get("workflow_dispatch", {})
+    workflow_dispatch = on_events.get("workflow_dispatch", {}) if isinstance(on_events, dict) else {}
     if workflow_dispatch:
         inputs = workflow_dispatch.get("inputs", {})
         for input_name, input_def in inputs.items():
@@ -2156,20 +2162,39 @@ def check_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     issues = []
 
     permissions = workflow.get("permissions", {})
-    if permissions == "write-all" or permissions.get("contents") == "write":
-        issues.append({
-            "type": "overly_permissive",
-            "severity": "medium",
-            "message": "Workflow has write permissions to repository contents. This increases the attack surface if the workflow is compromised.",
-            "permissions": permissions,
-            "evidence": {
+    
+    # Handle case where permissions is a string (e.g., "write-all")
+    if isinstance(permissions, str):
+        if permissions == "write-all":
+            issues.append({
+                "type": "overly_permissive",
+                "severity": "medium",
+                "message": "Workflow has write permissions to repository contents. This increases the attack surface if the workflow is compromised.",
                 "permissions": permissions,
-                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/overly_permissive"
-            },
-            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/overly_permissive"
-        })
-
-    if permissions.get("actions") == "write":
+                "evidence": {
+                    "permissions": permissions,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/overly_permissive"
+                },
+                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/overly_permissive"
+            })
+        return issues  # Can't check individual permissions if it's a string
+    
+    # Handle case where permissions is a dict
+    if isinstance(permissions, dict):
+        if permissions.get("contents") == "write":
+            issues.append({
+                "type": "overly_permissive",
+                "severity": "medium",
+                "message": "Workflow has write permissions to repository contents. This increases the attack surface if the workflow is compromised.",
+                "permissions": permissions,
+                "evidence": {
+                    "permissions": permissions,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/overly_permissive"
+                },
+                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/overly_permissive"
+            })
+    
+    if isinstance(permissions, dict) and permissions.get("actions") == "write":
         issues.append({
             "type": "overly_permissive",
             "severity": "high",
@@ -2448,7 +2473,13 @@ def check_workflow_dispatch_inputs(workflow: Dict[str, Any]) -> List[Dict[str, A
     issues = []
 
     on_events = workflow.get("on", {})
-    workflow_dispatch = on_events.get("workflow_dispatch", {})
+    # Handle case where 'on' is a list (e.g., ["push", "pull_request"])
+    if isinstance(on_events, list):
+        # If 'on' is a list, workflow_dispatch won't be present
+        return issues
+    
+    # Handle case where 'on' is a dict
+    workflow_dispatch = on_events.get("workflow_dispatch", {}) if isinstance(on_events, dict) else {}
 
     if workflow_dispatch:
         inputs = workflow_dispatch.get("inputs", {})
@@ -2649,7 +2680,7 @@ async def check_missing_action_repositories(workflow: Dict[str, Any], client: Op
         steps = job.get("steps", [])
         for step in steps:
             uses = step.get("uses", "")
-            if not uses:
+            if not uses or not isinstance(uses, str):
                 continue
 
             # Skip local paths, docker images, and URLs
@@ -2659,17 +2690,34 @@ async def check_missing_action_repositories(workflow: Dict[str, Any], client: Op
             # Extract action owner/repo
             action_owner = None
             action_repo = None
-            if "/" in uses:
-                action_part = uses.split("@")[0]  # Remove version/tag
-                parts = action_part.split("/", 1)
-                if len(parts) == 2:
-                    action_owner = parts[0]
-                    # Handle subdirectory actions (owner/repo/path)
-                    repo_part = parts[1]
-                    if "/" in repo_part:
-                        action_repo = repo_part.split("/")[0]
-                    else:
-                        action_repo = repo_part
+            
+            # Remove version/tag to get just the repo reference
+            action_part = uses.split("@")[0].strip()
+            
+            # Must have at least one slash for owner/repo format
+            if "/" not in action_part:
+                continue
+            
+            # Split into owner and rest
+            parts = action_part.split("/", 1)
+            if len(parts) != 2:
+                continue
+            
+            action_owner = parts[0].strip()
+            repo_path = parts[1].strip()
+            
+            # Validate owner is not empty
+            if not action_owner:
+                continue
+            
+            # Handle subdirectory actions (owner/repo/path/to/action)
+            # The repo name is the first part after owner/
+            repo_path_parts = repo_path.split("/")
+            action_repo = repo_path_parts[0].strip()
+            
+            # Validate repo is not empty
+            if not action_repo:
+                continue
 
             # Check if repository exists (if client is available)
             if action_owner and action_repo:
@@ -2678,13 +2726,19 @@ async def check_missing_action_repositories(workflow: Dict[str, Any], client: Op
                     try:
                         repo_info = await client.get_repository_info(action_owner, action_repo)
                         if repo_info is None:
-                            # Repository doesn't exist or is inaccessible
+                            # Repository doesn't exist or is inaccessible (404)
                             checked_repos[repo_key] = False
                         else:
+                            # Repository exists
                             checked_repos[repo_key] = True
+                    except HTTPException as e:
+                        # For HTTP exceptions (rate limits, etc.), skip this check
+                        # Don't assume repo is missing due to API errors
+                        continue
                     except Exception:
-                        # Error fetching, assume it doesn't exist
-                        checked_repos[repo_key] = False
+                        # For other unexpected errors, skip this check
+                        # Don't assume repo is missing due to errors
+                        continue
                 
                 repo_exists = checked_repos.get(repo_key)
                 if repo_exists is False:

@@ -87,8 +87,13 @@ async def resolve_action_dependencies(
     try:
         repo_info = await client.get_repository_info(owner, repo)
         repo_exists = repo_info is not None
+    except HTTPException:
+        # For API errors (rate limits, network issues), don't assume repo is missing
+        # Skip this check rather than marking as missing
+        return
     except Exception:
-        repo_exists = False
+        # For other unexpected errors, don't assume repo is missing
+        return
     
     # If repository doesn't exist, add a critical issue
     if repo_exists is False:

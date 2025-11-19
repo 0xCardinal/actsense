@@ -48,10 +48,10 @@ class TestPinnedVersion:
             assert "actsense.dev/vulnerabilities/short_hash_pinning" in short_hash_issues[0]["evidence"]["vulnerability"]
 
 
-@pytest.mark.asyncio
 class TestOlderActionVersions:
     """Tests for older action version detection."""
     
+    @pytest.mark.asyncio
     async def test_older_action_version(self, workflow_with_older_action_version, mock_github_client):
         """Test detection of older action versions."""
         issues = await security_rules.check_older_action_versions(
@@ -190,6 +190,131 @@ class TestDeprecatedActions:
         deprecated_issues = [i for i in issues if i.get("type") == "deprecated_action"]
         if len(deprecated_issues) > 0:
             assert "actsense.dev/vulnerabilities/deprecated_action" in deprecated_issues[0]["evidence"]["vulnerability"]
+
+
+class TestMissingActionRepositories:
+    """Tests for missing action repository detection."""
+    
+    @pytest.mark.asyncio
+    async def test_missing_action_repository(self, mock_github_client):
+        """Test detection of missing action repositories."""
+        from unittest.mock import AsyncMock
+        
+        # Mock client to return None for non-existent repo
+        mock_github_client.get_repository_info = AsyncMock(return_value=None)
+        
+        workflow = {
+            "name": "Test Workflow",
+            "on": ["push"],
+            "jobs": {
+                "test": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Checkout",
+                            "uses": "nonexistent-org/nonexistent-repo@v1"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = await security_rules.check_missing_action_repositories(workflow, mock_github_client)
+        
+        missing_repo_issues = [i for i in issues if i.get("type") == "missing_action_repository"]
+        assert len(missing_repo_issues) > 0
+        assert missing_repo_issues[0]["severity"] == "critical"
+        assert "nonexistent-org/nonexistent-repo" in missing_repo_issues[0]["message"]
+        assert "actsense.dev/vulnerabilities/missing_action_repository" in missing_repo_issues[0]["evidence"]["vulnerability"]
+    
+    @pytest.mark.asyncio
+    async def test_existing_action_repository(self, mock_github_client):
+        """Test that existing repositories are not flagged as missing."""
+        from unittest.mock import AsyncMock
+        
+        # Mock client to return repo info for existing repo
+        mock_github_client.get_repository_info = AsyncMock(return_value={
+            "full_name": "actions/checkout",
+            "name": "checkout",
+            "owner": {"login": "actions"}
+        })
+        
+        workflow = {
+            "name": "Test Workflow",
+            "on": ["push"],
+            "jobs": {
+                "test": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Checkout",
+                            "uses": "actions/checkout@v5"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = await security_rules.check_missing_action_repositories(workflow, mock_github_client)
+        
+        missing_repo_issues = [i for i in issues if i.get("type") == "missing_action_repository"]
+        assert len(missing_repo_issues) == 0
+    
+    @pytest.mark.asyncio
+    async def test_api_error_not_flagged_as_missing(self, mock_github_client):
+        """Test that API errors (rate limits, etc.) don't cause false positives."""
+        from unittest.mock import AsyncMock
+        from fastapi import HTTPException
+        
+        # Mock client to raise HTTPException (simulating rate limit or network error)
+        mock_github_client.get_repository_info = AsyncMock(side_effect=HTTPException(
+            status_code=403,
+            detail="GitHub API rate limit exceeded"
+        ))
+        
+        workflow = {
+            "name": "Test Workflow",
+            "on": ["push"],
+            "jobs": {
+                "test": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Checkout",
+                            "uses": "actions/checkout@v5"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = await security_rules.check_missing_action_repositories(workflow, mock_github_client)
+        
+        # Should not flag as missing when API errors occur
+        missing_repo_issues = [i for i in issues if i.get("type") == "missing_action_repository"]
+        assert len(missing_repo_issues) == 0
+    
+    @pytest.mark.asyncio
+    async def test_no_client_returns_empty(self):
+        """Test that check returns empty list when no client is provided."""
+        workflow = {
+            "name": "Test Workflow",
+            "on": ["push"],
+            "jobs": {
+                "test": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Checkout",
+                            "uses": "actions/checkout@v5"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = await security_rules.check_missing_action_repositories(workflow, None)
+        assert len(issues) == 0
 
 
 class TestContinueOnError:
