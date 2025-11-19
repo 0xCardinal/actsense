@@ -16,7 +16,7 @@ class RepoCloner:
             self.base_dir = Path(base_dir)
             self.base_dir.mkdir(parents=True, exist_ok=True)
         else:
-            self.base_dir = Path(tempfile.gettempdir()) / "action-auditor-clones"
+            self.base_dir = Path(tempfile.gettempdir()) / "actsense-clones"
             self.base_dir.mkdir(parents=True, exist_ok=True)
     
     def clone_repository(

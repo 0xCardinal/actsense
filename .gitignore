@@ -33,4 +33,10 @@ Thumbs.db
 # Analysis storage
 data/
 
+# Hugo
+.hugo_build.lock
+resources/_gen/
+.hugo_cache/
+public/
+
 AGENT.md

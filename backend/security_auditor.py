@@ -4,7 +4,6 @@ from github_client import GitHubClient
 
 # Import rules from rules module
 from rules import security as security_rules
-from rules import best_practices as best_practices_rules
 
 
 class SecurityAuditor:
@@ -15,7 +14,7 @@ class SecurityAuditor:
         
         Returns detailed vulnerability information with evidence and mitigation steps.
         """
-        return best_practices_rules.check_pinned_version(action_ref)
+        return security_rules.check_pinned_version(action_ref)
     @staticmethod
     def check_hash_pinning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -23,11 +22,11 @@ class SecurityAuditor:
         
         Returns detailed vulnerability information with evidence and mitigation steps.
         """
-        return best_practices_rules.check_hash_pinning(workflow)
+        return security_rules.check_hash_pinning(workflow)
     @staticmethod
     async def check_older_action_versions(workflow: Dict[str, Any], client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
         """Check if actions in workflow use older versions (tags or commit hashes) that may have security vulnerabilities."""
-        return await best_practices_rules.check_older_action_versions(workflow, client)
+        return await security_rules.check_older_action_versions(workflow, client)
 
     @staticmethod
     def check_inconsistent_action_versions(workflow_actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -43,7 +42,7 @@ class SecurityAuditor:
         Returns:
             List of issues for each inconsistent action
         """
-        return best_practices_rules.check_inconsistent_action_versions(workflow_actions)
+        return security_rules.check_inconsistent_action_versions(workflow_actions)
     @staticmethod
     def _run_trufflehog(content: str) -> List[Dict[str, Any]]:
         """Run TruffleHog on workflow content to detect secrets."""
@@ -56,7 +55,7 @@ class SecurityAuditor:
     @staticmethod
     def check_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for overly permissive workflow permissions."""
-        return best_practices_rules.check_permissions(workflow)
+        return security_rules.check_permissions(workflow)
     @staticmethod
     def check_self_hosted_runners(workflow: Dict[str, Any], is_public_repo: bool = False) -> List[Dict[str, Any]]:
         """Check for use of self-hosted runners and related security issues."""
@@ -83,7 +82,7 @@ class SecurityAuditor:
     @staticmethod
     def check_github_token_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for GITHUB_TOKEN permissions that are too permissive."""
-        return best_practices_rules.check_github_token_permissions(workflow)
+        return security_rules.check_github_token_permissions(workflow)
 
     @staticmethod
     def check_dangerous_events(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -118,7 +117,7 @@ class SecurityAuditor:
     @staticmethod
     def check_continue_on_error_critical_job(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for continue-on-error in critical jobs that should fail on error."""
-        return best_practices_rules.check_continue_on_error_critical_job(workflow)
+        return security_rules.check_continue_on_error_critical_job(workflow)
     @staticmethod
     def check_obfuscation_detection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for code obfuscation patterns that may hide malicious code."""
@@ -148,31 +147,36 @@ class SecurityAuditor:
     @staticmethod
     def check_excessive_write_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for excessive write permissions on read-only workflows."""
-        return best_practices_rules.check_excessive_write_permissions(workflow)
+        return security_rules.check_excessive_write_permissions(workflow)
 
     @staticmethod
     def check_artifact_retention(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for artifact retention settings."""
-        return best_practices_rules.check_artifact_retention(workflow)
+        return security_rules.check_artifact_retention(workflow)
     @staticmethod
     def check_matrix_strategy(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for unsafe matrix strategy usage."""
-        return best_practices_rules.check_matrix_strategy(workflow)
+        return security_rules.check_matrix_strategy(workflow)
     
     @staticmethod
     def check_workflow_dispatch_inputs(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for workflow_dispatch inputs without validation."""
-        return best_practices_rules.check_workflow_dispatch_inputs(workflow)
+        return security_rules.check_workflow_dispatch_inputs(workflow)
     
     @staticmethod
     def check_environment_secrets(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for environment secrets usage patterns."""
-        return best_practices_rules.check_environment_secrets(workflow)
+        return security_rules.check_environment_secrets(workflow)
     
     @staticmethod
     async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
         """Check for usage of deprecated actions."""
-        return await best_practices_rules.check_deprecated_actions(workflow, client)
+        return await security_rules.check_deprecated_actions(workflow, client)
+    
+    @staticmethod
+    async def check_missing_action_repositories(workflow: Dict[str, Any], client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
+        """Check if any referenced action repositories don't exist or are inaccessible."""
+        return await security_rules.check_missing_action_repositories(workflow, client)
     
     @staticmethod
     def check_typosquatting_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -193,7 +197,7 @@ class SecurityAuditor:
     @staticmethod
     def check_audit_logging(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for sensitive operations that should have detailed audit logging."""
-        return best_practices_rules.check_audit_logging(workflow)
+        return security_rules.check_audit_logging(workflow)
     @staticmethod
     def check_branch_protection_bypass(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for workflows that could bypass branch protection rules."""
@@ -205,15 +209,15 @@ class SecurityAuditor:
     @staticmethod
     def check_unpinnable_docker_action(action_yml: Dict[str, Any], action_ref: str, dockerfile_content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Check for unpinnable Docker actions (using mutable tags instead of digests)."""
-        return best_practices_rules.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content)
+        return security_rules.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content)
     @staticmethod
     def check_unpinnable_composite_action(action_yml: Dict[str, Any], action_ref: str) -> List[Dict[str, Any]]:
         """Check for unpinnable composite actions (using unpinned sub-actions or dependencies)."""
-        return best_practices_rules.check_unpinnable_composite_action(action_yml, action_ref)
+        return security_rules.check_unpinnable_composite_action(action_yml, action_ref)
     @staticmethod
     def check_unpinnable_javascript_action(action_yml: Dict[str, Any], action_ref: str, action_content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Check for unpinnable JavaScript actions (downloading external resources without checksums)."""
-        return best_practices_rules.check_unpinnable_javascript_action(action_yml, action_ref, action_content)
+        return security_rules.check_unpinnable_javascript_action(action_yml, action_ref, action_content)
     @staticmethod
     def audit_action(action_ref: str, action_yml: Optional[Dict[str, Any]] = None, action_content: Optional[str] = None, dockerfile_content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Audit a single action for security issues."""
@@ -241,16 +245,16 @@ class SecurityAuditor:
                             })
             
             # Check for unpinnable actions (Palo Alto Networks research)
-            issues.extend(best_practices_rules.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content))
-            issues.extend(best_practices_rules.check_unpinnable_composite_action(action_yml, action_ref))
-            issues.extend(best_practices_rules.check_unpinnable_javascript_action(action_yml, action_ref, action_content))
+            issues.extend(security_rules.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content))
+            issues.extend(security_rules.check_unpinnable_composite_action(action_yml, action_ref))
+            issues.extend(security_rules.check_unpinnable_javascript_action(action_yml, action_ref, action_content))
         
         return issues
 
     @staticmethod
     def _find_line_number(content: str, search_text: str, context: Optional[str] = None) -> Optional[int]:
         """Helper to find line number in content."""
-        return best_practices_rules._find_line_number(content, search_text, context)
+        return security_rules._find_line_number(content, search_text, context)
     @staticmethod
     async def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None, client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
         """Audit a workflow file for security issues."""
@@ -260,7 +264,7 @@ class SecurityAuditor:
         perm_issues = SecurityAuditor.check_permissions(workflow)
         if content and perm_issues:
             for issue in perm_issues:
-                line_num = best_practices_rules._find_line_number(content, "permissions")
+                line_num = security_rules._find_line_number(content, "permissions")
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(perm_issues)
@@ -269,7 +273,7 @@ class SecurityAuditor:
         token_issues = SecurityAuditor.check_github_token_permissions(workflow)
         if content and token_issues:
             for issue in token_issues:
-                line_num = best_practices_rules._find_line_number(content, "permissions", issue.get("message", ""))
+                line_num = security_rules._find_line_number(content, "permissions", issue.get("message", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(token_issues)
@@ -280,14 +284,14 @@ class SecurityAuditor:
             for issue in secret_issues:
                 # Try to find the secret pattern in content
                 if issue.get("path"):
-                    line_num = best_practices_rules._find_line_number(content, issue["path"].split(".")[-1])
+                    line_num = security_rules._find_line_number(content, issue["path"].split(".")[-1])
                     if line_num:
                         issue["line_number"] = line_num
                 # For long-term credential issues, look for credential keys
                 elif issue.get("type") in ["long_term_aws_credentials", "long_term_azure_credentials", "long_term_gcp_credentials", "potential_hardcoded_cloud_credentials"]:
                     cred_keys = ["AWS_ACCESS_KEY", "AZURE_CLIENT", "GOOGLE_APPLICATION", "GCP_SA_KEY", "aws_access_key", "aws_secret", "azure_client_secret", "gcp_key", "service_account_key"]
                     for key in cred_keys:
-                        line_num = best_practices_rules._find_line_number(content, key, issue.get("job", ""))
+                        line_num = security_rules._find_line_number(content, key, issue.get("job", ""))
                         if line_num:
                             issue["line_number"] = line_num
                             break
@@ -296,12 +300,12 @@ class SecurityAuditor:
                     detector = issue.get("evidence", {}).get("detector", "")
                     if detector:
                         # Try to find the detector name or common patterns
-                        line_num = best_practices_rules._find_line_number(content, detector.lower().replace(" ", ""))
+                        line_num = security_rules._find_line_number(content, detector.lower().replace(" ", ""))
                         if not line_num:
                             # Try common secret patterns
                             secret_patterns = ["secret", "password", "token", "key", "api_key", "credential"]
                             for pattern in secret_patterns:
-                                line_num = best_practices_rules._find_line_number(content, pattern)
+                                line_num = security_rules._find_line_number(content, pattern)
                                 if line_num:
                                     break
                         if line_num:
@@ -314,9 +318,9 @@ class SecurityAuditor:
         runner_issues = SecurityAuditor.check_self_hosted_runners(workflow, is_public_repo=False)
         if content and runner_issues:
             for issue in runner_issues:
-                line_num = best_practices_rules._find_line_number(content, "self-hosted", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "self-hosted", issue.get("job", ""))
                 if not line_num:
-                    line_num = best_practices_rules._find_line_number(content, "runs-on", issue.get("job", ""))
+                    line_num = security_rules._find_line_number(content, "runs-on", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(runner_issues)
@@ -325,7 +329,7 @@ class SecurityAuditor:
         label_confusion_issues = SecurityAuditor.check_runner_label_confusion(workflow)
         if content and label_confusion_issues:
             for issue in label_confusion_issues:
-                line_num = best_practices_rules._find_line_number(content, "runs-on", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "runs-on", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(label_confusion_issues)
@@ -334,7 +338,7 @@ class SecurityAuditor:
         runner_secrets_issues = SecurityAuditor.check_self_hosted_runner_secrets(workflow)
         if content and runner_secrets_issues:
             for issue in runner_secrets_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(runner_secrets_issues)
@@ -343,7 +347,7 @@ class SecurityAuditor:
         runner_env_issues = SecurityAuditor.check_runner_environment_security(workflow)
         if content and runner_env_issues:
             for issue in runner_env_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(runner_env_issues)
@@ -352,7 +356,7 @@ class SecurityAuditor:
         visibility_risks_issues = SecurityAuditor.check_repository_visibility_risks(workflow, is_public_repo=False)
         if content and visibility_risks_issues:
             for issue in visibility_risks_issues:
-                line_num = best_practices_rules._find_line_number(content, "runs-on")
+                line_num = security_rules._find_line_number(content, "runs-on")
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(visibility_risks_issues)
@@ -363,13 +367,13 @@ class SecurityAuditor:
             for issue in event_issues:
                 event_name = issue.get("event", "")
                 if event_name:
-                    line_num = best_practices_rules._find_line_number(content, event_name)
+                    line_num = security_rules._find_line_number(content, event_name)
                     if line_num:
                         issue["line_number"] = line_num
                 # For insecure_pull_request_target, also try to find checkout line
                 if issue.get("type") == "insecure_pull_request_target":
                     job_name = issue.get("job", "")
-                    line_num = best_practices_rules._find_line_number(content, "actions/checkout", job_name)
+                    line_num = security_rules._find_line_number(content, "actions/checkout", job_name)
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(event_issues)
@@ -378,7 +382,7 @@ class SecurityAuditor:
         checkout_issues = SecurityAuditor.check_checkout_actions(workflow)
         if content and checkout_issues:
             for issue in checkout_issues:
-                line_num = best_practices_rules._find_line_number(content, "actions/checkout", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "actions/checkout", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(checkout_issues)
@@ -387,7 +391,7 @@ class SecurityAuditor:
         script_issues = SecurityAuditor.check_script_injection(workflow)
         if content and script_issues:
             for issue in script_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(script_issues)
@@ -396,9 +400,9 @@ class SecurityAuditor:
         github_script_issues = SecurityAuditor.check_github_script_injection(workflow)
         if content and github_script_issues:
             for issue in github_script_issues:
-                line_num = best_practices_rules._find_line_number(content, "actions/github-script", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "actions/github-script", issue.get("job", ""))
                 if not line_num:
-                    line_num = best_practices_rules._find_line_number(content, "script:", issue.get("job", ""))
+                    line_num = security_rules._find_line_number(content, "script:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(github_script_issues)
@@ -407,7 +411,7 @@ class SecurityAuditor:
         powershell_issues = SecurityAuditor.check_powershell_injection(workflow)
         if content and powershell_issues:
             for issue in powershell_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(powershell_issues)
@@ -416,7 +420,7 @@ class SecurityAuditor:
         artifact_issues = SecurityAuditor.check_artifact_retention(workflow)
         if content and artifact_issues:
             for issue in artifact_issues:
-                line_num = best_practices_rules._find_line_number(content, "upload-artifact", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "upload-artifact", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(artifact_issues)
@@ -425,7 +429,7 @@ class SecurityAuditor:
         matrix_issues = SecurityAuditor.check_matrix_strategy(workflow)
         if content and matrix_issues:
             for issue in matrix_issues:
-                line_num = best_practices_rules._find_line_number(content, "matrix:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "matrix:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(matrix_issues)
@@ -434,7 +438,7 @@ class SecurityAuditor:
         dispatch_issues = SecurityAuditor.check_workflow_dispatch_inputs(workflow)
         if content and dispatch_issues:
             for issue in dispatch_issues:
-                line_num = best_practices_rules._find_line_number(content, "workflow_dispatch", issue.get("input", ""))
+                line_num = security_rules._find_line_number(content, "workflow_dispatch", issue.get("input", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(dispatch_issues)
@@ -443,7 +447,7 @@ class SecurityAuditor:
         env_issues = SecurityAuditor.check_environment_secrets(workflow)
         if content and env_issues:
             for issue in env_issues:
-                line_num = best_practices_rules._find_line_number(content, "environment:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "environment:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(env_issues)
@@ -452,16 +456,25 @@ class SecurityAuditor:
         deprecated_issues = await SecurityAuditor.check_deprecated_actions(workflow, client)
         if content and deprecated_issues:
             for issue in deprecated_issues:
-                line_num = best_practices_rules._find_line_number(content, issue.get("action", ""), issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, issue.get("action", ""), issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(deprecated_issues)
+        
+        # Check missing action repositories
+        missing_repo_issues = await SecurityAuditor.check_missing_action_repositories(workflow, client)
+        if content and missing_repo_issues:
+            for issue in missing_repo_issues:
+                line_num = security_rules._find_line_number(content, issue.get("action", ""), issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(missing_repo_issues)
         
         # Check typosquatting actions
         typosquatting_issues = SecurityAuditor.check_typosquatting_actions(workflow)
         if content and typosquatting_issues:
             for issue in typosquatting_issues:
-                line_num = best_practices_rules._find_line_number(content, issue.get("action", ""), issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, issue.get("action", ""), issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(typosquatting_issues)
@@ -474,7 +487,7 @@ class SecurityAuditor:
                 if action_ref:
                     # Extract action name
                     action_name = action_ref.split("@")[0].split("/")[-1] if "@" in action_ref else action_ref
-                    line_num = best_practices_rules._find_line_number(content, action_name)
+                    line_num = security_rules._find_line_number(content, action_name)
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(untrusted_issues)
@@ -485,9 +498,9 @@ class SecurityAuditor:
         network_issues = SecurityAuditor.check_network_traffic_filtering(workflow)
         if content and network_issues:
             for issue in network_issues:
-                line_num = best_practices_rules._find_line_number(content, "curl", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "curl", issue.get("job", ""))
                 if not line_num:
-                    line_num = best_practices_rules._find_line_number(content, "wget", issue.get("job", ""))
+                    line_num = security_rules._find_line_number(content, "wget", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(network_issues)
@@ -496,7 +509,7 @@ class SecurityAuditor:
         tamper_issues = SecurityAuditor.check_file_tampering_protection(workflow)
         if content and tamper_issues:
             for issue in tamper_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(tamper_issues)
@@ -505,7 +518,7 @@ class SecurityAuditor:
         audit_issues = SecurityAuditor.check_audit_logging(workflow)
         if content and audit_issues:
             for issue in audit_issues:
-                line_num = best_practices_rules._find_line_number(content, issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(audit_issues)
@@ -514,7 +527,7 @@ class SecurityAuditor:
         branch_issues = SecurityAuditor.check_branch_protection_bypass(workflow)
         if content and branch_issues:
             for issue in branch_issues:
-                line_num = best_practices_rules._find_line_number(content, "gh pr", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "gh pr", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(branch_issues)
@@ -525,7 +538,7 @@ class SecurityAuditor:
             for issue in injection_issues:
                 input_name = issue.get("input", "")
                 if input_name:
-                    line_num = best_practices_rules._find_line_number(content, f"inputs.{input_name}")
+                    line_num = security_rules._find_line_number(content, f"inputs.{input_name}")
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(injection_issues)
@@ -534,7 +547,7 @@ class SecurityAuditor:
         curl_pipe_issues = SecurityAuditor.check_malicious_curl_pipe_bash(workflow)
         if content and curl_pipe_issues:
             for issue in curl_pipe_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(curl_pipe_issues)
@@ -543,7 +556,7 @@ class SecurityAuditor:
         base64_issues = SecurityAuditor.check_malicious_base64_decode(workflow)
         if content and base64_issues:
             for issue in base64_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(base64_issues)
@@ -552,7 +565,7 @@ class SecurityAuditor:
         continue_error_issues = SecurityAuditor.check_continue_on_error_critical_job(workflow)
         if content and continue_error_issues:
             for issue in continue_error_issues:
-                line_num = best_practices_rules._find_line_number(content, "continue-on-error", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "continue-on-error", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(continue_error_issues)
@@ -561,7 +574,7 @@ class SecurityAuditor:
         obfuscation_issues = SecurityAuditor.check_obfuscation_detection(workflow)
         if content and obfuscation_issues:
             for issue in obfuscation_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(obfuscation_issues)
@@ -570,9 +583,9 @@ class SecurityAuditor:
         artipacked_issues = SecurityAuditor.check_artipacked_vulnerability(workflow)
         if content and artipacked_issues:
             for issue in artipacked_issues:
-                line_num = best_practices_rules._find_line_number(content, "upload-artifact", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "upload-artifact", issue.get("job", ""))
                 if not line_num:
-                    line_num = best_practices_rules._find_line_number(content, "download-artifact", issue.get("job", ""))
+                    line_num = security_rules._find_line_number(content, "download-artifact", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(artipacked_issues)
@@ -584,7 +597,7 @@ class SecurityAuditor:
                 action_ref = issue.get("action", "")
                 if action_ref:
                     action_name = action_ref.split("@")[0].split("/")[-1] if "@" in action_ref else action_ref
-                    line_num = best_practices_rules._find_line_number(content, action_name)
+                    line_num = security_rules._find_line_number(content, action_name)
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(hash_issues)
@@ -596,7 +609,7 @@ class SecurityAuditor:
                 action_ref = issue.get("action", "")
                 if action_ref:
                     action_name = action_ref.split("@")[0].split("/")[-1] if "@" in action_ref else action_ref
-                    line_num = best_practices_rules._find_line_number(content, action_name)
+                    line_num = security_rules._find_line_number(content, action_name)
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(version_issues)
@@ -613,7 +626,7 @@ class SecurityAuditor:
         token_escalation_issues = SecurityAuditor.check_token_permission_escalation(workflow)
         if content and token_escalation_issues:
             for issue in token_escalation_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(token_escalation_issues)
@@ -623,9 +636,9 @@ class SecurityAuditor:
         if content and cross_repo_issues:
             for issue in cross_repo_issues:
                 if issue.get("type") == "cross_repository_access":
-                    line_num = best_practices_rules._find_line_number(content, "actions/checkout", issue.get("job", ""))
+                    line_num = security_rules._find_line_number(content, "actions/checkout", issue.get("job", ""))
                 else:
-                    line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                    line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(cross_repo_issues)
@@ -634,7 +647,7 @@ class SecurityAuditor:
         env_bypass_issues = SecurityAuditor.check_environment_bypass(workflow)
         if content and env_bypass_issues:
             for issue in env_bypass_issues:
-                line_num = best_practices_rules._find_line_number(content, "run:", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(env_bypass_issues)
@@ -646,7 +659,7 @@ class SecurityAuditor:
                 action = issue.get("action", "")
                 if action:
                     action_name = action.split("@")[0].split("/")[-1] if "@" in action else action
-                    line_num = best_practices_rules._find_line_number(content, action_name)
+                    line_num = security_rules._find_line_number(content, action_name)
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(secrets_untrusted_issues)
@@ -655,7 +668,7 @@ class SecurityAuditor:
         excessive_write_issues = SecurityAuditor.check_excessive_write_permissions(workflow)
         if content and excessive_write_issues:
             for issue in excessive_write_issues:
-                line_num = best_practices_rules._find_line_number(content, "permissions", issue.get("job", ""))
+                line_num = security_rules._find_line_number(content, "permissions", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(excessive_write_issues)

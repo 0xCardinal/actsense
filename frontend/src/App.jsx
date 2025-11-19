@@ -329,6 +329,30 @@ function App() {
               actsense
             </h1>
             <p>Analyze security issues in GitHub Actions and their dependencies</p>
+            <a
+              className="sidebar-doc-link"
+              href="https://actsense.dev/vulnerabilities/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <path
+                  d="M12 6c0-1.1-.9-2-2-2H4a2 2 0 0 0-2 2v12a.5.5 0 0 0 .8.4c.7-.52 1.56-.84 2.5-.84h4.7a2 2 0 0 1 2 2V6Zm0 0c0-1.1.9-2 2-2h6a2 2 0 0 1 2 2v12a.5.5 0 0 1-.8.4 4 4 0 0 0-2.5-.84H14a2 2 0 0 0-2 2V6Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>Docs</span>
+            </a>
           </div>
           <InputForm ref={inputFormRef} onAudit={handleAudit} loading={loading} />
           {statistics && (
@@ -424,7 +448,10 @@ function App() {
                 >
                   actsense
                 </h1>
-                <p>Enter a repository (e.g., <code>owner/repo</code>) or action reference to begin auditing</p>
+                <p>
+                  Enter a repository (e.g., <code>owner/repo</code>) or action reference to begin auditing.<br />
+                  We'll fetch its workflow graph, uncover risky actions, and surface mitigation steps.
+                </p>
                 {graphData && (
                   <div className="empty-state-hint">
                     <p className="hint-text">Tip: Press <kbd>{navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘K' : 'Ctrl+K'}</kbd> to search issues and assets</p>

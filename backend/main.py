@@ -81,6 +81,34 @@ async def resolve_action_dependencies(
         {"owner": owner, "repo": repo, "ref": ref, "subdir": subdir}
     )
     
+    # Check if repository exists
+    repo_key = f"{owner}/{repo}"
+    repo_exists = None
+    try:
+        repo_info = await client.get_repository_info(owner, repo)
+        repo_exists = repo_info is not None
+    except Exception:
+        repo_exists = False
+    
+    # If repository doesn't exist, add a critical issue
+    if repo_exists is False:
+        missing_repo_issue = {
+            "type": "missing_action_repository",
+            "severity": "critical",
+            "message": f"Action '{action_ref}' references repository '{repo_key}' that does not exist or is not accessible. This will cause workflow failures at runtime.",
+            "action": action_ref,
+            "evidence": {
+                "action": action_ref,
+                "repository": repo_key,
+                "exists": False,
+                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/missing_action_repository"
+            },
+            "recommendation": f"Verify the action reference '{action_ref}' is correct. The repository '{repo_key}' may have been deleted, moved, made private, or the reference may contain a typo. Update the workflow to use a valid action reference."
+        }
+        graph.add_issues_to_node(action_ref, [missing_repo_issue])
+        # Don't try to fetch metadata if repository doesn't exist
+        return
+    
     # Get action metadata first (needed for comprehensive auditing)
     action_yml = None
     js_action_code = None

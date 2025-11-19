@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: actsense_app
+    ports:
+      - "8000:8000"
+    environment:
+      # Optional token for higher GitHub rate limits; override when needed.
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+

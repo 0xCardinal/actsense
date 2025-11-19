@@ -45,7 +45,7 @@ issue.get("evidence", {}).get("vulnerability", "")  # instead of issue["evidence
 
 - Tests check `if len(issues) > 0:` before asserting
 - Some tests allow for cases where detection may vary
-- Check the actual detection logic in `rules/security.py` and `rules/best_practices.py`
+- Check the actual detection logic in `rules/security.py`
 
 ### Issue: TruffleHog not found
 

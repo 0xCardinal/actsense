@@ -5,7 +5,7 @@ Thank you for your interest in contributing to actsense! This document provides 
 ## Project Structure
 
 ```
-action-auditor/
+actsense/
 ├── backend/
 │   ├── main.py                 # FastAPI application
 │   ├── github_client.py        # GitHub API client
@@ -26,6 +26,13 @@ action-auditor/
 │   │   └── utils/              # Utility functions
 │   ├── package.json
 │   └── vite.config.js
+├── docs/                       # Hugo site for documentation
+│   ├── hugo.yaml               # Site configuration
+│   ├── content/                # Markdown docs (see vulnerabilities/)
+│   ├── layouts/                # Theme overrides & partials
+│   ├── assets/                 # Custom CSS/JS
+│   ├── public/                 # Built static site output
+│   └── resources/_gen/         # Hugo cache (generated)
 └── data/                       # Generated data (gitignored)
     ├── analyses/              # Saved analyses
     └── clones/                # Cloned repositories
@@ -66,6 +73,23 @@ npm run dev
 ```
 
 The frontend will proxy API requests to `http://localhost:8000`.
+
+### Documentation Site (Hugo)
+
+1. Install the Hugo Extended binary (v0.125+ recommended).
+2. Run the docs locally:
+```bash
+cd docs
+hugo server --config hugo.yaml --disableFastRender
+```
+   The site will be served at `http://localhost:1313`.
+3. Build the static site (outputs to `docs/public/`):
+```bash
+cd docs
+hugo --config hugo.yaml
+```
+
+All public-facing vulnerability write-ups live under `docs/content/vulnerabilities/`. Each Markdown file maps 1:1 with the `/vulnerabilities/*` routes, so add or update files there when documenting new checks.
 
 ### Integrated Development
 
