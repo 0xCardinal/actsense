@@ -39,4 +39,9 @@ resources/_gen/
 .hugo_cache/
 public/
 
+# Coverage
+.coverage
+*/.coverage
+
+# Documentation
 AGENT.md
