@@ -1,7 +1,7 @@
 """Storage for analysis results."""
 import json
 import os
-from datetime import datetime
+import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import uuid
@@ -32,7 +32,7 @@ class AnalysisStorage:
         
         analysis = {
             "id": analysis_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "repository": repository,
             "action": action,
             "method": method,
