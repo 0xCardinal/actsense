@@ -1,72 +1,103 @@
 # Cross Repository Access
 
-## Vulnerability Description
+## Description
 
+When a workflow checks out or clones a repository other than the one that triggered it, any secrets granted to the workflow can cross trust boundaries. Attackers can substitute malicious dependencies, exfiltrate data to forked repos, or silently tamper with code if the external repo is compromised. GitHub recommends using organization allowlists and scoped tokens for cross-repo interactions. [^gh_cross_repo]
 
-Workflow accesses a different repository {repo} than the current repository.
-This may have security implications:
+## Vulnerable Instance
 
-- Cross-repository access may require additional permissions
+- `actions/checkout` fetches `owner/other-repo` using the default `GITHUB_TOKEN`.
+- Workflow writes artifacts or pushes commits back to that repository.
+- There is no allowlist or validation of the requested repository name.
 
-- Accessing untrusted repositories can introduce security risks
+```yaml
+name: Cross Repo Sync
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        required: true
 
-- Secrets may be exposed to external repositories
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone target repository
+        run: git clone https://github.com/${{ inputs.target_repo }} target
+      - name: Push changes
+        run: |
+          cd target
+          git commit --allow-empty -m "sync"
+          git push
+```
 
-- Code from external repositories may be executed
+A malicious user can supply `inputs.target_repo` pointing to an attacker-controlled repo, causing secrets or code to be exposed.
 
+## Mitigation Strategies
 
-Security concerns:
+1. **Allowlist target repositories**  
+   Check the requested repo against a regex or `case` statement before cloning.
+2. **Use fine-grained PATs**  
+   Replace the default `GITHUB_TOKEN` with repo- or org-scoped PATs that limit write operations.
+3. **Pin revisions and verify sources**  
+   When consuming code, pin to specific SHAs and configure Dependabot/CodeQL scanning.
+4. **Log and audit access**  
+   Emit telemetry when cross-repo operations run and review logs for unexpected targets.
+5. **Prefer GitHub Actions Marketplace**  
+   Use prebuilt actions from trusted publishers instead of cloning arbitrary repos.
 
-- Unauthorized access to other repositories
+### Secure Version
 
-- Potential for supply chain attacks
+- Workflow restricts inputs to a known set of repositories.
+- Custom token only grants read access to the target repo.
+- Code is pulled read-only; no blind pushes occur. [^gh_cross_repo]
 
-- Secrets exposure to external code
+```yaml
+name: Approved Cross Repo Sync
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        type: choice
+        options:
+          - my-org/docs
+          - my-org/app
+        required: true
 
-- Difficult to audit and control access
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone approved repo
+        env:
+          TARGET_REPO: ${{ inputs.target_repo }}
+        run: |
+          case "$TARGET_REPO" in
+            my-org/docs|my-org/app) ;;
+            *) echo "Repo not allowlisted"; exit 1 ;;
+          esac
+          git clone https://github.com/$TARGET_REPO target
+      - name: Sync read-only data
+        run: rsync -a src/ target/
+```
 
+## Impact
 
-## Recommendation
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Cross-repo clones are common in monorepos and mirrored workflows. |
+| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Exposes secrets to untrusted repos or allows supply-chain tampering. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any repository or service that the workflow token can reach becomes vulnerable. |
 
+## References
 
-Ensure cross-repository access is intentional and properly secured:
+- GitHub Docs, “Granting access to workflows,” https://docs.github.com/actions/using-jobs/assigning-permissions-to-jobs [^gh_cross_repo]
+- GitHub Docs, “Creating a fine-grained personal access token,” https://docs.github.com/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token
 
+---
 
-1. Verify the repository is trusted:
-
-- Only access repositories you own or trust
-
-- Review repository security and maintenance status
-
-- Check for known vulnerabilities
-
-
-2. Use minimal permissions:
-
-- Only grant read access when possible
-
-- Use specific repository permissions
-
-- Avoid write access to external repositories
-
-
-3. Validate repository access:
-
-- Use allowlists for permitted repositories
-
-- Validate repository names before access
-
-- Log all cross-repository access
-
-
-4. Consider alternatives:
-
-- Use GitHub Actions from trusted sources
-
-- Fork and maintain your own copy
-
-- Use pinned versions of external code
-
-
-5. Review all cross-repository access in workflows
-
+[^gh_cross_repo]: GitHub Docs, “Granting access to workflows,” https://docs.github.com/actions/using-jobs/assigning-permissions-to-jobs
