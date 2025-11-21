@@ -43,15 +43,16 @@ runs:
 
 ### Secure Version
 
-```yaml
-# action.yml
-name: 'My Composite Action'
-runs:
-  using: 'composite'
-  steps:
-    - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Pinned SHA
-      with:
-        path: src
+```diff
+ # action.yml
+ name: 'My Composite Action'
+ runs:
+   using: 'composite'
+   steps:
+-    - uses: actions/checkout@v4  # Unpinned - can be moved
++    - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Pinned SHA
+       with:
+         path: src
 ```
 
 ## Impact

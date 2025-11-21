@@ -49,28 +49,30 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build from Ref
-on:
-  workflow_dispatch:
-    inputs:
-      branch:
-        type: choice
-        options: [main, develop]  # Restricted choices
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Validate ref
-        run: |
-          if [[ "${{ inputs.branch }}" != "main" && "${{ inputs.branch }}" != "develop" ]]; then
-            echo "Invalid branch"
-            exit 1
-          fi
-      - uses: actions/checkout@v4
-        with:
-          ref: refs/heads/${{ inputs.branch }}  # Validated
-      - run: npm test
+```diff
+ name: Build from Ref
+ on:
+   workflow_dispatch:
+     inputs:
+       branch:
+-        type: string
++        type: choice
++        options: [main, develop]  # Restricted choices
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
++      - name: Validate ref
++        run: |
++          if [[ "${{ inputs.branch }}" != "main" && "${{ inputs.branch }}" != "develop" ]]; then
++            echo "Invalid branch"
++            exit 1
++          fi
+       - uses: actions/checkout@v4
+         with:
+-          ref: ${{ inputs.branch }}  # Dangerous - unvalidated user input
++          ref: refs/heads/${{ inputs.branch }}  # Validated
+       - run: npm test
 ```
 
 ## Impact

@@ -43,15 +43,16 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Verified Action
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Official, pinned
-      - run: npm test
+```diff
+ name: Build with Verified Action
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+-      - uses: action/checkout@v4  # Suspicious - should be actions/checkout
++      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Official, pinned
+       - run: npm test
 ```
 
 ## Impact

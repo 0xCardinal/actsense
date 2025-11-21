@@ -46,18 +46,20 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Verified Action
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4  # Verified, well-maintained action
-        with:
-          node-version: '20'
-      - run: npm test
+```diff
+ name: Build with Verified Action
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+-      - uses: non-existent-org/missing-action@v1  # Repository doesn't exist
++      - uses: actions/setup-node@v4  # Verified, well-maintained action
+         with:
+-          input: value
++          node-version: '20'
+       - run: npm test
 ```
 
 ## Impact

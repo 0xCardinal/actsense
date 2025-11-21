@@ -49,30 +49,33 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Deploy
-on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        type: choice  # Restricted choices
-        options: [production, staging]
-        required: true
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Validate input
-        run: |
-          if [[ "${{ inputs.environment }}" != "production" && "${{ inputs.environment }}" != "staging" ]]; then
-            echo "Invalid environment"
-            exit 1
-          fi
-      - name: Deploy
-        env:
-          ENV: ${{ inputs.environment }}
-        run: |
-          deploy.sh "$ENV"  # Validated, quoted
+```diff
+ name: Deploy
+ on:
+   workflow_dispatch:
+     inputs:
+       environment:
+-        type: string
+-        required: false  # Optional, unvalidated
++        type: choice  # Restricted choices
++        options: [production, staging]
++        required: true
+ jobs:
+   deploy:
+     runs-on: ubuntu-latest
+     steps:
++      - name: Validate input
++        run: |
++          if [[ "${{ inputs.environment }}" != "production" && "${{ inputs.environment }}" != "staging" ]]; then
++            echo "Invalid environment"
++            exit 1
++          fi
+       - name: Deploy
++        env:
++          ENV: ${{ inputs.environment }}
+         run: |
+-          deploy.sh ${{ inputs.environment }}  # Dangerous - unvalidated
++          deploy.sh "$ENV"  # Validated, quoted
 ```
 
 ## Impact

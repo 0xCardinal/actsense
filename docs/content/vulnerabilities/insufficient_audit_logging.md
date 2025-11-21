@@ -40,24 +40,23 @@ If the token leaks or is abused, there’s no record tying the action to a human
 
 ### Secure Version
 
-- Deployment step emits structured logs with commit SHA and actor.
-- Logs forward to an external endpoint for retention/anomaly detection.
-
-```yaml
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Log deployment start
-        run: |
-          echo "{\"event\":\"deploy_start\",\"run\":\"${{ github.run_id }}\",\"sha\":\"${{ github.sha }}\",\"actor\":\"${{ github.actor }}\"}" >> audit.log
-      - name: Publish package
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish
-      - name: Ship audit log
-        run: curl -X POST https://logging.example.com -H "Content-Type: application/json" --data-binary @audit.log
+```diff
+ name: Publish
+ on: workflow_dispatch
+ jobs:
+   publish:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
++      - name: Log deployment start
++        run: |
++          echo "{\"event\":\"deploy_start\",\"run\":\"${{ github.run_id }}\",\"sha\":\"${{ github.sha }}\",\"actor\":\"${{ github.actor }}\"}" >> audit.log
+       - name: Publish package
+         env:
+           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+         run: npm publish
++      - name: Ship audit log
++        run: curl -X POST https://logging.example.com -H "Content-Type: application/json" --data-binary @audit.log
 ```
 
 ## Impact

@@ -46,18 +46,19 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Deploy with GitHub Runner
-on:
-  pull_request:
-    branches: [main]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest  # GitHub-hosted for public repos
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-      - run: deploy.sh
+```diff
+ name: Deploy with GitHub Runner
+ on:
+   pull_request:
+     branches: [main]
+ jobs:
+   deploy:
+-    runs-on: self-hosted  # Dangerous in public repo
++    runs-on: ubuntu-latest  # GitHub-hosted for public repos
+     environment: production
+     steps:
+       - uses: actions/checkout@v4
+       - run: deploy.sh
 ```
 
 ## Impact

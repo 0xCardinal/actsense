@@ -35,15 +35,17 @@ jobs:
 
 ### Secure Version
 
-- Retention set to 30 days.
-- Separate job handles long-term archival off-platform.
-
-```yaml
-      - uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: logs/**
-          retention-days: 30
+```diff
+ jobs:
+   build:
+     steps:
+       - run: npm run build
+       - uses: actions/upload-artifact@v4
+         with:
+           name: build-logs
+           path: logs/**
+-          retention-days: 365
++          retention-days: 30
 ```
 
 ## Impact

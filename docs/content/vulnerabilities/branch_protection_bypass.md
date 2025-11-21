@@ -46,32 +46,39 @@ jobs:
 
 ### Secure Version
 
-- Human reviewers stay in the loop and branch protection settings enforce approvals.
-- Workflow permissions default to read-only except where explicitly required.
-- Notification step alerts reviewers instead of merging automatically. [^gh_branch_protection]
-
-```yaml
-name: Lint & Gate
-on:
-  pull_request:
-    branches: [ main ]
-jobs:
-  checks:
-    permissions:
-      contents: read
-      pull-requests: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm test
-  require-review:
-    needs: checks
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Notify reviewers
-        run: echo "All checks passed—waiting for human approval."
+```diff
+ name: Lint & Gate
+ on:
+   pull_request:
+     branches: [ main ]
+ jobs:
+-  auto-approve-and-merge:
+-    permissions: write-all
++  checks:
++    permissions:
++      contents: read
++      pull-requests: write
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm test
+-      - name: Auto approve PR
+-        run: gh pr review "$PR_URL" --approve
+-        env:
+-          PR_URL: ${{ github.event.pull_request.html_url }}
+-      - name: Auto merge PR
+-        uses: peter-evans/enable-pull-request-merge@v3
+-        with:
+-          token: ${{ secrets.GITHUB_TOKEN }}
+-          merge_method: squash
++  require-review:
++    needs: checks
++    runs-on: ubuntu-latest
++    permissions:
++      contents: read
++    steps:
++      - name: Notify reviewers
++        run: echo "All checks passed—waiting for human approval."
 ```
 
 ## Impact

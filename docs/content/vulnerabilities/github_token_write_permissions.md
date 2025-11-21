@@ -36,26 +36,26 @@ jobs:
 
 ### Secure Version
 
-- Workflow defaults to read scopes.
-- Only the `deploy` job elevates to `contents: write`. [^gh_permissions]
-
-```yaml
-permissions:
-  contents: read
-  pull-requests: read
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm test
-  deploy:
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-    steps:
-      - run: ./scripts/deploy.sh
+```diff
+ permissions:
+-  contents: write
+-  pull-requests: write
+-  issues: write
++  contents: read
++  pull-requests: read
+ jobs:
+   test:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm test
++  deploy:
++    needs: test
++    if: github.ref == 'refs/heads/main'
++    permissions:
++      contents: write
++    steps:
++      - run: ./scripts/deploy.sh
 ```
 
 ## Impact

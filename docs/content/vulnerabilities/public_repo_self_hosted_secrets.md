@@ -46,18 +46,20 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Secrets
-on:
-  pull_request:
-    branches: [main]
-jobs:
-  build:
-    runs-on: ubuntu-latest  # GitHub-hosted for public repos
-    steps:
-      - uses: actions/checkout@v4
-      - name: Use secret
-        run: echo "${{ secrets.API_KEY }}"  # Safer on GitHub-hosted runner
+```diff
+ name: Build with Secrets
+ on:
+   pull_request:
+     branches: [main]
+ jobs:
+   build:
+-    runs-on: self-hosted  # Dangerous in public repo
++    runs-on: ubuntu-latest  # GitHub-hosted for public repos
+     steps:
+       - uses: actions/checkout@v4
+       - name: Use secret
+-        run: echo "${{ secrets.API_KEY }}"  # Exposed to self-hosted runner
++        run: echo "${{ secrets.API_KEY }}"  # Safer on GitHub-hosted runner
 ```
 
 ## Impact

@@ -40,27 +40,24 @@ Any actor who can trigger the workflow gains access to `PROD_API_KEY`.
 
 ### Secure Version
 
-- Environment requires two reviewers and a 10-minute wait timer.
-- Deployment job runs only on `push` to `main`.
-- Secrets are scoped per environment and never exposed to forked PRs. [^gh_environment_secrets]
-
-```yaml
-jobs:
-  deploy:
-    if: github.ref == 'refs/heads/main'
-    environment:
-      name: production
-      url: https://prod.example.com
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy
-        env:
-          API_KEY: ${{ secrets.PROD_API_KEY }}
-        run: ./scripts/deploy.sh "$API_KEY"
+```diff
+ jobs:
+   deploy:
++    if: github.ref == 'refs/heads/main'
+     environment:
+-      name: production
++      name: production
++      url: https://prod.example.com
+     runs-on: ubuntu-latest
++    permissions:
++      contents: read
++      deployments: write
+     steps:
+       - uses: actions/checkout@v4
+       - name: Deploy
+         env:
+           API_KEY: ${{ secrets.PROD_API_KEY }}
+         run: ./scripts/deploy.sh "$API_KEY"
 ```
 
 ## Impact

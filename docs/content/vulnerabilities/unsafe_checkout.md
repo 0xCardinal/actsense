@@ -45,20 +45,21 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Only if pushing needed
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false  # Secure - no credential persistence
-      - run: npm test
-      - run: git push  # Uses GITHUB_TOKEN automatically
+```diff
+ name: Build
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
++    permissions:
++      contents: write  # Only if pushing needed
+     steps:
+       - uses: actions/checkout@v4
+         with:
+-          persist-credentials: true  # Dangerous - credentials persisted
++          persist-credentials: false  # Secure - no credential persistence
+       - run: npm test
++      - run: git push  # Uses GITHUB_TOKEN automatically
 ```
 
 ## Impact

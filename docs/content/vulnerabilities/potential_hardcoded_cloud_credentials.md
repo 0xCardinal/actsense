@@ -45,23 +45,26 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Deploy with OIDC
-on: [push]
-permissions:
-  id-token: write
-  contents: read
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::ACCOUNT:role/GitHubActionsRole
-          aws-region: us-east-1
-      - run: aws s3 cp dist/ s3://my-bucket/
+```diff
+ name: Deploy with OIDC
+ on: [push]
++permissions:
++  id-token: write
++  contents: read
+ jobs:
+   deploy:
+     runs-on: ubuntu-latest
+     steps:
++      - uses: actions/checkout@v4
++      - name: Configure AWS credentials
++        uses: aws-actions/configure-aws-credentials@v4
++        with:
++          role-to-assume: arn:aws:iam::ACCOUNT:role/GitHubActionsRole
++          aws-region: us-east-1
+       - run: |
+-          export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+-          export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+           aws s3 cp dist/ s3://my-bucket/
 ```
 
 ## Impact

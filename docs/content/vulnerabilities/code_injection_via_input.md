@@ -47,36 +47,34 @@ An attacker can trigger this workflow with `target_env: "prod && cat $GITHUB_TOK
 
 ### Secure Version
 
-- Input validation runs before any sensitive command.
-- Input type is restricted to a known set of environments.
-- Deployment script receives a sanitized, quoted argument only after validation passes. [^gh_security]
+```diff
+ name: Manual Deploy (Safe)
+ on:
+   workflow_dispatch:
+     inputs:
+       target_env:
+-        description: "Environment name"
++        type: choice
++        options: [staging, production]
+         required: true
 
-```yaml
-name: Manual Deploy (Safe)
-on:
-  workflow_dispatch:
-    inputs:
-      target_env:
-        type: choice
-        options: [staging, production]
-        required: true
-
-jobs:
-  deploy:
-    permissions:
-      contents: read
-      deployments: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate environment
-        run: |
-          case "${{ inputs.target_env }}" in
-            staging|production) ;;
-            *) echo "Invalid env"; exit 1 ;;
-          esac
-      - name: Deploy
-        run: ./scripts/deploy.sh "${{ inputs.target_env }}"
+ jobs:
+   deploy:
++    permissions:
++      contents: read
++      deployments: write
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
++      - name: Validate environment
++        run: |
++          case "${{ inputs.target_env }}" in
++            staging|production) ;;
++            *) echo "Invalid env"; exit 1 ;;
++          esac
+       - name: Deploy
+-        run: ./scripts/deploy.sh ${{ inputs.target_env }}
++        run: ./scripts/deploy.sh "${{ inputs.target_env }}"
 ```
 
 ## Impact

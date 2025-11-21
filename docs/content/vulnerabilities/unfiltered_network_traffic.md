@@ -45,19 +45,23 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Filtered Network
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download from trusted source
-        run: |
-          # Only allowlisted endpoints
-          curl -o data.json https://trusted-cdn.example.com/data
-          # Verify checksum
-          echo "expected_sha256" | sha256sum -c data.json
+```diff
+ name: Build with Filtered Network
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+-      - run: |
+-          curl https://example.com/data
+-          wget https://example.com/file
+-          # No filtering - can exfiltrate secrets
++      - name: Download from trusted source
++        run: |
++          # Only allowlisted endpoints
++          curl -o data.json https://trusted-cdn.example.com/data
++          # Verify checksum
++          echo "expected_sha256" | sha256sum -c data.json
 ```
 
 ## Impact

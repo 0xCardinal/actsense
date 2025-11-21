@@ -39,24 +39,23 @@ jobs:
 
 ### Secure Version
 
-- Default workflow tests a minimal set per push.
-- Scheduled workflow runs full compatibility matrix weekly.
-
-```yaml
-jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      max-parallel: 3
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        node: [18, 20]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-      - run: npm test
+```diff
+ jobs:
+   test:
+     runs-on: ${{ matrix.os }}
+     strategy:
++      max-parallel: 3
+       matrix:
+-        os: [ubuntu-latest, windows-latest, macos-latest]
+-        node: [14, 16, 18, 20, 22]
++        os: [ubuntu-latest, windows-latest]
++        node: [18, 20]
+     steps:
+       - uses: actions/checkout@v4
+       - uses: actions/setup-node@v4
+         with:
+           node-version: ${{ matrix.node }}
+       - run: npm test
 ```
 
 ## Impact

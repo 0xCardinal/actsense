@@ -40,35 +40,34 @@ jobs:
 
 ### Secure Version
 
-- PR workflow runs on `pull_request` (read-only).
-- `pull_request_target` workflow checks out only the base branch for tasks like labeling.
-- Deployment happens in a separate trusted workflow. [^gh_untrusted_input]
+```diff
+ name: PR Validation
+ on: pull_request
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm test
 
-```yaml
-name: PR Validation
-on: pull_request
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm test
-
-name: PR Target Labeler
-on:
-  pull_request_target:
-    branches: [main]
-jobs:
-  label:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.ref }}
-      - run: gh pr edit ${{ github.event.pull_request.number }} --add-label "triaged"
+ name: PR Target Labeler
+ on:
+   pull_request_target:
+     branches: [main]
+ jobs:
+-  build:
++  label:
+     runs-on: ubuntu-latest
++    permissions:
++      contents: read
++      pull-requests: write
+     steps:
+       - uses: actions/checkout@v4
+         with:
+-          ref: ${{ github.event.pull_request.head.sha }}  # Dangerous
+-      - run: npm test
++          ref: ${{ github.event.pull_request.base.ref }}
++      - run: gh pr edit ${{ github.event.pull_request.number }} --add-label "triaged"
 ```
 
 ## Impact

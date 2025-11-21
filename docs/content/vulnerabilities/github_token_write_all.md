@@ -38,30 +38,28 @@ Compromising `npm test` yields a token with repository-wide write privileges.
 
 ### Secure Version
 
-- Global permissions limited to read.
-- Deployment job elevates to `contents: write` only when pushing tags. [^gh_token_permissions]
-
-```yaml
-name: Test and Release
-on:
-  pull_request:
-  push:
-    tags: ["v*"]
-permissions:
-  contents: read
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm test
-  release:
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - run: ./scripts/publish.sh
+```diff
+ name: Test and Release
+ on:
+   pull_request:
+   push:
+     tags: ["v*"]
+-permissions: write-all
++permissions:
++  contents: read
+ jobs:
+   test:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm test
++  release:
++    if: startsWith(github.ref, 'refs/tags/')
++    permissions:
++      contents: write
++    runs-on: ubuntu-latest
++    steps:
++      - run: ./scripts/publish.sh
 ```
 
 ## Impact

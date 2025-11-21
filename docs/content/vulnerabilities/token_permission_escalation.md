@@ -45,21 +45,25 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Secure Token Usage
-on: [push]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write  # Use permissions, not token manipulation
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy
-        run: |
-          # Token is handled securely by GitHub Actions
-          git push origin main
+```diff
+ name: Secure Token Usage
+ on: [push]
+ jobs:
+   deploy:
+     runs-on: ubuntu-latest
++    permissions:
++      contents: read
++      pull-requests: write  # Use permissions, not token manipulation
+     steps:
++      - uses: actions/checkout@v4
++      - name: Deploy
++        run: |
++          # Token is handled securely by GitHub Actions
++          git push origin main
+-      - name: Encode token
+-        run: |
+-          echo "${{ secrets.GITHUB_TOKEN }}" | base64 > token.txt  # Dangerous
+-          # Token could be extracted from token.txt
 ```
 
 ## Impact

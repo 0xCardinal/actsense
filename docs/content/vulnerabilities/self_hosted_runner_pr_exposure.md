@@ -45,17 +45,18 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: PR Build Safe
-on:
-  pull_request:
-    branches: [main]
-jobs:
-  build:
-    runs-on: ubuntu-latest  # GitHub-hosted for PRs
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm test
+```diff
+ name: PR Build Safe
+ on:
+   pull_request:
+     branches: [main]
+ jobs:
+   build:
+-    runs-on: self-hosted  # CRITICAL: Never do this in public repos
++    runs-on: ubuntu-latest  # GitHub-hosted for PRs
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm test
 ```
 
 ## Impact

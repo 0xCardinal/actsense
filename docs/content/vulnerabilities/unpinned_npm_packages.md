@@ -42,14 +42,15 @@ runs:
 
 ### Secure Version
 
-```yaml
-# action.yml
-name: 'My Action'
-runs:
-  using: 'composite'
-  steps:
-    - run: npm ci  # Uses package-lock.json for exact versions
-      shell: bash
+```diff
+ # action.yml
+ name: 'My Action'
+ runs:
+   using: 'composite'
+   steps:
+-    - run: npm install  # Unpinned - versions can change
++    - run: npm ci  # Uses package-lock.json for exact versions
+       shell: bash
 ```
 
 ## Impact

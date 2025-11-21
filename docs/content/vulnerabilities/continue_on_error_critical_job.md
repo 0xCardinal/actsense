@@ -42,33 +42,30 @@ If `migrate.sh` fails, the job still reports success and continues with deploy, 
 
 ### Secure Version
 
-- Optional steps run conditionally via `if`, not `continue-on-error`.
-- Critical steps fail the job when they fail, ensuring branch protection reacts.
-- Deployment job only runs after validation job completes successfully. [^gh_continue_on_error]
-
-```yaml
-name: Deploy (Safe)
-on: workflow_dispatch
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Smoke tests
-        run: npm run test:smoke
-      - name: Optional telemetry
-        if: ${{ always() }}
-        run: ./scripts/report-telemetry.sh || echo "Telemetry failed"
-
-  release:
-    needs: validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run database migrations
-        run: ./scripts/migrate.sh
-      - name: Deploy app
-        run: ./scripts/deploy.sh
+```diff
+ name: Deploy (Safe)
+ on: workflow_dispatch
+ jobs:
++  validate:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - name: Smoke tests
++        run: npm run test:smoke
++      - name: Optional telemetry
++        if: ${{ always() }}
++        run: ./scripts/report-telemetry.sh || echo "Telemetry failed"
++
+   release:
++    needs: validate
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - name: Run database migrations
+-        continue-on-error: true
+         run: ./scripts/migrate.sh
+       - name: Deploy app
+         run: ./scripts/deploy.sh
 ```
 
 ## Impact

@@ -45,20 +45,22 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Trusted Action
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4  # Trusted, official action
-        with:
-          node-version: '20'
-      - name: Use secret
-        run: |
-          curl -H "Authorization: Bearer ${{ secrets.API_KEY }}" https://api.example.com
+```diff
+ name: Build with Trusted Action
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+-      - uses: untrusted-org/some-action@v1
++      - uses: actions/setup-node@v4  # Trusted, official action
+         with:
+-          api_key: ${{ secrets.API_KEY }}  # Dangerous - untrusted action
++          node-version: '20'
++      - name: Use secret
++        run: |
++          curl -H "Authorization: Bearer ${{ secrets.API_KEY }}" https://api.example.com
 ```
 
 ## Impact

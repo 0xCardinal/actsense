@@ -47,17 +47,20 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Secure Secret
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Use secret
-        run: |
-          curl -H "Authorization: Bearer ${{ secrets.API_KEY }}" https://api.example.com
-          # Secret is automatically masked in logs
+```diff
+ name: Build with Secure Secret
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+       - name: Use secret
+-        env:
+-          API_KEY: ${{ secrets.API_KEY }}  # May be logged
+         run: |
+-          echo "Using API key: $API_KEY"  # Exposed in logs
+           curl -H "Authorization: Bearer ${{ secrets.API_KEY }}" https://api.example.com
++          # Secret is automatically masked in logs
 ```
 
 ## Impact

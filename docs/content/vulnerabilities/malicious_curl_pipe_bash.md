@@ -30,17 +30,19 @@ jobs:
 
 ### Secure Version
 
-```yaml
-jobs:
-  setup:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download installer
-        run: curl -fsSL https://example.com/install.sh -o install.sh
-      - name: Verify checksum
-        run: echo "abc123  install.sh" | sha256sum --check -
-      - name: Run installer
-        run: bash install.sh
+```diff
+ jobs:
+   setup:
+     runs-on: ubuntu-latest
+     steps:
+-      - name: Install tool
+-        run: curl -fsSL https://example.com/install.sh | bash
++      - name: Download installer
++        run: curl -fsSL https://example.com/install.sh -o install.sh
++      - name: Verify checksum
++        run: echo "abc123  install.sh" | sha256sum --check -
++      - name: Run installer
++        run: bash install.sh
 ```
 
 ## Impact

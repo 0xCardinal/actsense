@@ -47,19 +47,20 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Run script
-        run: |
-          set -euo pipefail  # Exit on error, undefined vars, pipe failures
-          npm install
-          npm test
-          npm build
+```diff
+ name: Build
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+       - name: Run script
+         run: |
++          set -euo pipefail  # Exit on error, undefined vars, pipe failures
+-          # No set -e - errors ignored
+           npm install
+           npm test
+           npm build
 ```
 
 ## Impact

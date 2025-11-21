@@ -45,18 +45,19 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Minimal Permissions
-on: [push]
-jobs:
-  build:
-    runs-on: self-hosted
-    permissions:
-      contents: read  # Only what's needed
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm test
+```diff
+ name: Build with Minimal Permissions
+ on: [push]
+ jobs:
+   build:
+     runs-on: self-hosted
+     permissions:
+-      contents: write  # Dangerous on self-hosted
++      contents: read  # Only what's needed
++      pull-requests: read
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm test
 ```
 
 ## Impact

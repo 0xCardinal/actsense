@@ -45,27 +45,28 @@ https.get('https://example.com/script.sh', (response) => {
 
 ### Secure Version
 
-```javascript
-// action.js
-const crypto = require('crypto');
-const fs = require('fs');
-const https = require('https');
-
-const expectedHash = 'a1b2c3d4e5f6...'; // SHA256 checksum
-
-// Download and verify
-const file = fs.createWriteStream('script.sh');
-https.get('https://example.com/script.sh', (response) => {
-  response.pipe(file);
-  file.on('finish', () => {
-    const data = fs.readFileSync('script.sh');
-    const hash = crypto.createHash('sha256').update(data).digest('hex');
-    if (hash !== expectedHash) {
-      throw new Error('Checksum verification failed');
-    }
-    // Use verified file
-  });
-});
+```diff
+ // action.js
++const crypto = require('crypto');
+ const https = require('https');
+ const fs = require('fs');
++
++const expectedHash = 'a1b2c3d4e5f6...'; // SHA256 checksum
++
++// Download and verify
+ const file = fs.createWriteStream('script.sh');
+ https.get('https://example.com/script.sh', (response) => {
+   response.pipe(file);
+-  // No checksum verification
++  file.on('finish', () => {
++    const data = fs.readFileSync('script.sh');
++    const hash = crypto.createHash('sha256').update(data).digest('hex');
++    if (hash !== expectedHash) {
++      throw new Error('Checksum verification failed');
++    }
++    // Use verified file
++  });
+ });
 ```
 
 ## Impact

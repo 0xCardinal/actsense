@@ -35,22 +35,20 @@ jobs:
 
 ### Secure Version
 
-- Uses latest major versions (e.g., `actions/checkout@v4`, `actions/setup-node@v4`).
-- Comment notes when the version was last reviewed.
-- Optional: pin to SHA if the action is outside GitHub’s verified orgs. [^gh_actions_security]
-
-```yaml
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci && npm test
+```diff
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+-      - uses: actions/checkout@v1
+-      - uses: actions/setup-node@v1
++      - uses: actions/checkout@v4
++        with:
++          persist-credentials: false
++      - uses: actions/setup-node@v4
++        with:
++          node-version: 20
+       - run: npm ci && npm test
 ```
 
 ## Impact

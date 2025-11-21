@@ -45,18 +45,19 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Secure Workflow
-on: [push]
-permissions:
-  contents: read
-  actions: read  # Read-only or omit entirely
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo "Deploying..."
+```diff
+ name: Secure Workflow
+ on: [push]
+ permissions:
++  contents: read
+-  actions: write  # Extremely dangerous!
++  actions: read  # Read-only or omit entirely
+ jobs:
+   deploy:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - run: echo "Deploying..."
 ```
 
 ## Impact

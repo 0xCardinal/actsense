@@ -42,19 +42,20 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Download and Verify
-on: [push]
-jobs:
-  setup:
-    runs-on: self-hosted
-    steps:
-      - name: Download script
-        run: |
-          curl -o script.sh https://example.com/script.sh
-          echo "expected_sha256" | sha256sum -c script.sh
-      - name: Review and execute
-        run: bash script.sh
+```diff
+ name: Download and Verify
+ on: [push]
+ jobs:
+   setup:
+     runs-on: self-hosted
+     steps:
++      - name: Download script
++        run: |
++          curl -o script.sh https://example.com/script.sh
++          echo "expected_sha256" | sha256sum -c script.sh
++      - name: Review and execute
++        run: bash script.sh
+-      - run: curl https://example.com/script.sh | bash  # Dangerous - no verification
 ```
 
 ## Impact

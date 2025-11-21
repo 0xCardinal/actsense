@@ -37,11 +37,12 @@ RUN wget https://example.com/script.sh && bash script.sh  # No verification
 
 ### Secure Version
 
-```dockerfile
-FROM alpine:latest
-RUN wget https://example.com/script.sh && \
-    echo "a1b2c3d4e5f6..." script.sh | sha256sum -c - && \
-    bash script.sh
+```diff
+ FROM alpine:latest
+-RUN wget https://example.com/script.sh && bash script.sh  # No verification
++RUN wget https://example.com/script.sh && \
++    echo "a1b2c3d4e5f6..." script.sh | sha256sum -c - && \
++    bash script.sh
 ```
 
 ## Impact

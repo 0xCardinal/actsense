@@ -40,26 +40,24 @@ If `inputs.repo` is attacker-controlled, the workflow executes arbitrary code fr
 
 ### Secure Version
 
-- Approved repos are enumerated in the workflow.
-- Script downloads a reference tarball at a fixed SHA.
-- Integrity is verified before execution. [^gh_cross_repo_command]
-
-```yaml
-name: Pull External Util (Safe)
-on: workflow_dispatch
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Fetch approved helper
-        env:
-          REPO: my-org/ci-utils
-          SHA: 0123456789abcdef
-        run: |
-          curl -L "https://github.com/$REPO/archive/$SHA.tar.gz" -o helper.tar.gz
-          echo "expected_checksum  helper.tar.gz" | sha256sum --check -
-          tar -xzf helper.tar.gz
-          cd ci-utils-$SHA && ./install.sh
+```diff
+ name: Pull External Util (Safe)
+ on: workflow_dispatch
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+       - name: Fetch approved helper
++        env:
++          REPO: my-org/ci-utils
++          SHA: 0123456789abcdef
+         run: |
+-          git clone https://github.com/${{ inputs.repo }} helper
+-          cd helper && ./install.sh
++          curl -L "https://github.com/$REPO/archive/$SHA.tar.gz" -o helper.tar.gz
++          echo "expected_checksum  helper.tar.gz" | sha256sum --check -
++          tar -xzf helper.tar.gz
++          cd ci-utils-$SHA && ./install.sh
 ```
 
 ## Impact

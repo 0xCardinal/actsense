@@ -43,15 +43,16 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Latest Action
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Latest v4 SHA
-      - run: npm test
+```diff
+ name: Build with Latest Action
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+-      - uses: actions/checkout@v2  # Outdated - v4 available
++      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Latest v4 SHA
+       - run: npm test
 ```
 
 ## Impact

@@ -43,15 +43,16 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Clear Label
-on: [push]
-jobs:
-  build:
-    runs-on: acme-corp-build-runner  # Clear, distinct label
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm test
+```diff
+ name: Build with Clear Label
+ on: [push]
+ jobs:
+   build:
+-    runs-on: self-hosted-ubuntu  # Confusing - could be mistaken for ubuntu-latest
++    runs-on: acme-corp-build-runner  # Clear, distinct label
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm test
 ```
 
 ## Impact

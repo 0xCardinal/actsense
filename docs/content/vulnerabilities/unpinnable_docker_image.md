@@ -40,12 +40,13 @@ runs:
 
 ### Secure Version
 
-```yaml
-# action.yml
-name: 'Docker Action'
-runs:
-  using: 'docker'
-  image: 'docker://alpine@sha256:21a3deaa0d32a8057914f36584b5288d2e5ecc984380bc0118285d70cf261174'  # Immutable digest
+```diff
+ # action.yml
+ name: 'Docker Action'
+ runs:
+   using: 'docker'
+-  image: 'docker://alpine:latest'  # Mutable tag - can be moved
++  image: 'docker://alpine@sha256:21a3deaa0d32a8057914f36584b5288d2e5ecc984380bc0118285d70cf261174'  # Immutable digest
 ```
 
 ## Impact

@@ -43,15 +43,16 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build with Full SHA
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Full SHA
-      - run: npm test
+```diff
+ name: Build with Full SHA
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+-      - uses: actions/checkout@8f4b7f8  # Short SHA - ambiguous
++      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Full SHA
+       - run: npm test
 ```
 
 ## Impact

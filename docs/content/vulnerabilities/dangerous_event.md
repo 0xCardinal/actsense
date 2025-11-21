@@ -41,32 +41,29 @@ If the upstream `CI` workflow is compromised, it can finish with `completed` and
 
 ### Secure Version
 
-- Only specific workflows/branches can trigger it.
-- Job checks the upstream conclusion and metadata before running.
-- Permissions reduced to read unless deployment step needs more. [^gh_workflow_run]
-
-```yaml
-name: Auto Deploy (Safe)
-on:
-  workflow_run:
-    workflows: ["Release Build"]
-    branches: [main]
-    types: [completed]
-jobs:
-  deploy:
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
-    permissions:
-      contents: read
-      deployments: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify artifact signature
-        run: ./scripts/verify.sh "${{ github.event.workflow_run.id }}"
-      - name: Deploy
-        run: ./scripts/deploy.sh
+```diff
+ name: Auto Deploy (Safe)
+ on:
+   workflow_run:
+-    workflows: ["CI"]
++    workflows: ["Release Build"]
++    branches: [main]
+     types: [completed]
+ jobs:
+   deploy:
++    if: >
++      github.event.workflow_run.conclusion == 'success' &&
++      github.event.workflow_run.head_branch == 'main'
++    permissions:
++      contents: read
++      deployments: write
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
++      - name: Verify artifact signature
++        run: ./scripts/verify.sh "${{ github.event.workflow_run.id }}"
+       - name: Deploy
+         run: ./scripts/deploy.sh
 ```
 
 ## Impact

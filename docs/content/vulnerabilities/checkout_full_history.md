@@ -38,20 +38,18 @@ jobs:
 
 ### Secure Version
 
-- Workflow pins `fetch-depth: 1` by default and fetches additional commits only when required.
-- Artifact uploads exclude `.git/` and other historical content so past secrets stay on the runner. [^checkout_docs]
-
-```yaml
-name: Shallow Checkout Build
-on: [pull_request]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1   # Only the latest commit
-      - run: npm test
+```diff
+ name: Shallow Checkout Build
+ on: [pull_request]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+         with:
+-          fetch-depth: 0   # Fetch the entire repository history
++          fetch-depth: 1   # Only the latest commit
+       - run: npm test
 ```
 
 ## Impact

@@ -46,20 +46,23 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build Matrix Secure
-on: [push]
-jobs:
-  build:
-    strategy:
-      matrix:
-        os: [ubuntu, windows, macos]  # No secrets here
-    runs-on: ${{ matrix.os }}-latest
-    steps:
-      - name: Use secret
-        env:
-          API_KEY: ${{ secrets.API_KEY }}  # Secret at step level
-        run: echo "Using API key"
+```diff
+ name: Build Matrix Secure
+ on: [push]
+ jobs:
+   build:
+     strategy:
+       matrix:
+         os: [ubuntu, windows, macos]
+-        api_key: [${{ secrets.API_KEY }}]  # Dangerous - exposed to all jobs
++        # No secrets here
+     runs-on: ${{ matrix.os }}-latest
+     steps:
+-      - run: echo "Using ${{ matrix.api_key }}"
++      - name: Use secret
++        env:
++          API_KEY: ${{ secrets.API_KEY }}  # Secret at step level
++        run: echo "Using API key"
 ```
 
 ## Impact

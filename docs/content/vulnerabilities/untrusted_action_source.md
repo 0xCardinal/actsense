@@ -43,17 +43,18 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read  # Minimal permissions
-    steps:
-      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Trusted, pinned
-      - run: npm test
+```diff
+ name: Build
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
++    permissions:
++      contents: read  # Minimal permissions
+     steps:
+-      - uses: untrusted-org/some-action@v1  # Untrusted publisher
++      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Trusted, pinned
+       - run: npm test
 ```
 
 ## Impact

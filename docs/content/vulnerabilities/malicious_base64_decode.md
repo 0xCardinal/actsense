@@ -32,15 +32,15 @@ jobs:
 
 ### Secure Version
 
-- Script lives in the repo and runs directly.
-
-```yaml
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: ./scripts/setup.sh
+```diff
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
++      - uses: actions/checkout@v4
+-      - name: Run helper
+-        run: echo "ZXZpbCBtYWxpY2lvdXMgcGF5bG9hZA==" | base64 -d | bash
++      - run: ./scripts/setup.sh
 ```
 
 ## Impact

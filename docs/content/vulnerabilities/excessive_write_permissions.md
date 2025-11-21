@@ -39,31 +39,28 @@ If a malicious dependency escapes the lint job, it can use the token to push com
 
 ### Secure Version
 
-- Global permissions set to read.
-- Deployment job elevates to `contents: write` only when needed.
-- Comments explain why elevated permissions exist. [^gh_permissions]
-
-```yaml
-name: CI
-on: pull_request
-permissions:
-  contents: read
-  pull-requests: write
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm run lint
-  deploy:
-    needs: lint
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-    steps:
-      - run: ./scripts/deploy.sh
+```diff
+ name: CI
+ on: pull_request
+-permissions: write-all
++permissions:
++  contents: read
++  pull-requests: write
+ jobs:
+   lint:
+     runs-on: ubuntu-latest
++    permissions:
++      contents: read
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm run lint
++  deploy:
++    needs: lint
++    if: github.ref == 'refs/heads/main'
++    permissions:
++      contents: write
++    steps:
++      - run: ./scripts/deploy.sh
 ```
 
 ## Impact

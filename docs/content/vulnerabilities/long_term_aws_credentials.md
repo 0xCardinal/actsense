@@ -36,24 +36,25 @@ jobs:
 
 ### Secure Version
 
-- Workflow requests an OIDC token (`id-token: write`) and assumes an IAM role.
-
-```yaml
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsDeploy
-          aws-region: us-east-1
-      - run: aws s3 sync dist/ s3://my-bucket
+```diff
++permissions:
++  id-token: write
++  contents: read
++
+ jobs:
+   deploy:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - name: Configure AWS credentials
+-        run: |
+-          export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+-          export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
++        uses: aws-actions/configure-aws-credentials@v4
++        with:
++          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsDeploy
++          aws-region: us-east-1
+       - run: aws s3 sync dist/ s3://my-bucket
 ```
 
 ## Impact

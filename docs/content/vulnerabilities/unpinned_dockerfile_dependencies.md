@@ -37,14 +37,15 @@ RUN pip install requests flask  # Unpinned - versions can change
 
 ### Secure Version
 
-```dockerfile
-FROM python:3.9
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-# requirements.txt:
-# requests==2.31.0
-# flask==3.0.0
+```diff
+ FROM python:3.9
++COPY requirements.txt .
+-RUN pip install requests flask  # Unpinned - versions can change
++RUN pip install -r requirements.txt
++
++# requirements.txt:
++# requests==2.31.0
++# flask==3.0.0
 ```
 
 ## Impact

@@ -44,16 +44,17 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Deploy with Secrets
-on: [push]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Connect to database
-        run: |
-          mysql -u admin -p"${{ secrets.DB_PASSWORD }}" -h db.example.com
+```diff
+ name: Deploy with Secrets
+ on: [push]
+ jobs:
+   deploy:
+     runs-on: ubuntu-latest
+     steps:
+       - name: Connect to database
+         run: |
+-          mysql -u admin -p'MyHardcodedPassword123!' -h db.example.com
++          mysql -u admin -p"${{ secrets.DB_PASSWORD }}" -h db.example.com
 ```
 
 ## Impact

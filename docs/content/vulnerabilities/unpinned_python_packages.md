@@ -42,18 +42,19 @@ runs:
 
 ### Secure Version
 
-```yaml
-# action.yml
-name: 'My Action'
-runs:
-  using: 'composite'
-  steps:
-    - run: pip install -r requirements.txt  # Pinned versions
-      shell: bash
-
-# requirements.txt:
-# requests==2.31.0
-# flask==3.0.0
+```diff
+ # action.yml
+ name: 'My Action'
+ runs:
+   using: 'composite'
+   steps:
+-    - run: pip install requests flask  # Unpinned - versions can change
++    - run: pip install -r requirements.txt  # Pinned versions
+       shell: bash
++
++# requirements.txt:
++# requests==2.31.0
++# flask==3.0.0
 ```
 
 ## Impact

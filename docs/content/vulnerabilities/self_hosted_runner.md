@@ -43,15 +43,16 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build on GitHub Runner
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest  # GitHub-hosted, isolated, ephemeral
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm test
+```diff
+ name: Build on GitHub Runner
+ on: [push]
+ jobs:
+   build:
+-    runs-on: self-hosted  # Requires careful security
++    runs-on: ubuntu-latest  # GitHub-hosted, isolated, ephemeral
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm test
 ```
 
 ## Impact

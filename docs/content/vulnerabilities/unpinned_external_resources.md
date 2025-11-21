@@ -44,17 +44,17 @@ runs:
 
 ### Secure Version
 
-```yaml
-# action.yml
-name: 'My Action'
-runs:
-  using: 'composite'
-  steps:
-    - run: |
-        wget https://example.com/script.sh
-        echo "a1b2c3d4e5f6..." script.sh | sha256sum -c -
-        bash script.sh
-      shell: bash
+```diff
+ # action.yml
+ name: 'My Action'
+ runs:
+   using: 'composite'
+   steps:
+     - run: |
+         wget https://example.com/script.sh
++        echo "a1b2c3d4e5f6..." script.sh | sha256sum -c -
+         bash script.sh
+       shell: bash
 ```
 
 ## Impact

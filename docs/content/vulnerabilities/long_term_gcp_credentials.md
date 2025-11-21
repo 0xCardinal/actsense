@@ -38,25 +38,29 @@ jobs:
 
 ### Secure Version
 
-- Workflow uses OIDC to obtain short-lived credentials.
-
-```yaml
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: projects/123456789/locations/global/workloadIdentityPools/github/providers/actions
-          service_account: deployer@my-project.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud run deploy ...
+```diff
++permissions:
++  id-token: write
++  contents: read
++
+ jobs:
+   deploy:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - name: Authenticate to GCP
+-        env:
+-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
++      - id: auth
++        uses: google-github-actions/auth@v2
++        with:
++          workload_identity_provider: projects/123456789/locations/global/workloadIdentityPools/github/providers/actions
++          service_account: deployer@my-project.iam.gserviceaccount.com
++      - uses: google-github-actions/setup-gcloud@v2
+         run: |
+-          echo "$GCP_SA_KEY" > key.json
+-          gcloud auth activate-service-account --key-file key.json
+       - run: gcloud run deploy ...
 ```
 
 ## Impact

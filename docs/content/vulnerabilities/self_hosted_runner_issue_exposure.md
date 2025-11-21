@@ -46,23 +46,24 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Process Issue Safely
-on:
-  issues:
-    types: [opened]
-jobs:
-  process:
-    runs-on: ubuntu-latest  # GitHub-hosted for issue triggers
-    permissions:
-      issues: read
-      contents: read
-    steps:
-      - name: Process issue
-        run: |
-          # Validate and sanitize input
-          TITLE="${{ github.event.issue.title }}"
-          echo "Processing: ${TITLE}"
+```diff
+ name: Process Issue Safely
+ on:
+   issues:
+     types: [opened]
+ jobs:
+   process:
+-    runs-on: self-hosted  # Dangerous with issue triggers
++    runs-on: ubuntu-latest  # GitHub-hosted for issue triggers
++    permissions:
++      issues: read
++      contents: read
+     steps:
+       - name: Process issue
+         run: |
++          # Validate and sanitize input
+           TITLE="${{ github.event.issue.title }}"
+           echo "Processing: ${TITLE}"
 ```
 
 ## Impact

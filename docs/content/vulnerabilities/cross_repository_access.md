@@ -49,40 +49,43 @@ A malicious user can supply `inputs.target_repo` pointing to an attacker-control
 
 ### Secure Version
 
-- Workflow restricts inputs to a known set of repositories.
-- Custom token only grants read access to the target repo.
-- Code is pulled read-only; no blind pushes occur. [^gh_cross_repo]
+```diff
+ name: Approved Cross Repo Sync
+ on:
+   workflow_dispatch:
+     inputs:
+       target_repo:
+-        required: true
++        type: choice
++        options:
++          - my-org/docs
++          - my-org/app
++        required: true
 
-```yaml
-name: Approved Cross Repo Sync
-on:
-  workflow_dispatch:
-    inputs:
-      target_repo:
-        type: choice
-        options:
-          - my-org/docs
-          - my-org/app
-        required: true
-
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: Clone approved repo
-        env:
-          TARGET_REPO: ${{ inputs.target_repo }}
-        run: |
-          case "$TARGET_REPO" in
-            my-org/docs|my-org/app) ;;
-            *) echo "Repo not allowlisted"; exit 1 ;;
-          esac
-          git clone https://github.com/$TARGET_REPO target
-      - name: Sync read-only data
-        run: rsync -a src/ target/
+ jobs:
+   sync:
+     runs-on: ubuntu-latest
++    permissions:
++      contents: read
+     steps:
+       - uses: actions/checkout@v4
+       - name: Clone approved repo
++        env:
++          TARGET_REPO: ${{ inputs.target_repo }}
+         run: |
+-          git clone https://github.com/${{ inputs.target_repo }} target
+-      - name: Push changes
+-        run: |
+-          cd target
+-          git commit --allow-empty -m "sync"
+-          git push
++          case "$TARGET_REPO" in
++            my-org/docs|my-org/app) ;;
++            *) echo "Repo not allowlisted"; exit 1 ;;
++          esac
++          git clone https://github.com/$TARGET_REPO target
++      - name: Sync read-only data
++        run: rsync -a src/ target/
 ```
 
 ## Impact

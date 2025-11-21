@@ -44,19 +44,22 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Deploy with Secret
-on: [push]
-jobs:
-  deploy:
-    runs-on: self-hosted
-    steps:
-      - name: Deploy
-        env:
-          API_KEY: ${{ secrets.API_KEY }}  # Secret in env, not command
-        run: |
-          curl -H "Authorization: Bearer $API_KEY" https://api.example.com
-          # Secret not visible in process list
+```diff
+ name: Deploy with Secret
+ on: [push]
+ jobs:
+   deploy:
+     runs-on: self-hosted
+     steps:
+-      - run: |
+-          curl -H "Authorization: Bearer ${{ secrets.API_KEY }}" https://api.example.com
+-          # Secret visible in process list
++      - name: Deploy
++        env:
++          API_KEY: ${{ secrets.API_KEY }}  # Secret in env, not command
++        run: |
++          curl -H "Authorization: Bearer $API_KEY" https://api.example.com
++          # Secret not visible in process list
 ```
 
 ## Impact

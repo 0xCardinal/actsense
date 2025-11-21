@@ -50,36 +50,38 @@ jobs:
 
 ### Secure Version
 
-```yaml
-name: Build With Integrity Checks
-on: [push]
-jobs:
-  verify-source:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Calculate source checksum
-        run: find src -type f -exec sha256sum {} \; > source.checksums
-      - uses: actions/upload-artifact@v4
-        with:
-          name: source-checksums
-          path: source.checksums
-  build:
-    needs: verify-source
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify source integrity
-        run: |
-          find src -type f -exec sha256sum {} \; > build.checksums
-          diff source.checksums build.checksums || exit 1
-      - run: npm run build
-      - name: Verify build outputs
-        run: sha256sum dist/* > dist.checksums
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
+```diff
+ name: Build With Integrity Checks
+ on: [push]
+ jobs:
++  verify-source:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - name: Calculate source checksum
++        run: find src -type f -exec sha256sum {} \; > source.checksums
++      - uses: actions/upload-artifact@v4
++        with:
++          name: source-checksums
++          path: source.checksums
+   build:
++    needs: verify-source
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+-      - uses: untrusted-action/build@v1  # Could tamper with files
++      - name: Verify source integrity
++        run: |
++          find src -type f -exec sha256sum {} \; > build.checksums
++          diff source.checksums build.checksums || exit 1
+       - run: npm run build
+-      - uses: actions/upload-artifact@v4
++      - name: Verify build outputs
++        run: sha256sum dist/* > dist.checksums
++      - uses: actions/upload-artifact@v4
+         with:
+           name: dist
+           path: dist/
 ```
 
 ## Impact
