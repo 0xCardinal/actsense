@@ -7,7 +7,7 @@ Workflows that auto-approve or auto-merge pull requests undermine GitHub branch 
 ## Vulnerable Instance
 
 - Workflow triggers on `pull_request` or `pull_request_target`.
-- Uses an action (e.g., `peter-evans/enable-pull-request-merge`) or CLI command (`gh pr merge --auto`) that approves/merges PRs automatically.
+- Uses an action (e.g., `peter-evans/enable-pull-request-merge`) or CLI command (`gh pr merge --auto`) that approves/merges PRs automatically. [^gh_auto_merge]
 - Runs with default `GITHUB_TOKEN` write permissions, so the auto-merge succeeds even when branch protection expects reviewers.
 
 ```yaml
@@ -46,6 +46,10 @@ jobs:
 
 ### Secure Version
 
+- Human reviewers stay in the loop and branch protection settings enforce approvals.
+- Workflow permissions default to read-only except where explicitly required.
+- Notification step alerts reviewers instead of merging automatically. [^gh_branch_protection]
+
 ```yaml
 name: Lint & Gate
 on:
@@ -70,6 +74,19 @@ jobs:
         run: echo "All checks passed—waiting for human approval."
 ```
 
+## Impact
+
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Auto-merge helpers are common in CI templates, especially for dependency updates. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Bypassing branch protection enables unreviewed code (or attacker payloads) to land on protected branches. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised main/default branches impact every downstream deployment, release, or package built from them. |
+
 ## References
 
+- GitHub Docs, “Managing a branch protection rule,” https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/managing-a-branch-protection-rule [^gh_branch_protection]
+- GitHub Docs, “Automatically merging a pull request,” https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request [^gh_auto_merge]
+
 [^gh_branch_protection]: GitHub Docs, “Managing a branch protection rule,” https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/managing-a-branch-protection-rule
+
+[^gh_auto_merge]: GitHub Docs, “Automatically merging a pull request,” https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request
