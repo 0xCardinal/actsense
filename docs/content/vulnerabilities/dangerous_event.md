@@ -1,82 +1,87 @@
 # Dangerous Event
 
-## Vulnerability Description
+## Description
 
+`workflow_run` triggers execute whenever another workflow finishes—meaning any compromised workflow can automatically launch the dependent job with its token and permissions. Without strict filtering, attackers can escalate privileges, trigger cascading deployments, or farm artifacts from trusted jobs. GitHub recommends using `workflow_call` for reusable logic and tightening filters when `workflow_run` is unavoidable. [^gh_workflow_run]
 
-Workflow uses workflow_run event, which can create security risks:
+## Vulnerable Instance
 
-- Creates dependency chains between workflows
+- Workflow listens to `workflow_run` for any workflow in the repository.
+- No filtering on branches or workflow names.
+- Dependent job runs deployments or publishes packages with elevated permissions.
 
-- Can be triggered by other workflows, including potentially compromised ones
-
-- May run with elevated permissions if the triggering workflow has them
-
-- Can create cascading failures or security issues
-
-- Makes workflow dependencies and execution flow harder to understand
-
-
-Security concerns:
-
-- If a triggering workflow is compromised, it can trigger this workflow
-
-- Workflow chains can be used to bypass security controls
-
-- Difficult to audit and understand the full execution path
-
-- Can lead to unexpected behavior and security vulnerabilities
-
-
-## Recommendation
-
-
-Secure workflow_run usage or consider alternatives:
-
-
-1. Review if workflow_run is necessary:
-
-- Can the workflow be triggered directly instead?
-
-- Can you use workflow_call for reusable workflows?
-
-
-2. If you must use workflow_run, implement security controls:
-
-- Validate the triggering workflow name
-
-- Check the triggering workflows branch
-
-- Use minimal permissions
-
-- Validate all inputs and artifacts
-
-
-3. Example secure pattern:
-
+```yaml
+name: Auto Deploy
 on:
-
-workflow_run:
-
-workflows: [\Specific Workflow Name\]  # Only specific workflows
-
-types: [completed]
-
-branches: [main]  # Only from specific branches
-
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/deploy.sh
+```
 
-deploy:
+If the upstream `CI` workflow is compromised, it can finish with `completed` and automatically trigger this deployment job.
 
-if: github.event.workflow_run.conclusion == success
+## Mitigation Strategies
 
-permissions:
+1. **Prefer `workflow_call`**  
+   Convert reusable logic to callable workflows requiring explicit invocation.
+2. **Strict filters**  
+   Restrict `workflows`, `branches`, and require `github.event.workflow_run.conclusion == 'success'`.
+3. **Limit permissions**  
+   Set `permissions` per job to the minimum needed; avoid inheriting upstream scopes.
+4. **Validate upstream artifacts**  
+   Verify checksums or signatures before consuming artifacts produced by the triggering workflow.
+5. **Audit chains**  
+   Document which workflows can trigger others and review them periodically.
 
-contents: read  # Minimal permissions
+### Secure Version
 
+- Only specific workflows/branches can trigger it.
+- Job checks the upstream conclusion and metadata before running.
+- Permissions reduced to read unless deployment step needs more. [^gh_workflow_run]
 
-4. Consider using workflow_call for reusable workflows
+```yaml
+name: Auto Deploy (Safe)
+on:
+  workflow_run:
+    workflows: ["Release Build"]
+    branches: [main]
+    types: [completed]
+jobs:
+  deploy:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    permissions:
+      contents: read
+      deployments: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify artifact signature
+        run: ./scripts/verify.sh "${{ github.event.workflow_run.id }}"
+      - name: Deploy
+        run: ./scripts/deploy.sh
+```
 
-5. Document workflow dependencies and execution flow
+## Impact
 
-6. Regularly audit workflow chains for security issues
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Teams often chain workflows for releases without adding filters. |
+| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Compromised upstream jobs can force deployments or exfiltrate secrets. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any downstream environment or release pipeline triggered by the workflow is affected. |
 
+## References
+
+- GitHub Docs, “Events that trigger workflows: workflow_run,” https://docs.github.com/actions/using-workflows/events-that-trigger-workflows#workflow_run [^gh_workflow_run]
+- GitHub Docs, “Reusing workflows,” https://docs.github.com/actions/using-workflows/reusing-workflows
+
+---
+
+[^gh_workflow_run]: GitHub Docs, “Events that trigger workflows: workflow_run,” https://docs.github.com/actions/using-workflows/events-that-trigger-workflows#workflow_run
