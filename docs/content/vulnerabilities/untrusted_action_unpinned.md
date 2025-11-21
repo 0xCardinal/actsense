@@ -1,67 +1,75 @@
 # Untrusted Action Unpinned
 
-## Vulnerability Description
+## Description
 
+Untrusted third-party actions that are not pinned to a specific version create critical security risks: the action can be updated by the maintainer at any time, malicious code can be introduced without your knowledge, and attackers who compromise the action repository can inject malicious code that your workflow will automatically use. This is one of the most dangerous supply-chain attack vectors. [^gh_actions_security] [^gh_actions_pinning]
 
-Untrusted third-party action {action_ref} from owner {owner} is not pinned to a specific version.
-This creates critical security risks:
+## Vulnerable Instance
 
-- The action can be updated by the maintainer at any time
+- Workflow uses an untrusted third-party action without version pinning.
+- Action can be updated to malicious code without your knowledge.
+- Workflow will automatically use the compromised version.
 
-- Malicious code can be introduced without your knowledge
+```yaml
+name: Build
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: untrusted-org/some-action@main  # Unpinned, untrusted
+      - run: npm test
+```
 
-- The action runs with your workflows permissions
+## Mitigation Strategies
 
-- Attackers who compromise the action repository can inject malicious code
+1. **Review the action source code**  
+   Visit the action's GitHub repository and review the code for security issues. Check for recent security advisories and maintainer activity.
 
-- Your workflow will automatically use the compromised version
+2. **Pin to a specific commit SHA**  
+   Find a specific release or commit, copy the full 40-character commit SHA, and update the workflow to use it: `untrusted-org/some-action@8f4b7f84884ec3e152e95e913f196d7a537752ca`.
 
+3. **Consider forking and maintaining your own copy**  
+   Fork the action to your organization, review and audit the code, and use your forked version: `your-org/some-action@<sha>`.
 
-Security risks:
+4. **Regularly review and update pinned actions**  
+   Periodically review pinned actions for security updates. Use automated tools to suggest updates, but always review before merging.
 
-- Supply chain attacks through compromised actions
+5. **Monitor for security advisories**  
+   Subscribe to security advisories for actions you use. Monitor the action repository for security issues.
 
-- Secret exfiltration by malicious action code
+6. **Use minimal permissions**  
+   Use minimal permissions for workflows that use untrusted actions. Don't grant write permissions unless absolutely necessary.
 
-- Unauthorized access to your repository and resources
+### Secure Version
 
-- Data breaches and system compromise
+```yaml
+name: Build
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # Minimal permissions
+    steps:
+      - uses: untrusted-org/some-action@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Pinned SHA
+      - run: npm test
+```
 
+## Impact
 
-## Recommendation
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Unpinned untrusted actions are common, and repository compromises can redirect to malicious code. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised actions can exfiltrate secrets, inject backdoors, or compromise entire CI/CD pipelines with minimal detection. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised actions can affect all workflows that use them, potentially compromising entire repositories and their secrets. |
 
+## References
 
-Pin the action to a specific commit SHA and review the source code:
+- GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions [^gh_actions_security]
+- GitHub Docs, "Security hardening for GitHub Actions - Using actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-actions [^gh_actions_pinning]
 
+---
 
-1. Review the action source code:
-
-- Visit: https://github.com/{action_ref.split(@)[0]}
-
-- Review the code for security issues
-
-- Check for recent security advisories
-
-
-2. Pin to a specific commit SHA:
-
-- Find a specific release or commit
-
-- Copy the full 40-character commit SHA
-
-- Update: {action_ref.split(@)[0]}@<full-40-char-sha>
-
-
-3. Consider forking and maintaining your own copy:
-
-- Fork the action to your organization
-
-- Review and audit the code
-
-- Use your forked version: your-org/{action_ref.split(@)[0].split(/, 1)[1]}@<sha>
-
-
-4. Regularly review and update pinned actions
-
-5. Monitor for security advisories about the action
-
+[^gh_actions_security]: GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions
+[^gh_actions_pinning]: GitHub Docs, "Security hardening for GitHub Actions - Using actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-actions

@@ -1,63 +1,69 @@
 # Unpinned Npm Packages
 
-## Vulnerability Description
+## Description
 
+Composite actions that install NPM packages without version locking create security and reproducibility risks: package versions can change between runs, newer versions may introduce security vulnerabilities, and builds are not reproducible. This makes it difficult to track and fix security issues and enables supply-chain attacks through compromised packages. [^gh_actions_security]
 
-Composite action installs NPM packages without version locking.
-This creates security risks:
+## Vulnerable Instance
 
-- Package versions can change between runs
+- Composite action installs NPM packages without version locking (e.g., `npm install` without `package-lock.json`).
+- Package versions can change between runs, introducing vulnerabilities.
+- Builds are not reproducible and difficult to audit.
 
-- Newer versions may introduce security vulnerabilities
+```yaml
+# action.yml
+name: 'My Action'
+runs:
+  using: 'composite'
+  steps:
+    - run: npm install  # Unpinned - versions can change
+      shell: bash
+```
 
-- Builds are not reproducible
+## Mitigation Strategies
 
-- Difficult to track and fix security issues
+1. **Use package-lock.json**  
+   Commit `package-lock.json` to the repository and use `npm ci` instead of `npm install`. This ensures exact versions are installed.
 
+2. **Specify exact versions in package.json**  
+   Use exact versions (e.g., `"package": "1.2.3"`) instead of ranges (e.g., `"package": "^1.2.3"`) in `package.json`.
 
-Security concerns:
+3. **Use npm ci for CI/CD**  
+   Use `npm ci` instead of `npm install` in workflows. `npm ci` uses `package-lock.json` for exact versions and fails if versions don't match.
 
-- Supply chain attacks through compromised packages
+4. **Regularly update and review**  
+   Periodically review package versions for security updates. Use automated tools like Dependabot to suggest updates.
 
-- Unintended package updates with vulnerabilities
+5. **Use security scanning tools**  
+   Scan `package-lock.json` for known vulnerabilities. Use tools like `npm audit` or Snyk to detect security issues.
 
-- Non-reproducible builds
+6. **Document dependency management**  
+   Establish team guidelines for dependency management. Require `package-lock.json` for all NPM-based actions.
 
-- Difficult to audit package versions
+### Secure Version
 
+```yaml
+# action.yml
+name: 'My Action'
+runs:
+  using: 'composite'
+  steps:
+    - run: npm ci  # Uses package-lock.json for exact versions
+      shell: bash
+```
 
-## Recommendation
+## Impact
 
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Unpinned NPM packages are common, and package updates can introduce vulnerabilities. |
+| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Compromised or vulnerable packages can introduce backdoors, exfiltrate secrets, or enable system compromise. |
+| Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Impact depends on what the action does, but can affect all workflows that use the composite action. |
 
-Lock NPM package versions:
+## References
 
+- GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions [^gh_actions_security]
 
-1. Use package-lock.json:
+---
 
-- Commit package-lock.json to the repository
-
-- Use npm ci instead of npm install
-
-- Ensures exact versions are installed
-
-
-2. Specify exact versions in package.json:
-
-\dependencies\: {{
-
-\package\: \1.2.3\  # Exact version, not ^1.2.3
-
-}}
-
-
-3. Use npm ci for CI/CD:
-
-run: npm ci  # Instead of npm install
-
-# npm ci uses package-lock.json for exact versions
-
-
-4. Regularly update and review package versions
-
-5. Use security scanning tools to check for vulnerabilities
-
+[^gh_actions_security]: GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions

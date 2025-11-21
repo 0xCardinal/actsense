@@ -1,60 +1,77 @@
 # Public Repo Self Hosted Environment
 
-## Vulnerability Description
+## Description
 
+Self-hosted runners in public repositories that access protected environments create significant security risks: public repos are accessible to anyone, so attackers can analyze workflow code, submit pull requests, or trigger workflows to potentially bypass environment protection rules and access environment secrets. Self-hosted runners on attacker-controlled infrastructure can exfiltrate secrets or perform unauthorized actions. [^gh_runners]
 
-Self-hosted runner in public repository has environment access. This creates risks because:
+## Vulnerable Instance
 
-- Environments may have protection rules that can be bypassed
+- Public repository uses self-hosted runners with environment access.
+- Environment protection rules may be bypassed through workflow manipulation.
+- Attackers can trigger workflows that access protected environments.
 
-- Environment secrets may be accessible
+```yaml
+name: Deploy with Self-Hosted
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: self-hosted  # Dangerous in public repo
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy.sh
+```
 
-- Privilege escalation through environment access
+## Mitigation Strategies
 
-- Public repos with self-hosted runners and environments are risky
+1. **Use GitHub-hosted runners for public repos**  
+   Prefer `runs-on: ubuntu-latest` (or other GitHub-hosted runners) for public repositories. GitHub-hosted runners are isolated and ephemeral.
 
+2. **Make repository private if self-hosted runners are required**  
+   If self-hosted runners are necessary, consider making the repository private to limit who can trigger workflows and access environments.
 
-Security concerns:
+3. **Restrict environment access**  
+   If self-hosted runners must be used, restrict environment access, use environment protection rules, require approvals for environment access, and use minimal environment permissions.
 
-- Potential bypass of environment protection rules
+4. **Use branch protection**  
+   Require pull request reviews and status checks before workflows can access protected environments. Prevent direct pushes to protected branches.
 
-- Unauthorized access to environment secrets
+5. **Monitor and audit**  
+   Regularly review environment access logs, monitor for suspicious workflow runs, and audit which workflows access which environments.
 
-- Privilege escalation risks
+6. **Isolate sensitive operations**  
+   Keep self-hosted runners for public repos limited to read-only operations. Use GitHub-hosted runners or private repos for deployments and secret access.
 
-- Difficult to audit and control access
+### Secure Version
 
+```yaml
+name: Deploy with GitHub Runner
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest  # GitHub-hosted for public repos
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy.sh
+```
 
-## Recommendation
+## Impact
 
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Public repos with self-hosted runners are less common but create high risk when present. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Attackers can potentially bypass environment protection and access environment secrets through compromised self-hosted runners. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised environment access can affect all systems and secrets in that environment, potentially including production infrastructure. |
 
-Restrict environment access for self-hosted runners in public repositories:
+## References
 
+- GitHub Docs, "About self-hosted runners," https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners [^gh_runners]
 
-1. Use GitHub-hosted runners:
+---
 
-runs-on: ubuntu-latest  # For public repos
-
-
-2. If self-hosted runners are necessary:
-
-- Restrict environment access
-
-- Use environment protection rules
-
-- Require approvals for environment access
-
-- Use minimal environment permissions
-
-
-3. Review environment usage:
-
-- Minimize environment access in public repos
-
-- Use environment protection rules
-
-- Document environment access requirements
-
-
-4. Consider making repository private if environments are required
-
+[^gh_runners]: GitHub Docs, "About self-hosted runners," https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners

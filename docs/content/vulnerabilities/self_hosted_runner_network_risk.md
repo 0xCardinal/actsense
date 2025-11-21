@@ -1,85 +1,74 @@
 # Self Hosted Runner Network Risk
 
-## Vulnerability Description
+## Description
 
+Self-hosted runners that download and execute code from the internet without verification create significant security risks: downloaded scripts may be malicious, there's no verification of code integrity, and attackers can inject malicious payloads that compromise the runner. Once compromised, runners can be used to access internal networks, exfiltrate secrets, or perform lateral movement attacks. Network operations from self-hosted runners should be carefully controlled and verified. [^gh_runners]
 
-Self-hosted runner performs risky network operation: {description}. This is dangerous because:
+## Vulnerable Instance
 
-- Downloads and executes code from the internet
+- Workflow downloads and executes scripts from the internet on self-hosted runners without verification.
+- No checksum verification or code review before execution.
+- Malicious code can compromise the runner and access internal resources.
 
-- No verification of downloaded code integrity
+```yaml
+name: Download and Run
+on: [push]
+jobs:
+  setup:
+    runs-on: self-hosted
+    steps:
+      - run: curl https://example.com/script.sh | bash  # Dangerous - no verification
+```
 
-- Malicious code can compromise the runner
+## Mitigation Strategies
 
-- Attackers can inject malicious payloads
+1. **Download and verify scripts first**  
+   Download scripts to files, verify checksums before execution, review script content if possible, and only then execute verified scripts.
 
-- Runner environment can be fully compromised
+2. **Use trusted sources**  
+   Only download from trusted sources, use HTTPS with certificate verification, pin to specific versions/commits, and verify checksums.
 
+3. **Store scripts in repository**  
+   Store scripts in the repository rather than downloading from the internet. This allows code review and version control.
 
-Security risks:
+4. **Use GitHub Actions**  
+   Prefer GitHub Actions instead of shell scripts downloaded from the internet. Actions are more transparent and can be pinned to specific versions.
 
-- Code injection through downloaded scripts
+5. **Implement network security controls**  
+   Use network segmentation, implement firewall rules, monitor outbound connections, and use allowlists for permitted endpoints.
 
-- Runner compromise and persistence
+6. **Use containerized execution**  
+   Run untrusted code in containers with minimal privileges. Avoid `--privileged` flag and use specific capabilities if needed.
 
-- Access to runner network and resources
+### Secure Version
 
-- Potential for lateral movement
+```yaml
+name: Download and Verify
+on: [push]
+jobs:
+  setup:
+    runs-on: self-hosted
+    steps:
+      - name: Download script
+        run: |
+          curl -o script.sh https://example.com/script.sh
+          echo "expected_sha256" | sha256sum -c script.sh
+      - name: Review and execute
+        run: bash script.sh
+```
 
+## Impact
 
-## Recommendation
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Downloading and executing scripts is common, but unverified downloads create high risk. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Malicious scripts can fully compromise self-hosted runners, providing access to internal networks and secrets. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised runners can affect all systems the runner can access, including internal networks, databases, and services. |
 
+## References
 
-Avoid downloading and executing scripts from the internet on self-hosted runners:
+- GitHub Docs, "About self-hosted runners," https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners [^gh_runners]
 
+---
 
-1. Download and verify scripts first:
-
-- Download script to file
-
-- Verify checksum before execution
-
-- Review script content if possible
-
-- Then execute verified script
-
-
-2. Use trusted sources:
-
-- Only download from trusted sources
-
-- Use HTTPS with certificate verification
-
-- Pin to specific versions/commits
-
-- Verify checksums
-
-
-3. Implement network security controls:
-
-- Use network segmentation
-
-- Implement firewall rules
-
-- Monitor outbound connections
-
-- Use allowlists for permitted endpoints
-
-
-4. Consider alternatives:
-
-- Store scripts in repository
-
-- Use GitHub Actions instead of shell scripts
-
-- Use containerized execution
-
-
-5. For Docker privileged mode:
-
-- Avoid --privileged flag
-
-- Use specific capabilities if needed
-
-- Run containers with minimal privileges
-
+[^gh_runners]: GitHub Docs, "About self-hosted runners," https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners

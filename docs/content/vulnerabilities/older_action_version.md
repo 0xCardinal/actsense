@@ -1,54 +1,71 @@
 # Older Action Version
 
-## Vulnerability Description
+## Description
 
+Workflows using older major versions of actions (v1, v2) when newer versions (v3+, v4+) are available expose themselves to known security vulnerabilities that have been patched in later releases. Newer major versions typically include security hardening, improved defaults, better error handling, and compatibility fixes. Staying on outdated versions increases attack surface and may violate security policies requiring up-to-date dependencies. [^gh_actions_security]
 
-Version {ref} (major version {current_version[0]}) may be outdated.
-Many GitHub Actions have moved to v3+ or v4+ with significant security improvements:
+## Vulnerable Instance
 
-- Security vulnerabilities patched in newer major versions
+- Workflow uses `actions/checkout@v2` when `v4` is available with security improvements.
+- Older versions may have known CVEs or security advisories.
+- Missing security patches and hardened defaults from newer releases.
 
-- Better security practices and hardened defaults
+```yaml
+name: Build with Old Action
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2  # Outdated - v4 available
+      - run: npm test
+```
 
-- Improved error handling and reliability
+## Mitigation Strategies
 
-- Enhanced features and compatibility
+1. **Check for latest releases**  
+   Visit the action repository's releases page (e.g., `https://github.com/{owner}/{repo}/releases`) and look for v3+ or v4+ versions.
 
+2. **Review changelogs**  
+   Check release notes for security fixes, patches, breaking changes between major versions, and migration guides.
 
-Using older major versions (v1, v2) increases your attack surface and may expose your workflows
-to known security vulnerabilities that have been addressed in newer major releases.
+3. **Update to latest stable version**  
+   Upgrade to the latest stable major version. For maximum security, pin to the commit SHA from that release rather than the tag.
 
+4. **Test in non-production first**  
+   Test the updated action in a development or staging environment before deploying to production workflows.
 
-## Recommendation
+5. **Automate version updates**  
+   Use Dependabot or Renovate to automatically suggest action version updates, but require review before merging.
 
+6. **Audit all workflows**  
+   Periodically scan all workflows for outdated action versions and create a migration plan for critical actions.
 
-Check for and upgrade to newer versions:
+### Secure Version
 
+```yaml
+name: Build with Latest Action
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Latest v4 SHA
+      - run: npm test
+```
 
-1. Check the action repository for latest releases:
+## Impact
 
-- Visit: https://github.com/{action_ref.split(@)[0]}/releases
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many workflows still use older action versions, and known vulnerabilities in those versions are publicly documented. |
+| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Older versions may have unpatched CVEs that allow secret leakage, code injection, or privilege escalation. |
+| Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Impact depends on the specific vulnerability, but can affect all workflows using the outdated action. |
 
-- Look for v3+ or v4+ versions
+## References
 
+- GitHub Docs, "Security hardening for GitHub Actions - Using actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-actions [^gh_actions_security]
 
-2. Review the changelog for:
+---
 
-- Security fixes and patches
-
-- Breaking changes between major versions
-
-- Migration guides if available
-
-
-3. Update your workflow to the latest stable version:
-
-Change: {action_ref}
-
-To: {action_ref.split(@)[0]}@v3 (or latest version)
-
-
-4. For maximum security, pin to the commit SHA from the latest release
-
-5. Test the updated action in a non-production environment first
-
+[^gh_actions_security]: GitHub Docs, "Security hardening for GitHub Actions - Using actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-actions

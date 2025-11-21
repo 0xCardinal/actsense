@@ -1,59 +1,75 @@
 # Self Hosted Runner Pr Exposure
 
-## Vulnerability Description
+## Description
 
+Self-hosted runners exposed to pull requests in public repositories create extreme security risks: attackers from forks can create PRs that trigger workflows on your self-hosted runners, malicious code from forks can execute on your infrastructure, and attackers can access your network, secrets, and internal resources. This is one of the most dangerous self-hosted runner configurations and should never be used. [^gh_runners]
 
-Self-hosted runner in job {job_name} is exposed to pull requests in a public repository. This is CRITICAL because:
+## Vulnerable Instance
 
-- Attackers from forks can create PRs that trigger workflows on your self-hosted runners
+- Public repository workflow triggers on `pull_request` events and uses self-hosted runners.
+- Attackers can fork the repository, create a PR with malicious workflow code, and trigger execution on your infrastructure.
+- Malicious code runs with access to your network and secrets.
 
-- Malicious code from forks can execute on your infrastructure
+```yaml
+name: PR Build
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  build:
+    runs-on: self-hosted  # CRITICAL: Never do this in public repos
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+```
 
-- Attackers can access your network, secrets, and internal resources
+## Mitigation Strategies
 
-- This is one of the most dangerous self-hosted runner configurations
+1. **Use GitHub-hosted runners for public repositories**  
+   Always use `runs-on: ubuntu-latest` (or other GitHub-hosted runners) for pull request workflows in public repositories.
 
+2. **Restrict self-hosted runners to trusted events**  
+   If self-hosted runners are necessary, restrict to trusted events only (push, workflow_dispatch). Never allow pull_request or pull_request_target triggers.
 
-Attack scenario:
+3. **Use runner groups with restricted access**  
+   Create runner groups that only allow specific workflows or events. Prevent pull request workflows from using self-hosted runners.
 
-1. Attacker forks your public repository
+4. **Make repository private if needed**  
+   If self-hosted runners are required for PR workflows, make the repository private to limit who can create pull requests.
 
-2. Attacker creates a PR with malicious workflow code
+5. **Use separate workflows**  
+   Use GitHub-hosted runners for PR workflows and self-hosted runners only for trusted push events or manual triggers.
 
-3. Workflow triggers on your self-hosted runner
+6. **Implement network isolation**  
+   If you must use self-hosted runners, isolate them in separate networks with minimal access to internal resources.
 
-4. Malicious code executes on your infrastructure
+### Secure Version
 
-5. Attacker gains access to your network and secrets
+```yaml
+name: PR Build Safe
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest  # GitHub-hosted for PRs
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+```
 
+## Impact
 
-## Recommendation
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Public repos with self-hosted runners on PRs are less common but create extreme risk when present. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Attackers can trigger malicious code execution on your infrastructure by creating pull requests, enabling full system compromise. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised self-hosted runners can affect all systems the runner can access, including internal networks, databases, and services. |
 
+## References
 
-NEVER expose self-hosted runners to PRs in public repositories:
+- GitHub Docs, "About self-hosted runners," https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners [^gh_runners]
 
+---
 
-1. Use GitHub-hosted runners for public repositories:
-
-runs-on: ubuntu-latest  # For public repos
-
-
-2. If you must use self-hosted runners:
-
-- Restrict to trusted events only (push, workflow_dispatch)
-
-- Never allow pull_request or pull_request_target triggers
-
-- Use runner groups with restricted access
-
-- Implement network isolation
-
-
-3. For PR workflows in public repos:
-
-- Always use GitHub-hosted runners
-
-- Never use self-hosted runners
-
-- Consider making the repository private if self-hosted runners are required
-
+[^gh_runners]: GitHub Docs, "About self-hosted runners," https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners

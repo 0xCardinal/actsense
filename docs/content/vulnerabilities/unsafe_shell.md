@@ -1,68 +1,79 @@
 # Unsafe Shell
 
-## Vulnerability Description
+## Description
 
+Bash scripts that run without the `-e` flag (exit on error) create security and reliability risks: scripts continue executing even if a command fails, errors may be silently ignored, and security checks or validations may be bypassed. This can lead to unexpected behavior, invalid states, and security vulnerabilities going undetected. [^gh_actions_security]
 
-Bash script runs without the -e flag, which means:
+## Vulnerable Instance
 
-- Script continues executing even if a command fails
+- Bash script runs without `set -e`, allowing execution to continue after failures.
+- Failed security checks may not be detected.
+- Script may continue with invalid state.
 
-- Errors may be silently ignored
+```yaml
+name: Build
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run script
+        run: |
+          # No set -e - errors ignored
+          npm install
+          npm test  # May not run if install fails
+          npm build
+```
 
-- Unexpected behavior may occur if commands fail
+## Mitigation Strategies
 
-- Security checks or validations may be bypassed
+1. **Add -e flag to bash commands**  
+   Use `set -e` at the start of scripts to exit immediately if any command fails.
 
+2. **Use stricter error handling**  
+   Use `set -euo pipefail` for stricter error handling: exit on error, undefined variables, and pipe failures.
 
-Security concerns:
+3. **Specify in shell**  
+   Use `shell: bash -e {0}` to enable exit-on-error for the entire step.
 
-- Failed security checks may not be detected
+4. **Review all bash scripts**  
+   Audit all workflows for bash scripts without error handling. Add `set -e` or `set -euo pipefail` to all scripts.
 
-- Script may continue with invalid state
+5. **Test error handling**  
+   Test error handling to ensure failures are caught. Verify that scripts fail appropriately when commands fail.
 
-- Errors in critical operations may go unnoticed
+6. **Use proper error messages**  
+   When using `set -e`, ensure error messages are clear and actionable. Consider using `trap` for cleanup on errors.
 
+### Secure Version
 
-## Recommendation
+```yaml
+name: Build
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run script
+        run: |
+          set -euo pipefail  # Exit on error, undefined vars, pipe failures
+          npm install
+          npm test
+          npm build
+```
 
+## Impact
 
-Add -e flag to bash commands for better error handling:
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Bash scripts without error handling are common, especially in legacy workflows. |
+| Risk | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Failed security checks or validations may go undetected, potentially allowing vulnerabilities to persist. |
+| Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Impact depends on what the script does, but can affect build processes, deployments, and security checks. |
 
+## References
 
-1. Update the step:
+- GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions [^gh_actions_security]
 
-- name: Run script
+---
 
-run: |
-
-set -e  # Exit on error
-
-# Your commands here
-
-
-2. Or use set -euo pipefail for stricter error handling:
-
-- name: Run script
-
-run: |
-
-set -euo pipefail  # Exit on error, undefined vars, pipe failures
-
-# Your commands here
-
-
-3. Or specify in shell:
-
-- name: Run script
-
-shell: bash -e {0}
-
-run: |
-
-# Your commands here
-
-
-4. Review all bash scripts in your workflows
-
-5. Test error handling to ensure failures are caught
-
+[^gh_actions_security]: GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions

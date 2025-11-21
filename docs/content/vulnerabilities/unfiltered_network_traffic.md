@@ -1,76 +1,77 @@
 # Unfiltered Network Traffic
 
-## Vulnerability Description
+## Description
 
+Workflows that perform network operations (curl, wget, ssh, etc.) without filtering or monitoring create security risks: network traffic can be used to exfiltrate secrets and sensitive data, attackers can use network operations to send credentials to external servers, and unfiltered outbound connections may violate security policies. Compromised workflows can exfiltrate secrets via network requests, and network operations can be used to establish backdoors or maintain persistent access. [^gh_actions_security]
 
-Job {job_name} performs network operations (curl, wget, nc, ssh, etc.) without filtering.
-This creates security risks:
+## Vulnerable Instance
 
-- Network traffic can be used to exfiltrate secrets and sensitive data
+- Workflow performs network operations (curl, wget, ssh) without restrictions or monitoring.
+- No filtering of outbound connections or allowed destinations.
+- Compromised workflows can exfiltrate secrets via network requests.
 
-- Attackers can use network operations to send credentials to external servers
+```yaml
+name: Build with Network Access
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl https://example.com/data
+          wget https://example.com/file
+          # No filtering - can exfiltrate secrets
+```
 
-- Unfiltered outbound connections may violate security policies
+## Mitigation Strategies
 
-- Network operations can be used to establish backdoors
+1. **Restrict outbound network access**  
+   Use network policies to limit allowed destinations, block access to external IPs except required services, and use allowlists for permitted endpoints.
 
-- Difficult to detect and prevent credential exfiltration
+2. **Monitor network traffic**  
+   Log all outbound connections, set up alerts for suspicious network activity, and review network logs regularly.
 
+3. **Use network segmentation**  
+   Isolate workflows in separate network segments, use firewalls to control traffic flow, and implement network access controls.
 
-Security concerns:
+4. **Validate network operations**  
+   Review all curl/wget commands, ensure URLs are from trusted sources, and avoid using user input in network commands.
 
-- Compromised workflows can exfiltrate secrets via network requests
+5. **Use GitHub-hosted runners with network restrictions**  
+   GitHub-hosted runners have network restrictions, but be aware of what outbound connections are allowed.
 
-- Unfiltered network access increases attack surface
+6. **Implement egress filtering for self-hosted runners**  
+   For self-hosted runners, implement egress filtering to block unauthorized outbound connections. Use allowlists for permitted endpoints.
 
-- Network operations may bypass security controls
+### Secure Version
 
-- Difficult to audit and monitor network traffic
+```yaml
+name: Build with Filtered Network
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download from trusted source
+        run: |
+          # Only allowlisted endpoints
+          curl -o data.json https://trusted-cdn.example.com/data
+          # Verify checksum
+          echo "expected_sha256" | sha256sum -c data.json
+```
 
+## Impact
 
-## Recommendation
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Network operations are common in workflows, but unfiltered access creates high risk for secret exfiltration. |
+| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Compromised workflows can exfiltrate secrets via network requests, enabling attackers to access systems and maintain persistent access. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Exfiltrated secrets can affect all systems the secrets authorize, potentially including production infrastructure and services. |
 
+## References
 
-Implement network segmentation and traffic filtering:
+- GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions [^gh_actions_security]
 
+---
 
-1. Restrict outbound network access:
-
-- Use network policies to limit allowed destinations
-
-- Block access to external IPs except required services
-
-- Use allowlists for permitted endpoints
-
-
-2. Monitor network traffic:
-
-- Log all outbound connections
-
-- Set up alerts for suspicious network activity
-
-- Review network logs regularly
-
-
-3. Use network segmentation:
-
-- Isolate workflows in separate network segments
-
-- Use firewalls to control traffic flow
-
-- Implement network access controls
-
-
-4. Validate network operations:
-
-- Review all curl/wget commands
-
-- Ensure URLs are from trusted sources
-
-- Avoid using user input in network commands
-
-
-5. Consider using GitHub-hosted runners with network restrictions
-
-6. Implement egress filtering for self-hosted runners
-
+[^gh_actions_security]: GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions

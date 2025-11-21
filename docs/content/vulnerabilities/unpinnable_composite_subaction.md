@@ -1,63 +1,71 @@
 # Unpinnable Composite Subaction
 
-## Vulnerability Description
+## Description
 
+Composite actions that use sub-actions with tags or branches instead of commit SHAs create transitive dependency risks: tags and branches can be moved or updated, sub-actions can be updated with malicious code, and security vulnerabilities can be introduced through sub-actions. This makes builds non-reproducible and difficult to audit. Supply-chain attacks can compromise composite actions through their unpinned sub-actions. [^gh_actions_security]
 
-Composite action uses sub-action {uses} with reference {ref} which is not a commit SHA.
-This creates transitive dependency risks:
+## Vulnerable Instance
 
-- Tags and branches can be moved or updated
+- Composite action uses a sub-action with a tag or branch reference instead of a commit SHA.
+- Sub-action can be updated with malicious code without the composite action changing.
+- Builds are not reproducible and difficult to audit.
 
-- Sub-actions can be updated with malicious code
+```yaml
+# action.yml
+name: 'My Composite Action'
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/checkout@v4  # Unpinned - can be moved
+      with:
+        path: src
+```
 
-- Security vulnerabilities can be introduced through sub-actions
+## Mitigation Strategies
 
-- Builds are not reproducible
+1. **Pin all sub-actions to full 40-character commit SHA**  
+   Find the commit SHA for the sub-action by visiting the repository's releases page or checking the specific tag/branch. Copy the full 40-character commit SHA.
 
+2. **Update the composite action**  
+   Replace tag/branch references with full commit SHAs: `actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca` instead of `actions/checkout@v4`.
 
-Security concerns:
+3. **Verify the SHA is correct**  
+   Ensure the SHA is exactly 40 hexadecimal characters. Verify at `https://github.com/{owner}/{repo}/commit/{sha}`.
 
-- Supply chain attacks through compromised sub-actions
+4. **Review all sub-actions**  
+   Audit all sub-actions in composite actions. Document which sub-actions are used and why.
 
-- Transitive dependency vulnerabilities
+5. **Regularly update and audit**  
+   Periodically review and update sub-action SHAs. Use automated tools to detect outdated or vulnerable sub-actions.
 
-- Non-reproducible builds
+6. **Use dependency scanning**  
+   Use tools like Dependabot to monitor sub-actions for security updates, but always pin to specific SHAs.
 
-- Difficult to audit and track sub-action versions
+### Secure Version
 
+```yaml
+# action.yml
+name: 'My Composite Action'
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Pinned SHA
+      with:
+        path: src
+```
 
-## Recommendation
+## Impact
 
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many composite actions use unpinned sub-actions, creating transitive dependency risks. |
+| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Compromised sub-actions can inject malicious code into composite actions, affecting all workflows that use them. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised composite actions can affect all workflows that use them, potentially compromising entire CI/CD pipelines. |
 
-Pin all sub-actions to full 40-character commit SHA:
+## References
 
+- GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions [^gh_actions_security]
 
-1. Find the commit SHA for the sub-action:
+---
 
-- Visit: https://github.com/{uses.split(@)[0]}/releases
-
-- Or check the repository for the specific tag/branch
-
-- Copy the full 40-character commit SHA
-
-
-2. Update the composite action:
-
-steps:
-
-- uses: {uses.split(@)[0]}@<full-40-char-sha>
-
-# Instead of: {uses}
-
-
-3. Verify the SHA is correct:
-
-- Should be exactly 40 hexadecimal characters
-
-- Verify at: https://github.com/{uses.split(@)[0]}/commit/<sha>
-
-
-4. Review all sub-actions in composite actions
-
-5. Regularly update and audit sub-action SHAs
-
+[^gh_actions_security]: GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions

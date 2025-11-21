@@ -1,91 +1,92 @@
 # Unvalidated Workflow Input
 
-## Vulnerability Description
+## Description
 
+Workflows with `workflow_dispatch` inputs that are optional or used in shell commands without validation create security risks: optional inputs may be used without proper validation, inputs can be used in shell commands or file operations enabling injection attacks, and missing validation can lead to path traversal or code injection. Unvalidated inputs are a common vector for command injection and other security vulnerabilities. [^gh_actions_security]
 
-Workflow_dispatch input {input_name} is optional and may be used in shell commands without validation.
-This creates security risks:
+## Vulnerable Instance
 
-- Optional inputs may be used without proper validation
+- Workflow has `workflow_dispatch` inputs that are optional or used without validation.
+- Inputs are used in shell commands or file operations.
+- Attacker can inject malicious code through inputs.
 
-- Inputs can be used in shell commands or file operations
-
-- Missing validation can lead to injection attacks
-
-- Optional inputs may have unexpected default behavior
-
-
-Security concerns:
-
-- Code injection if input is used in shell commands
-
-- Path traversal if input is used in file operations
-
-- Unexpected behavior with unvalidated inputs
-
-- Potential for security vulnerabilities
-
-
-## Recommendation
-
-
-Validate workflow_dispatch inputs:
-
-
-1. Make inputs required when necessary:
-
+```yaml
+name: Deploy
 on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: string
+        required: false  # Optional, unvalidated
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: |
+          deploy.sh ${{ inputs.environment }}  # Dangerous - unvalidated
+```
 
-workflow_dispatch:
+## Mitigation Strategies
 
-inputs:
+1. **Make inputs required when necessary**  
+   Set `required: true` for inputs that must be provided. This ensures inputs are always present and can be validated.
 
-{input_name}:
+2. **Validate inputs before use**  
+   Validate inputs against allowlists, check for required values, and reject inputs that don't match expected patterns.
 
-type: string
+3. **Use input types with validation**  
+   Use `choice` type when possible to restrict inputs to specific options. This prevents arbitrary input values.
 
-required: true  # Make required if needed
+4. **Sanitize inputs used in shell commands**  
+   Sanitize all inputs before using them in shell commands. Escape special characters and use parameterized commands.
 
+5. **Review all workflow_dispatch inputs**  
+   Audit all workflows for `workflow_dispatch` inputs. Ensure all inputs are validated before use.
 
-2. Validate inputs before use:
+6. **Use environment variables**  
+   Pass inputs through environment variables instead of direct interpolation in commands. This reduces injection risk.
 
-- name: Validate input
+### Secure Version
 
-run: |
-
-if [[ -z \${{{{ inputs.{input_name} }}}}\ ]]; then
-
-echo \Input is required\
-
-exit 1
-
-fi
-
-if [[ ! \${{{{ inputs.{input_name} }}}}\ =~ ^[a-zA-Z0-9 ]+$ ]]; then
-
-echo \Invalid input format\
-
-exit 1
-
-fi
-
-
-3. Use input types with validation:
-
+```yaml
+name: Deploy
 on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice  # Restricted choices
+        options: [production, staging]
+        required: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate input
+        run: |
+          if [[ "${{ inputs.environment }}" != "production" && "${{ inputs.environment }}" != "staging" ]]; then
+            echo "Invalid environment"
+            exit 1
+          fi
+      - name: Deploy
+        env:
+          ENV: ${{ inputs.environment }}
+        run: |
+          deploy.sh "$ENV"  # Validated, quoted
+```
 
-workflow_dispatch:
+## Impact
 
-inputs:
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Unvalidated workflow inputs are common, especially in deployment workflows, and create high risk when used in commands. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Unvalidated inputs can enable command injection, path traversal, or other attacks that compromise the workflow and its permissions. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised workflows can affect all systems the workflow can access, including repositories, secrets, and deployment targets. |
 
-{input_name}:
+## References
 
-type: choice  # Use choice type when possible
+- GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions [^gh_actions_security]
 
-options: [option1, option2]
+---
 
-
-4. Sanitize inputs used in shell commands
-
-5. Review all workflow_dispatch inputs for validation
-
+[^gh_actions_security]: GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions
