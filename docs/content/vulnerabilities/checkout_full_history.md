@@ -1,60 +1,56 @@
 # Checkout Full History
 
-## Vulnerability Description
+## Description
 
+Setting `actions/checkout` to `fetch-depth: 0` clones the entire repository history into the runner. That full history can expose secrets that were removed later, sensitive files that should remain internal, or massive diffs an attacker could mine. It also slows CI and increases the amount of data a compromised workflow can exfiltrate. [^checkout_docs]
 
-Checkout fetches the full git history (fetch-depth: 0). This may expose:
+## Vulnerable Instance
 
-- Sensitive information from old commits
+- `on: pull_request` workflow clones the entire repo for every run.
+- Secrets or sensitive files exist in historical commits that would otherwise stay hidden.
+- Runner writes logs/artifacts that might include those historical files.
 
-- Hardcoded secrets that were removed in later commits
+```yaml
+name: Full History Build
+on: [pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Fetch the entire repository history
+      - run: npm test
+```
 
-- Historical code that may contain vulnerabilities
+## Mitigation Strategies
 
-- Large repository size, slowing down workflows
+1. **Use shallow clones by default**  
+   Set `fetch-depth: 1` so only the latest commit is pulled, limiting exposure and speeding up builds.
+2. **Fetch history only when needed**  
+   If a job needs older commits (e.g., for `git describe`), run a targeted `git fetch --depth=<n>` step rather than disabling depth globally.
+3. **Document exceptions**  
+   When full history is mandatory, document the justification in the workflow and ensure secrets have been scrubbed from the repo.
+4. **Limit artifact contents**  
+   Combine shallow clones with scoped artifact uploads so historic files never leave the runner.
+5. **Monitor for depth overrides**  
+   Periodically scan workflows for `fetch-depth: 0` and review whether the setting is still required.
 
+### Secure Version
 
-While not always a security issue, fetching full history:
+```yaml
+name: Shallow Checkout Build
+on: [pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1   # Only the latest commit
+      - run: npm test
+```
 
-- Increases the attack surface
+## References
 
-- May expose information that should remain in history
-
-- Slows down workflow execution
-
-
-## Recommendation
-
-
-Use fetch-depth: 1 to only fetch the latest commit:
-
-
-1. Update the checkout step:
-
-- uses: actions/checkout@v4
-
-with:
-
-fetch-depth: 1  # Only fetch latest commit
-
-
-2. If you need history for specific operations:
-
-- Use fetch-depth: 1 by default
-
-- Fetch additional history only when needed
-
-- Consider using shallow clones with specific depth
-
-
-3. If full history is required:
-
-- Document why its necessary
-
-- Ensure no sensitive data is in history
-
-- Consider cleaning history if secrets were committed
-
-
-4. Review if full history is truly needed for the workflow
-
+[^checkout_docs]: GitHub Docs, “actions/checkout – inputs,” https://docs.github.com/actions/checkout#usage
