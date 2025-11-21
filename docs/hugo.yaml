@@ -101,7 +101,7 @@ markup:
     style: github
     codeFences: true
     guessSyntax: true
-    lineNos: true
+    lineNos: false
     noClasses: false
 
 # Output formats
