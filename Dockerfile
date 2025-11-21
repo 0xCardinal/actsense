@@ -17,7 +17,7 @@ COPY frontend/ ./
 RUN npm run build
 
 ########################################
-# Stage 2: Backend + bundled frontend #
+# Stage 2: Backend + bundled frontend  #
 ########################################
 FROM python:3.11-slim AS backend
 
