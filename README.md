@@ -1,8 +1,19 @@
-# actsense
-<img width="1484" height="917" alt="image" src="https://github.com/user-attachments/assets/f83358db-abf2-4da9-97a5-4f7fbac98773" />
+<div align="center">
 
+# actsense
+
+[![Deployed on Cloudflare Pages](https://img.shields.io/badge/Deployed%20on-Cloudflare%20Pages-f38020?logo=cloudflare&logoColor=white)](https://actsense.dev)
+[![License: GPL-3.0](https://img.shields.io/github/license/0xCardinal/actsense)](https://opensource.org/licenses/GPL-3.0)
+[![AI-Assisted Development](https://img.shields.io/badge/AI-Assisted%20Development-blue)](https://github.com/0xCardinal/actsense)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/0xCardinal/actsense/pulls)
+
+<img width="1484" height="917" alt="actsense graph visualization" src="https://raw.githubusercontent.com/0xCardinal/actsense/main/docs/static/images/platform.png" />
 
 A security auditor for GitHub Actions that analyzes workflows and their dependencies to identify security vulnerabilities.
+
+**🙌 Refer to [https://actsense.dev](https://actsense.dev) for the guide 📖**
+
+</div>
 
 ## Features
 
@@ -87,14 +98,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for technical details, API documentation,
 
 Thank you to all contributors who help make actsense better!
 
-<div align="center">
+<table>
+    <tr>
+    <td align="center"><a href="https://github.com/0xCardinal"><img alt="0xCardinal" src="https://avatars.githubusercontent.com/u/77858203?v=4" width="100" /><br />0xCardinal</a></td>
+    </tr>
+</table>
 
-<a href="https://github.com/0xCardinal">
-  <img src="https://github.com/0xCardinal.png" width="64" height="64" alt="0xCardinal" style="border-radius: 50%;" />
-  <br />
-  <sub><b>0xCardinal</b></sub>
-</a>
-
-</div>
-
-**Made with ❤️ by the actsense team**
+Made with ❤️ by the actsense team

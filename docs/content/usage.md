@@ -7,7 +7,7 @@ description: "Learn how to use actsense to audit GitHub Actions workflows and id
 
 actsense is a comprehensive security auditing platform for GitHub Actions that helps you identify vulnerabilities, analyze dependencies, and secure your CI/CD pipelines.
 
-![actsense Platform](https://github.com/user-attachments/assets/f83358db-abf2-4da9-97a5-4f7fbac98773)
+![actsense Platform](/images/platform.png)
 
 *The actsense platform provides a comprehensive view of your GitHub Actions security posture with interactive visualizations and detailed analysis.*
 
