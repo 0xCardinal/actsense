@@ -6,3 +6,17 @@
 
 <!-- Platform image tilt effect -->
 <script src="/tilt-effect.js" defer></script>
+
+<!-- Remove hextra-max-footer-width div -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Find all elements with hextra-max-footer-width class
+  const elements = document.querySelectorAll('.hextra-max-footer-width');
+  
+  // Remove only the last instance
+  if (elements.length > 0) {
+    const lastElement = elements[elements.length - 1];
+    lastElement.remove();
+  }
+});
+</script>

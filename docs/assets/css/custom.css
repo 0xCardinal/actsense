@@ -89,7 +89,7 @@
   font-family: 'Inter', sans-serif;
   font-size: 1.25rem;
   color: hsl(var(--muted-foreground));
-  margin-bottom: 2rem;
+  margin-bottom: 2rem !important;
   max-width: 700px;
   margin-left: auto;
   margin-right: auto;
@@ -295,7 +295,7 @@ a.hextra-card:hover,
   
   .actsense-cta {
     padding: 0.625rem 1.25rem;
-    font-size: 0.875rem;
+    font-size: 0.875rem !important;
   }
   
   .hextra-cards {
@@ -385,4 +385,15 @@ html {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+/* Custom footer styling */
+.hextra-custom-footer {
+  padding-bottom: 1rem !important;
+  font-size: 0.875rem !important;
+}
+
+.hextra-custom-footer p {
+  font-size: 0.875rem !important;
+  margin: 0;
 }
