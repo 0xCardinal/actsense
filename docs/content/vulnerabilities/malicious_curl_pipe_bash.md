@@ -1,74 +1,61 @@
 # Malicious Curl Pipe Bash
 
-## Vulnerability Description
+## Description
 
+`curl ... | bash` downloads and executes remote code in one step with zero verification. If the server or DNS is compromised—or the script changes unexpectedly—attackers gain full control of the workflow’s token and secrets. GitHub’s hardening guide calls this pattern unsafe because it bypasses review and integrity checks. [^gh_curl_pipe]
 
-Detected {description} in the workflow. This is a critical security vulnerability because:
+## Vulnerable Instance
 
-- Code is downloaded from the internet and executed without verification
+```yaml
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install tool
+        run: curl -fsSL https://example.com/install.sh | bash
+```
 
-- If the remote server is compromised, malicious code will be executed
+## Mitigation Strategies
 
-- Theres no way to verify the integrity of the downloaded script
+1. **Avoid piping to shell**  
+   Download files to disk, inspect them, then execute.
+2. **Verify integrity**  
+   Check signatures/hashes or use releases with checksums.
+3. **Pin versions**  
+   Reference immutable assets (e.g., GitHub releases) rather than latest endpoints.
+4. **Prefer actions**  
+   Use vetted GitHub Actions or container images instead of ad-hoc scripts.
+5. **Restrict network egress**  
+   If scripts must be fetched, use allowlists and TLS with certificate pinning. [^gh_curl_pipe]
 
-- Attackers can inject arbitrary commands through the downloaded script
+### Secure Version
 
-- The script runs with the workflows permissions, potentially accessing secrets
+```yaml
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download installer
+        run: curl -fsSL https://example.com/install.sh -o install.sh
+      - name: Verify checksum
+        run: echo "abc123  install.sh" | sha256sum --check -
+      - name: Run installer
+        run: bash install.sh
+```
 
+## Impact
 
-Attack scenarios:
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Quick-start guides often recommend this pattern. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Remote code executes with full workflow privileges. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any repo/cloud resource accessible to the workflow can be compromised. |
 
-- Attacker compromises the remote server hosting the script
+## References
 
-- Attacker performs a man-in-the-middle attack during download
+- GitHub Docs, “Security hardening for GitHub Actions,” https://docs.github.com/actions/security-guides/security-hardening-for-github-actions [^gh_curl_pipe]
+- curl Manual, “Security considerations,” https://curl.se/docs/security.html
 
-- Attacker redirects the URL to a malicious script
+---
 
-- Malicious script exfiltrates secrets, modifies files, or performs unauthorized actions
-
-
-## Recommendation
-
-
-Never pipe curl/wget directly to shell. Instead:
-
-
-1. Download and verify the script first:
-
-- name: Download script
-
-run: |
-
-curl -o script.sh https://example.com/script.sh
-
-# Verify checksum
-
-echo \expected_checksum script.sh\ | sha256sum -c
-
-# Then execute
-
-bash script.sh
-
-
-2. Use pinned GitHub Actions instead:
-
-- uses: actions/checkout@v4  # Pinned version
-
-- uses: trusted-action@v1.0.0  # Use trusted actions
-
-
-3. If you must download scripts:
-
-- Use checksums to verify integrity
-
-- Review the script content before execution
-
-- Use HTTPS only
-
-- Pin to specific script versions/commits
-
-- Run in a sandboxed environment
-
-
-4. Consider using GitHub Actions from trusted sources instead of shell scripts
-
+[^gh_curl_pipe]: GitHub Docs, “Security hardening for GitHub Actions,” https://docs.github.com/actions/security-guides/security-hardening-for-github-actions

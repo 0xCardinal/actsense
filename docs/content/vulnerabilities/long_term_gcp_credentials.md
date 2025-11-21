@@ -1,74 +1,77 @@
-# Long Term Gcp Credentials
+# Long Term GCP Credentials
 
-## Vulnerability Description
+## Description
 
+Storing Google Cloud JSON service account keys (`GOOGLE_APPLICATION_CREDENTIALS`, `GCP_SA_KEY`) in GitHub secrets creates a long-lived credential. If the key leaks, attackers can impersonate the service account until you manually revoke it. GitHub’s OIDC + Workload Identity Federation lets workflows request short-lived credentials without storing keys. [^gh_oidc_gcp]
 
-Job {job_name} uses long-term GCP credentials (GOOGLE_APPLICATION_CREDENTIALS, GCP_SA_KEY) instead of OIDC.
-This creates security risks:
+## Vulnerable Instance
 
-- Long-term credentials dont expire automatically
+- Workflow base64-decodes a service account key and activates it with `gcloud auth activate-service-account`.
 
-- Credentials are harder to rotate and manage
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate to GCP
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          echo "$GCP_SA_KEY" > key.json
+          gcloud auth activate-service-account --key-file key.json
+      - run: gcloud run deploy ...
+```
 
-- Credentials may be stored in secrets for extended periods
+## Mitigation Strategies
 
-- If compromised, credentials remain valid until manually rotated
+1. **Create a Workload Identity Pool/Provider**  
+   Configure `token.actions.githubusercontent.com` as an OIDC provider in GCP IAM.
+2. **Bind service accounts to the provider**  
+   Grant the necessary IAM roles to the service account and allow GitHub workflows to impersonate it.
+3. **Use `google-github-actions/auth`**  
+   Request tokens at runtime with `id-token: write`.
+4. **Delete stored keys**  
+   Remove JSON key secrets after federation is in place.
+5. **Monitor Cloud Audit Logs**  
+   Alert on unexpected service account impersonations. [^gh_oidc_gcp]
 
-- Credentials may have excessive permissions
+### Secure Version
 
+- Workflow uses OIDC to obtain short-lived credentials.
 
-Security concerns:
-
-- Compromised credentials can be used indefinitely
-
-- Credentials may have broader permissions than needed
-
-- Difficult to audit and track credential usage
-
-- No automatic expiration or rotation
-
-
-## Recommendation
-
-
-Migrate to GitHub OIDC for GCP authentication:
-
-
-1. Configure OIDC in GCP:
-
-- Create a Workload Identity Pool in GCP
-
-- Configure OIDC provider with GitHub
-
-- Create a service account with required permissions
-
-- Grant the service account access to the workload identity pool
-
-
-2. Update the workflow to use OIDC:
-
+```yaml
 permissions:
+  id-token: write
+  contents: read
 
-id-token: write  # Required for OIDC
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/123456789/locations/global/workloadIdentityPools/github/providers/actions
+          service_account: deployer@my-project.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud run deploy ...
+```
 
-contents: read
+## Impact
 
-steps:
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many repos still rely on JSON keys. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Exposed keys allow persistent GCP access. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any project/resource accessible to the service account is at risk. |
 
-- name: Authenticate to Google Cloud
+## References
 
-uses: google-github-actions/auth@v2
+- GitHub Docs, “Configuring OpenID Connect in Google Cloud Platform,” https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-google-cloud-platform [^gh_oidc_gcp]
+- Google Cloud Docs, “Authenticate workloads using Workload Identity Federation,” https://cloud.google.com/iam/docs/workload-identity-federation
 
-with:
+---
 
-workload_identity_provider: projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/providers/PROVIDER_ID
-
-service_account: SERVICE_ACCOUNT@PROJECT_ID.iam.gserviceaccount.com
-
-
-3. Remove long-term credentials from secrets
-
-4. Test the OIDC authentication
-
-5. See: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-google-cloud-platform
-
+[^gh_oidc_gcp]: GitHub Docs, “Configuring OpenID Connect in Google Cloud Platform,” https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-google-cloud-platform

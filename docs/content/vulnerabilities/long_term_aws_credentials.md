@@ -1,72 +1,74 @@
-# Long Term Aws Credentials
+# Long Term AWS Credentials
 
-## Vulnerability Description
+## Description
 
+Storing `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` in GitHub secrets means the keys never expire. If an attacker exfiltrates them (e.g., via a compromised workflow), they can use the credentials until you manually rotate them. GitHub and AWS recommend using GitHub’s OIDC provider to request short-lived credentials at runtime instead. [^gh_oidc_aws]
 
-Job {job_name} uses long-term AWS credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) instead of OIDC.
-This creates security risks:
+## Vulnerable Instance
 
-- Long-term credentials dont expire automatically
+- Workflow loads static AWS keys from secrets and runs deployment commands.
 
-- Credentials are harder to rotate and manage
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        run: |
+          export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - run: aws s3 sync dist/ s3://my-bucket
+```
 
-- Credentials may be stored in secrets for extended periods
+## Mitigation Strategies
 
-- If compromised, credentials remain valid until manually rotated
+1. **Enable GitHub OIDC in AWS**  
+   Create an IAM identity provider for `token.actions.githubusercontent.com` and define trust policies.
+2. **Assume roles dynamically**  
+   Use `aws-actions/configure-aws-credentials` with `role-to-assume` so tokens expire automatically.
+3. **Scope roles tightly**  
+   Grant least-privilege policies per workflow (deploy, infrastructure, etc.).
+4. **Remove stored keys**  
+   Delete static AWS secrets from GitHub once OIDC is configured.
+5. **Monitor CloudTrail**  
+   Audit role-assumption events and alert on anomalies. [^gh_oidc_aws]
 
-- Credentials may have excessive permissions
+### Secure Version
 
+- Workflow requests an OIDC token (`id-token: write`) and assumes an IAM role.
 
-Security concerns:
-
-- Compromised credentials can be used indefinitely
-
-- Credentials may have broader permissions than needed
-
-- Difficult to audit and track credential usage
-
-- No automatic expiration or rotation
-
-
-## Recommendation
-
-
-Migrate to GitHub OIDC for AWS authentication:
-
-
-1. Configure OIDC in AWS:
-
-- Create an OIDC identity provider in AWS IAM
-
-- Configure trust relationship with GitHub
-
-- Create IAM role with required permissions
-
-
-2. Update the workflow to use OIDC:
-
+```yaml
 permissions:
+  id-token: write
+  contents: read
 
-id-token: write  # Required for OIDC
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsDeploy
+          aws-region: us-east-1
+      - run: aws s3 sync dist/ s3://my-bucket
+```
 
-contents: read
+## Impact
 
-steps:
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many legacy workflows still use static keys. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Leaked keys enable long-term AWS account compromise. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any AWS resource accessible to the key is exposed. |
 
-- name: Configure AWS credentials
+## References
 
-uses: aws-actions/configure-aws-credentials@v4
+- GitHub Docs, “Configuring OpenID Connect in Amazon Web Services,” https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services [^gh_oidc_aws]
+- AWS Docs, “Use IAM roles to connect GitHub Actions to AWS,” https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html
 
-with:
+---
 
-role-to-assume: arn:aws:iam::ACCOUNT:role/GitHubActionsRole
-
-aws-region: us-east-1
-
-
-3. Remove long-term credentials from secrets
-
-4. Test the OIDC authentication
-
-5. See: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
-
+[^gh_oidc_aws]: GitHub Docs, “Configuring OpenID Connect in Amazon Web Services,” https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services

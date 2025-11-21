@@ -1,71 +1,62 @@
 # Malicious Base64 Decode
 
-## Vulnerability Description
+## Description
 
+Attackers often smuggle malicious scripts in base64-encoded strings, then decode and execute them inside workflows (`base64 -d | bash`). Because the encoded payload is unreadable, reviewers miss it and scanners may not flag it. GitHub warns that decoding opaque data and piping it to a shell is a red flag for supply-chain attacks. [^gh_base64]
 
-Detected {description} in the workflow. This is a critical security vulnerability because:
+## Vulnerable Instance
 
-- Base64 encoding is used to obfuscate malicious code
+- Workflow decodes a base64 string and executes the result in one step.
 
-- The encoded content is not human-readable, making review difficult
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run helper
+        run: echo "ZXZpbCBtYWxpY2lvdXMgcGF5bG9hZA==" | base64 -d | bash
+```
 
-- Attackers can hide malicious commands in base64-encoded strings
+## Mitigation Strategies
 
-- The decoded content is executed directly without verification
+1. **Avoid opaque payloads**  
+   Store scripts in the repository or trusted action, not inline encoded strings.
+2. **Decode then verify**  
+   If binary data is unavoidable, decode to a file, inspect it, verify checksums, then execute.
+3. **Use signed releases**  
+   Pull helpers from signed/tagged releases instead of embedding them.
+4. **Enable code scanning**  
+   Use CodeQL/secret scanning to detect suspicious decode patterns. [^gh_base64]
+5. **Review contributions**  
+   Block PRs that introduce `base64 -d | bash` or similar constructs.
 
-- Security scanners may not detect malicious code in base64-encoded form
+### Secure Version
 
+- Script lives in the repo and runs directly.
 
-Attack scenarios:
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/setup.sh
+```
 
-- Attacker embeds malicious commands in base64-encoded string
+## Impact
 
-- The encoded string looks harmless but decodes to dangerous commands
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Attackers frequently obfuscate payloads this way. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Decoded code runs with workflow permissions, enabling full compromise. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any resource the workflow touches (repo, secrets, cloud) is exposed. |
 
-- Malicious code executes with workflow permissions
+## References
 
-- Attackers can exfiltrate secrets, modify files, or perform unauthorized actions
+- GitHub Security Lab, “Untrusted input in GitHub Actions,” https://securitylab.github.com/research/github-actions-untrusted-input/ [^gh_base64]
+- GitHub Docs, “Security hardening for GitHub Actions,” https://docs.github.com/actions/security-guides/security-hardening-for-github-actions
 
+---
 
-This pattern is commonly used in supply chain attacks to hide malicious payloads.
-
-
-## Recommendation
-
-
-Never execute base64-decoded content directly. Instead:
-
-
-1. Use readable, reviewable code:
-
-- Write scripts in plain text
-
-- Store scripts in the repository
-
-- Review all code before execution
-
-
-2. If you must use base64 (e.g., for binary data):
-
-- Decode to a file first
-
-- Review the decoded content
-
-- Verify checksums
-
-- Execute only after verification
-
-
-3. Use GitHub Actions instead:
-
-- Prefer trusted GitHub Actions over shell scripts
-
-- Actions are more transparent and reviewable
-
-- Actions can be pinned to specific versions
-
-
-4. Review all base64 usage in workflows
-
-5. Consider using secrets or encrypted values instead of base64 encoding
+[^gh_base64]: GitHub Security Lab, “Untrusted input in GitHub Actions,” https://securitylab.github.com/research/github-actions-untrusted-input/
 

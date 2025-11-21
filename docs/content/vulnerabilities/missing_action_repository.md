@@ -1,75 +1,77 @@
 # Missing Action Repository
 
-## Vulnerability Description
+## Description
 
-Workflow references action {action} from repository {repository} that does not exist or is not accessible.
+Workflows that reference actions from repositories that don't exist or are inaccessible will fail at runtime, disrupting CI/CD pipelines and potentially causing production outages. While this may seem like a configuration error, missing action repositories indicate supply-chain risks: if an action was deleted due to security concerns, workflows fail unexpectedly, and poor dependency management can hide other vulnerabilities. [^gh_actions_syntax]
 
-This is a critical issue that will cause workflow failures at runtime. The referenced action repository may have been:
+## Vulnerable Instance
 
-- Deleted or removed
-- Made private without proper access permissions
-- Moved or renamed
-- Contains a typo in the action reference
-- Never existed (typo in workflow configuration)
+- Workflow references an action from a repository that was deleted, made private, moved, or never existed.
+- Typo in the action reference (owner, repository name, or path).
+- Workflow fails immediately when GitHub Actions tries to resolve the missing action.
 
-When a workflow references a non-existent action repository, GitHub Actions will fail to resolve the action, causing the workflow run to fail immediately. This can lead to:
+```yaml
+name: Build with Missing Action
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: non-existent-org/missing-action@v1  # Repository doesn't exist
+        with:
+          input: value
+      - run: npm test
+```
 
-- Workflow execution failures
-- CI/CD pipeline disruptions
-- Deployment delays
-- Production issues if workflows are critical
+## Mitigation Strategies
 
-## Security Implications
+1. **Verify action references**  
+   Check for typos in owner, repository name, or subdirectory paths. Visit `https://github.com/{owner}/{repo}` to confirm the repository exists and is accessible.
 
-While this may seem like a simple configuration error, missing action repositories can have security implications:
+2. **Pin to specific versions**  
+   Use commit SHAs instead of tags for maximum security and to prevent breakage if repositories are renamed or moved.
 
-- **Supply Chain Risk**: If an action repository was deleted due to security concerns, workflows may fail unexpectedly
-- **Availability Risk**: Critical workflows depending on missing actions will fail, potentially impacting system availability
-- **Maintenance Risk**: Missing repositories indicate poor dependency management and may hide other security issues
+3. **Audit dependencies regularly**  
+   Periodically scan workflows for missing or deprecated actions. Monitor for repository deletions or security advisories.
 
-## Evidence
+4. **Use trusted, well-maintained actions**  
+   Prefer actions from official organizations (e.g., `actions/*`) or verified publishers. Consider forking critical actions to your organization.
 
-- **Action Reference**: {action}
-- **Repository**: {repository}
-- **Status**: Repository does not exist or is inaccessible
-- **Impact**: Workflow will fail at runtime when attempting to use this action
+5. **Test workflows after updates**  
+   After changing action references, run workflows in a test environment to catch resolution failures before production.
 
-## Recommendation
+6. **Have fallback plans**  
+   Document alternative actions for critical workflows. If a repository is intentionally deleted, migrate to replacements immediately.
 
-Immediately verify and fix the action reference:
+### Secure Version
 
-1. **Verify the action reference is correct:**
-   - Check for typos in the owner, repository, or path
-   - Verify the action name matches the repository name
-   - Ensure subdirectory paths are correct (if applicable)
+```yaml
+name: Build with Verified Action
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4  # Verified, well-maintained action
+        with:
+          node-version: '20'
+      - run: npm test
+```
 
-2. **Check if the repository exists:**
-   - Visit: https://github.com/{repository}
-   - Verify the repository is public or you have access
-   - Check if the repository was renamed or moved
+## Impact
 
-3. **Find an alternative action:**
-   - Search for similar actions that provide the same functionality
-   - Check if the action was moved to a different repository
-   - Look for official alternatives from trusted publishers
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Typos and repository deletions are common, but most workflows use verified actions. |
+| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Workflow failures disrupt CI/CD, cause deployment delays, and can impact production availability. |
+| Blast radius | ![Narrow](https://img.shields.io/badge/-Narrow-green?style=flat-square) | Impact is limited to workflows using the missing action, but cascading failures can affect dependent jobs. |
 
-4. **Update the workflow:**
-   - Replace the action reference with a valid one
-   - Pin to a specific version (commit SHA) for security
-   - Test the workflow after making changes
+## References
 
-5. **Prevent future issues:**
-   - Regularly audit workflow dependencies
-   - Use actions from trusted, well-maintained repositories
-   - Monitor for repository deletions or changes
-   - Consider forking critical actions to your organization
+- GitHub Docs, "Workflow syntax for GitHub Actions," https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsuses [^gh_actions_syntax]
 
-6. **If the repository was intentionally deleted:**
-   - Remove the action from all workflows
-   - Find and migrate to a replacement action
-   - Update documentation to reflect the change
+---
 
-## External Reference
-
-For more information about managing GitHub Actions dependencies and preventing workflow failures, visit: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsuses
-
+[^gh_actions_syntax]: GitHub Docs, "Workflow syntax for GitHub Actions," https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsuses

@@ -1,80 +1,82 @@
-# Github Token Write All
+# GitHub Token Write-All
 
-## Vulnerability Description
+## Description
 
+Setting `permissions: write-all` grants the workflow token write access to every API scope (contents, issues, packages, etc.). Attackers who compromise a single job can use that token to push malicious commits, publish packages, or tamper with releases. GitHub recommends explicitly enumerating only the scopes you need and defaulting to read. [^gh_token_permissions]
 
-Workflow uses write-all permissions for GITHUB_TOKEN. This grants the workflow write access to:
+## Vulnerable Instance
 
-- Repository contents (files, branches, commits)
+- Workflow-level `permissions: write-all`.
+- Jobs perform read-only checks (tests, lint) but inherit full write scopes.
 
-- Pull requests and issues
-
-- GitHub Actions
-
-- Packages and registries
-
-- Security alerts and advisories
-
-- And many other resources
-
-
-This violates the principle of least privilege and creates significant security risks:
-
-- If the workflow is compromised, attackers have broad access to your repository
-
-- Attackers can modify files, create backdoors, or exfiltrate data
-
-- Attackers can create malicious actions or modify existing ones
-
-- Attackers can manipulate pull requests, issues, and other resources
-
-
-Most workflows only need read access or very specific write permissions.
-
-
-## Recommendation
-
-
-Replace write-all with specific, scoped permissions:
-
-
-1. Identify what the workflow actually needs:
-
-- Review each step to determine required permissions
-
-- Most workflows only need read access
-
-
-2. Use minimal permissions:
-
-permissions:
-
-contents: read  # For reading repository files
-
-pull-requests: read  # For reading PRs
-
-
-3. If write access is needed, scope it precisely:
-
-permissions:
-
-contents: write  # Only if you need to modify files
-
-pull-requests: write  # Only if you need to create/update PRs
-
-
-4. Use job-level permissions for specific jobs:
-
+```yaml
+name: Test
+on: pull_request
+permissions: write-all
 jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+```
 
-deploy:
+Compromising `npm test` yields a token with repository-wide write privileges.
 
+## Mitigation Strategies
+
+1. **Set explicit read-only defaults**  
+   Use `permissions: read-all` or list only the required read scopes.
+2. **Grant write per job**  
+   Only deployment/publish jobs should request write scopes.
+3. **Review third-party actions**  
+   Ensure they do not require `write-all`; replace or fork if necessary.
+4. **Monitor token usage**  
+   Log `git push` and `gh` commands; alert on unexpected writes.
+5. **Adopt branch protection**  
+   Combine least privilege with reviews so even if a token is abused, merges still need approval.
+
+### Secure Version
+
+- Global permissions limited to read.
+- Deployment job elevates to `contents: write` only when pushing tags. [^gh_token_permissions]
+
+```yaml
+name: Test and Release
+on:
+  pull_request:
+  push:
+    tags: ["v*"]
 permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./scripts/publish.sh
+```
 
-contents: write  # Only this job needs write access
+## Impact
 
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many workflow templates still use `write-all`. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Token abuse lets attackers rewrite history or publish trojans. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Every repository resource accessible via the token is exposed. |
 
-5. Avoid granting permissions you dont need
+## References
 
-6. Regularly review and audit permissions
+- GitHub Docs, “Assigning permissions to jobs,” https://docs.github.com/actions/using-jobs/assigning-permissions-to-jobs [^gh_token_permissions]
+- GitHub Docs, “Security hardening for GitHub Actions,” https://docs.github.com/actions/security-guides/security-hardening-for-github-actions
 
+---
+
+[^gh_token_permissions]: GitHub Docs, “Assigning permissions to jobs,” https://docs.github.com/actions/using-jobs/assigning-permissions-to-jobs

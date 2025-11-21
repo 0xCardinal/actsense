@@ -1,74 +1,77 @@
 # Long Term Azure Credentials
 
-## Vulnerability Description
+## Description
 
+Workflows that authenticate to Azure using static service principal secrets (`AZURE_CLIENT_SECRET`) rely on long-lived credentials. If those secrets leak, attackers can access Azure resources indefinitely. GitHub’s OIDC integration with Azure AD issues short-lived tokens tied to a specific workflow run and eliminates stored secrets. [^gh_oidc_azure]
 
-Job {job_name} uses long-term Azure credentials (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID) instead of OIDC.
-This creates security risks:
+## Vulnerable Instance
 
-- Long-term credentials dont expire automatically
+- Workflow exports client ID/secret into environment variables and runs Azure CLI commands.
 
-- Credentials are harder to rotate and manage
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to Azure
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
+      - run: az webapp deployment source config-zip ...
+```
 
-- Credentials may be stored in secrets for extended periods
+## Mitigation Strategies
 
-- If compromised, credentials remain valid until manually rotated
+1. **Create federated credentials**  
+   In Azure AD, configure the GitHub OIDC provider on your app registration.
+2. **Use `azure/login` with OIDC**  
+   Grant `id-token: write` and use the `azure/login@v1` action with `client-id`/`tenant-id`/`subscription-id` (no secret).
+3. **Scope roles tightly**  
+   Assign least-privilege roles (e.g., `Contributor` on specific resource groups).
+4. **Remove long-term secrets**  
+   Delete `AZURE_CLIENT_SECRET` from repository/org secrets after migration.
+5. **Monitor sign-ins**  
+   Use Azure AD sign-in logs to alert on unexpected role assumptions. [^gh_oidc_azure]
 
-- Credentials may have excessive permissions
+### Secure Version
 
+- Workflow relies on GitHub OIDC to request Azure tokens at runtime.
 
-Security concerns:
-
-- Compromised credentials can be used indefinitely
-
-- Credentials may have broader permissions than needed
-
-- Difficult to audit and track credential usage
-
-- No automatic expiration or rotation
-
-
-## Recommendation
-
-
-Migrate to GitHub OIDC for Azure authentication:
-
-
-1. Configure OIDC in Azure:
-
-- Create an App Registration in Azure AD
-
-- Configure federated credential with GitHub
-
-- Create a service principal with required permissions
-
-
-2. Update the workflow to use OIDC:
-
+```yaml
 permissions:
+  id-token: write
+  contents: read
 
-id-token: write  # Required for OIDC
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - run: az webapp deployment source config-zip ...
+```
 
-contents: read
+## Impact
 
-steps:
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many Azure workflows still use service principal secrets. |
+| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Stolen secrets allow persistent Azure access. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any subscription/resource group assigned to the principal is exposed. |
 
-- name: Azure Login
+## References
 
-uses: azure/login@v1
+- GitHub Docs, “Configuring OpenID Connect in Azure,” https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure [^gh_oidc_azure]
+- Microsoft Docs, “Use workload identity federation for GitHub Actions,” https://learn.microsoft.com/azure/developer/github/connect-from-azure
 
-with:
+---
 
-client-id: ${{{{ secrets.AZURE_CLIENT_ID }}}}
-
-tenant-id: ${{{{ secrets.AZURE_TENANT_ID }}}}
-
-subscription-id: ${{{{ secrets.AZURE_SUBSCRIPTION_ID }}}}
-
-
-3. Remove long-term credentials from secrets
-
-4. Test the OIDC authentication
-
-5. See: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure
-
+[^gh_oidc_azure]: GitHub Docs, “Configuring OpenID Connect in Azure,” https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure
