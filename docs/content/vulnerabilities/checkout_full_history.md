@@ -38,6 +38,9 @@ jobs:
 
 ### Secure Version
 
+- Workflow pins `fetch-depth: 1` by default and fetches additional commits only when required.
+- Artifact uploads exclude `.git/` and other historical content so past secrets stay on the runner. [^checkout_docs]
+
 ```yaml
 name: Shallow Checkout Build
 on: [pull_request]
@@ -51,6 +54,17 @@ jobs:
       - run: npm test
 ```
 
+## Impact
+
+| Dimension | Severity | Notes |
+| --- | --- | --- |
+| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Many workflows accept the default depth and never revisit it, especially in legacy repos. |
+| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Historical secrets or sensitive files become accessible to any job output or attacker with runner access. |
+| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Leakage spans every historical commit—including past environments, credentials, and intellectual property. |
+
 ## References
+
+- GitHub Docs, “actions/checkout – inputs,” https://docs.github.com/actions/checkout#usage [^checkout_docs]
+- GitHub Docs, “Persisting workflow data using artifacts,” https://docs.github.com/actions/using-workflows/storing-workflow-data-as-artifacts
 
 [^checkout_docs]: GitHub Docs, “actions/checkout – inputs,” https://docs.github.com/actions/checkout#usage
