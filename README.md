@@ -82,3 +82,19 @@ All vulnerability documentation is available at `docs/content/vulnerabilities/` 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for technical details, API documentation, and development guidelines.
+
+## Contributors
+
+Thank you to all contributors who help make actsense better!
+
+<div align="center">
+
+<a href="https://github.com/0xCardinal">
+  <img src="https://github.com/0xCardinal.png" width="64" height="64" alt="0xCardinal" style="border-radius: 50%;" />
+  <br />
+  <sub><b>0xCardinal</b></sub>
+</a>
+
+</div>
+
+**Made with ❤️ by the actsense team**
