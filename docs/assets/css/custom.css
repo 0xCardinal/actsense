@@ -69,8 +69,8 @@
 /* Hero section - shadcn style */
 .actsense-hero {
   text-align: center;
-  padding: 4rem 1rem 3rem;
-  margin-bottom: 4rem;
+  padding: 4rem 1rem 1.5rem;
+  margin-bottom: 0rem;
 }
 
 .actsense-hero h1 {
@@ -121,6 +121,12 @@
   transform: translateY(-1px);
 }
 
+/* Dark mode hover fix for CTA button */
+:is(html[class~="dark"] *) .actsense-cta:hover {
+  background-color: hsl(0 0% 85%);
+  color: hsl(0 0% 0%);
+}
+
 .actsense-cta:active {
   transform: translateY(0);
 }
@@ -143,6 +149,13 @@
   color: hsl(var(--primary)) !important;
 }
 
+/* Dark mode hover fix for transparent CTA button */
+:is(html[class~="dark"] *) .actsense-cta[style*="transparent"]:hover {
+  background-color: hsl(217 33% 25%) !important;
+  border-color: hsl(0 0% 100%) !important;
+  color: hsl(0 0% 100%) !important;
+}
+
 /* Cards - shadcn card style */
 .hextra-card {
   background-color: hsl(var(--card));
@@ -156,6 +169,28 @@
   border-color: hsl(var(--primary) / 0.5);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   transform: translateY(-2px);
+}
+
+/* Remove underline from links inside cards on hover - comprehensive override */
+.hextra-card a,
+.hextra-card a:hover,
+.hextra-card a:focus,
+.hextra-card a:active,
+.hextra-card:hover a,
+.hextra-card:hover a:hover,
+.content .hextra-card a,
+.content .hextra-card a:hover,
+.content .hextra-card:hover a,
+a.hextra-card,
+a.hextra-card:hover,
+.hextra-card-link,
+.hextra-card-link:hover,
+* .hextra-card a,
+* .hextra-card a:hover {
+  text-decoration: none !important;
+  text-decoration-line: none !important;
+  text-underline-offset: 0 !important;
+  text-underline-position: unset !important;
 }
 
 /* Cards container */
@@ -213,7 +248,7 @@
 }
 
 /* Links - shadcn style */
-.content a:not(.actsense-cta) {
+.content a:not(.actsense-cta):not(.hextra-card a) {
   font-family: 'Inter', sans-serif;
   color: hsl(var(--primary));
   text-decoration: none;
@@ -221,7 +256,7 @@
   transition: color 0.2s;
 }
 
-.content a:not(.actsense-cta):hover {
+.content a:not(.actsense-cta):not(.hextra-card a):hover {
   color: hsl(0 0% 20%);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -280,10 +315,16 @@ html {
   border-radius: calc(var(--radius) * 0.5);
 }
 
-/* Selection color */
+/* Selection color - black for light mode (white background) */
 ::selection {
-  background-color: hsl(var(--primary) / 0.2);
-  color: hsl(var(--primary-foreground));
+  background-color: hsl(0 0% 0% / 0.2);
+  color: hsl(0 0% 0%);
+}
+
+/* Dark mode selection - use white highlight for dark background */
+:is(html[class~="dark"] *) ::selection {
+  background-color: hsl(0 0% 100% / 0.3);
+  color: hsl(0 0% 100%);
 }
 
 /* Navbar title - Stack Sans Notch font */
@@ -294,4 +335,54 @@ html {
   font-style: normal;
   font-weight: 600;
   letter-spacing: -0.025em;
+}
+
+/* Platform image container with background blur */
+.platform-image-container {
+  position: relative;
+  padding: 1rem 2rem;
+  margin: 0 auto;
+}
+
+.platform-image-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: inherit;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 1rem;
+  z-index: -1;
+  opacity: 0.6;
+}
+
+.platform-image-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border-radius: 1rem;
+  z-index: -1;
+  opacity: 0.4;
+}
+
+/* Dark mode background blur adjustments */
+:is(html[class~="dark"] *) .platform-image-container::before {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(25px) saturate(150%);
+  -webkit-backdrop-filter: blur(25px) saturate(150%);
+}
+
+:is(html[class~="dark"] *) .platform-image-container::after {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
