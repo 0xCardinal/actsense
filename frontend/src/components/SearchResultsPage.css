@@ -29,9 +29,9 @@
 }
 
 .back-button {
-  background: transparent;
-  border: 1px solid #e5e7eb;
-  color: #111827;
+  background: #111827;
+  border: 1px solid #111827;
+  color: white;
   padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;
@@ -39,11 +39,13 @@
   font-weight: 500;
   transition: all 0.15s ease;
   font-family: 'Inter', sans-serif;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .back-button:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
+  background: #1f2937;
+  border-color: #1f2937;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
 .search-results-title {
@@ -242,9 +244,9 @@
 
 .result-button {
   flex: 1;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  color: #111827;
+  background: #111827;
+  border: 1px solid #111827;
+  color: white;
   padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;
@@ -255,19 +257,19 @@
 }
 
 .result-button:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
+  background: #1f2937;
+  border-color: #1f2937;
 }
 
 .result-button.primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  color: #ffffff;
+  background: #111827;
+  border-color: #111827;
+  color: white;
 }
 
 .result-button.primary:hover {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #1f2937;
+  border-color: #1f2937;
 }
 
 .asset-badge {
