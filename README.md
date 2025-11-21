@@ -7,7 +7,7 @@
 [![AI-Assisted Development](https://img.shields.io/badge/AI-Assisted%20Development-blue)](https://github.com/0xCardinal/actsense)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/0xCardinal/actsense/pulls)
 
-<img width="1484" height="917" alt="actsense graph visualization" src="https://raw.githubusercontent.com/0xCardinal/actsense/main/docs/static/images/platform.png" />
+<img width="1484" height="917" alt="actsense platform" src="docs/static/images/platform.png" />
 
 A security auditor for GitHub Actions that analyzes workflows and their dependencies to identify security vulnerabilities.
 
