@@ -19,15 +19,18 @@ menu:
     - name: Getting Started
       pageRef: /getting-started
       weight: 2
+    - name: Usage
+      pageRef: /usage
+      weight: 3
     - name: Vulnerabilities
       pageRef: /vulnerabilities
-      weight: 3
-    - name: Search
       weight: 4
+    - name: Search
+      weight: 5
       params:
         type: search
     - name: GitHub
-      weight: 5
+      weight: 6
       url: "https://github.com/0xCardinal/actsense"
       params:
         icon: github
