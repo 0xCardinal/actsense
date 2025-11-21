@@ -5,7 +5,7 @@ import shutil
 import os
 from typing import Optional, Tuple
 from pathlib import Path
-
+import re
 
 class RepoCloner:
     """Handle cloning and cleanup of repositories."""
@@ -35,6 +35,9 @@ class RepoCloner:
         repo_url = f"https://github.com/{owner}/{repo}.git"
         
         # Use token in URL if provided (for private repos)
+            # Validate token: only allow alphanumeric, underscore, and dash, typical of GitHub tokens (minimum 20, maximum 100 characters for sanity)
+            if not re.fullmatch(r'^[A-Za-z0-9_\-]{20,100}$', token):
+                raise ValueError("Invalid GitHub token format")
         if token:
             # For private repos, use token in URL
             repo_url = f"https://{token}@github.com/{owner}/{repo}.git"
