@@ -90,7 +90,7 @@ jobs:
             # No previous tag found - this is the initial release
             {
               echo "RELEASE_BODY<<EOF"
-              echo "## Release $CURRENT_TAG"
+              echo "## v$CURRENT_TAG"
               echo ""
               echo "Initial release of actsense."
               echo "EOF"
@@ -101,7 +101,7 @@ jobs:
             if [ -z "$CHANGELOG" ]; then
               {
                 echo "RELEASE_BODY<<EOF"
-                echo "## Release $CURRENT_TAG"
+                echo "## v$CURRENT_TAG"
                 echo ""
                 echo "### Changes since $PREV_TAG"
                 echo ""
@@ -111,13 +111,11 @@ jobs:
             else
               {
                 echo "RELEASE_BODY<<EOF"
-                echo "## Release $CURRENT_TAG"
+                echo "## v$CURRENT_TAG"
                 echo ""
                 echo "### Changes since $PREV_TAG"
                 echo ""
-                echo '```'
                 echo "$CHANGELOG"
-                echo '```'
                 echo "EOF"
               } >> $GITHUB_ENV
             fi
@@ -133,4 +131,4 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{ github.repository }}/releases \
-            -d "{\"tag_name\":\"$TAG_NAME\",\"name\":\"Release $TAG_NAME\",\"body\":$(echo -n \"$RELEASE_BODY\" | jq -Rs .),\"draft\":false,\"prerelease\":false}"
+            -d "{\"tag_name\":\"$TAG_NAME\",\"name\":\"v$TAG_NAME\",\"body\":$(echo -n \"$RELEASE_BODY\" | jq -Rs .),\"draft\":false,\"prerelease\":false}"
