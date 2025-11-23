@@ -77,7 +77,7 @@ jobs:
         run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Fetch all tags
-        run: git fetch --tags
+        run: git fetch --tags --force
 
       - name: Generate release notes
         run: |
