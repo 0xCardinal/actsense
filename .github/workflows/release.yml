@@ -115,9 +115,9 @@ jobs:
                 echo ""
                 echo "### Changes since $PREV_TAG"
                 echo ""
-                echo "\`\`\`"
+                echo '```'
                 echo "$CHANGELOG"
-                echo "\`\`\`"
+                echo '```'
                 echo "EOF"
               } >> $GITHUB_ENV
             fi
