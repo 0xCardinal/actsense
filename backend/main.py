@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, Set
 import os
 import uvicorn
-
+from urllib.parse import urlparse
 from github_client import GitHubClient
 from workflow_parser import WorkflowParser
 from security_auditor import SecurityAuditor
@@ -319,14 +319,14 @@ async def audit(request: AuditRequest):
         if request.repository:
             # Parse repository: owner/repo or full URL
             repo_str = request.repository
-            if "github.com" in repo_str:
-                # Extract owner/repo from URL
-                parts = repo_str.split("github.com/")[-1].split("/")
-                if len(parts) >= 2:
-                    owner, repo = parts[0], parts[1].replace(".git", "")
-                else:
-                    raise HTTPException(status_code=400, detail="Invalid repository URL")
-            else:
+            # Check if repo_str is a full GitHub URL
+            parsed_url = urlparse(repo_str)
+            if parsed_url.scheme and parsed_url.netloc:
+                # Allow both github.com and www.github.com
+                if parsed_url.netloc not in ("github.com", "www.github.com"):
+                    raise HTTPException(status_code=400, detail="Only github.com repository URLs are supported")
+                path_parts = parsed_url.path.strip("/").split("/")
+                if len(path_parts) < 2:
                 parts = repo_str.split("/")
                 if len(parts) != 2:
                     raise HTTPException(status_code=400, detail="Invalid repository format. Use 'owner/repo'")
