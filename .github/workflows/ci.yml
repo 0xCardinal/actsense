@@ -17,7 +17,10 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3.11 git
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y python3.11 python3.11-venv git
 
       - name: Install uv
         run: |
@@ -52,6 +55,9 @@ jobs:
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
 
+      - name: Install patch-package globally
+        run: npm install -g patch-package
+
       - name: Install dependencies
         run: |
           cd frontend
@@ -84,7 +90,10 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3.11 git
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y python3.11 python3.11-venv git
 
       - name: Install uv
         run: |
@@ -113,6 +122,9 @@ jobs:
         run: |
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
+
+      - name: Install patch-package globally
+        run: npm install -g patch-package
 
       - name: Install dependencies
         run: |
