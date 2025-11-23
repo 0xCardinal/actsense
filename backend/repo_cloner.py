@@ -6,6 +6,7 @@ import os
 from typing import Optional, Tuple
 from pathlib import Path
 import re
+from urllib.parse import quote
 
 class RepoCloner:
     """Handle cloning and cleanup of repositories."""
@@ -47,8 +48,9 @@ class RepoCloner:
             # Additional check for forbidden characters in the token
             if any(c in token for c in '@:/\\ \n\r\t'):
                 raise ValueError("Token contains forbidden characters")
-            # For private repos, use token in URL
-            repo_url = f"https://{token}@github.com/{owner}/{repo}.git"
+            # For private repos, use token in URL. URL-encode the token to ensure safety.
+            safe_token = quote(token, safe='')
+            repo_url = f"https://{safe_token}@github.com/{owner}/{repo}.git"
         
         # Create unique directory for this clone
         clone_dir = self.base_dir / f"{owner}_{repo}_{os.getpid()}"
