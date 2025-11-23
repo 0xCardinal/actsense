@@ -88,14 +88,38 @@ jobs:
           
           if [ -z "$PREV_TAG" ]; then
             # No previous tag found - this is the initial release
-            echo "RELEASE_BODY=## Release $CURRENT_TAG"$'\n\n'"Initial release of actsense." >> $GITHUB_ENV
+            {
+              echo "RELEASE_BODY<<EOF"
+              echo "## Release $CURRENT_TAG"
+              echo ""
+              echo "Initial release of actsense."
+              echo "EOF"
+            } >> $GITHUB_ENV
           else
             # Generate changelog between previous tag and current tag
             CHANGELOG=$(git log --pretty=format:'- %s (%h)' ${PREV_TAG}..${CURRENT_TAG} 2>/dev/null || echo "")
             if [ -z "$CHANGELOG" ]; then
-              echo "RELEASE_BODY=## Release $CURRENT_TAG"$'\n\n'"### Changes since $PREV_TAG"$'\n\n'"No changes found." >> $GITHUB_ENV
+              {
+                echo "RELEASE_BODY<<EOF"
+                echo "## Release $CURRENT_TAG"
+                echo ""
+                echo "### Changes since $PREV_TAG"
+                echo ""
+                echo "No changes found."
+                echo "EOF"
+              } >> $GITHUB_ENV
             else
-              echo "RELEASE_BODY=## Release $CURRENT_TAG"$'\n\n'"### Changes since $PREV_TAG"$'\n\n'"\`\`\`"$'\n'"$CHANGELOG"$'\n'"\`\`\`" >> $GITHUB_ENV
+              {
+                echo "RELEASE_BODY<<EOF"
+                echo "## Release $CURRENT_TAG"
+                echo ""
+                echo "### Changes since $PREV_TAG"
+                echo ""
+                echo "\`\`\`"
+                echo "$CHANGELOG"
+                echo "\`\`\`"
+                echo "EOF"
+              } >> $GITHUB_ENV
             fi
           fi
 
