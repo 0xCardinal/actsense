@@ -81,10 +81,11 @@ jobs:
 
       - name: Generate release notes
         run: |
+          set -e
           CURRENT_TAG=${GITHUB_REF#refs/tags/}
           
-          # Try to find the previous tag using git describe (excludes current tag)
-          PREV_TAG=$(git describe --tags --abbrev=0 ${CURRENT_TAG}^ 2>/dev/null || git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -1 || echo "")
+          # Get all tags sorted by version, excluding current tag
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -1 || echo "")
           
           if [ -z "$PREV_TAG" ]; then
             # No previous tag found - this is the initial release
@@ -97,7 +98,9 @@ jobs:
             } >> $GITHUB_ENV
           else
             # Generate changelog between previous tag and current tag
-            CHANGELOG=$(git log --pretty=format:'- %s (%h)' ${PREV_TAG}..${CURRENT_TAG} 2>/dev/null || echo "")
+            # Use merge-base to handle cases where tags might not be in direct lineage
+            CHANGELOG=$(git log --pretty=format:'- %s (%h)' $(git merge-base ${PREV_TAG} ${CURRENT_TAG} 2>/dev/null || echo ${PREV_TAG})..${CURRENT_TAG} 2>/dev/null || echo "")
+            
             if [ -z "$CHANGELOG" ]; then
               {
                 echo "RELEASE_BODY<<EOF"
@@ -126,9 +129,25 @@ jobs:
 
       - name: Create Release
         run: |
-          curl -X POST \
+          set -e
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{ github.repository }}/releases \
-            -d "{\"tag_name\":\"$TAG_NAME\",\"name\":\"v$TAG_NAME\",\"body\":$(echo -n \"$RELEASE_BODY\" | jq -Rs .),\"draft\":false,\"prerelease\":false}"
+            -d "{\"tag_name\":\"$TAG_NAME\",\"name\":\"v$TAG_NAME\",\"body\":$(echo -n \"$RELEASE_BODY\" | jq -Rs .),\"draft\":false,\"prerelease\":false}")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          if [ "$HTTP_CODE" -eq 201 ]; then
+            echo "✅ Release created successfully"
+            echo "$BODY" | jq -r '.html_url' || echo "Release URL not available"
+          elif [ "$HTTP_CODE" -eq 422 ]; then
+            echo "⚠️ Release already exists (HTTP 422)"
+            echo "$BODY" | jq -r '.message' || echo "Release already exists"
+          else
+            echo "❌ Failed to create release (HTTP $HTTP_CODE)"
+            echo "$BODY"
+            exit 1
+          fi
