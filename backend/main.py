@@ -327,6 +327,10 @@ async def audit(request: AuditRequest):
                     raise HTTPException(status_code=400, detail="Only github.com repository URLs are supported")
                 path_parts = parsed_url.path.strip("/").split("/")
                 if len(path_parts) < 2:
+                    raise HTTPException(status_code=400, detail="Invalid repository URL")
+                owner, repo = path_parts[0], path_parts[1].replace(".git", "")
+            else:
+                # Not a full URL, treat as owner/repo format
                 parts = repo_str.split("/")
                 if len(parts) != 2:
                     raise HTTPException(status_code=400, detail="Invalid repository format. Use 'owner/repo'")
