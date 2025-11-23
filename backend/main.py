@@ -405,9 +405,12 @@ if os.path.exists(FRONTEND_BUILD_PATH):
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Not found")
         
-        file_path = os.path.join(FRONTEND_BUILD_PATH, full_path)
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return FileResponse(file_path)
+        # Normalize and check the path is within FRONTEND_BUILD_PATH
+        abs_frontend_root = os.path.abspath(FRONTEND_BUILD_PATH)
+        file_path = os.path.normpath(os.path.join(FRONTEND_BUILD_PATH, full_path))
+        abs_file_path = os.path.abspath(file_path)
+        if abs_file_path.startswith(abs_frontend_root) and os.path.exists(abs_file_path) and os.path.isfile(abs_file_path):
+            return FileResponse(abs_file_path)
         # Serve index.html for SPA routing
         return FileResponse(os.path.join(FRONTEND_BUILD_PATH, "index.html"))
 
