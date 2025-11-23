@@ -12,7 +12,7 @@ Get started with actsense in minutes. This guide will help you set up and run yo
 Before you begin, ensure you have:
 
 - **Docker and Docker Compose** (for Docker installation) OR
-- **Python 3.8+** installed (for manual installation)
+- **Python 3.12+** installed (for manual installation)
 - **Node.js 16+** and npm installed (for manual installation)
 - **Git** (optional, for repository cloning)
 

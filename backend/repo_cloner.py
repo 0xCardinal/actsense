@@ -36,8 +36,13 @@ class RepoCloner:
         
         # Use token in URL if provided (for private repos)
         if token:
-            # Validate token: only allow alphanumeric, underscore, and dash, typical of GitHub tokens (minimum 20, maximum 100 characters for sanity)
-            if not re.fullmatch(r'^[A-Za-z0-9_\-]{20,100}$', token):
+            # Validate token: GitHub tokens can be:
+            # - Classic tokens: ghp_ followed by 36 alphanumeric characters (40 total)
+            # - Fine-grained tokens: github_pat_ followed by alphanumeric/underscore/dash (longer)
+            # - Legacy tokens: alphanumeric/underscore/dash, 20-100 chars
+            if not (re.fullmatch(r'^ghp_[A-Za-z0-9]{36}$', token) or
+                    re.fullmatch(r'^github_pat_[A-Za-z0-9_\-]{20,}$', token) or
+                    re.fullmatch(r'^[A-Za-z0-9_\-]{20,100}$', token)):
                 raise ValueError("Invalid GitHub token format")
             # For private repos, use token in URL
             repo_url = f"https://{token}@github.com/{owner}/{repo}.git"

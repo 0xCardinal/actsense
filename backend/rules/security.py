@@ -22,8 +22,21 @@ def check_secrets_in_workflow(workflow: Dict[str, Any], content: Optional[str] =
 
     def check_value(value, path=""):
         if isinstance(value, str):
-            # Check for hardcoded secrets patterns
+            # Check for hardcoded secrets patterns in string values
             if re.search(r'(password|secret|token|key|api[_-]?key)\s*[:=]\s*["\']?[a-zA-Z0-9]{20,}', value, re.IGNORECASE):
+                issues.append({
+                    "type": "potential_hardcoded_secret",
+                    "severity": "critical",
+                    "message": f"Potential hardcoded secret found at {path}. This is a critical security vulnerability that could expose sensitive credentials.",
+                    "path": path,
+                    "evidence": {
+                        "location": path,
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/potential_hardcoded_secret"
+                    },
+                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/potential_hardcoded_secret"
+                })
+            # Also check if the value itself looks like a secret (long alphanumeric string)
+            elif len(value) >= 20 and re.match(r'^[a-zA-Z0-9_\-]{20,}$', value) and path and re.search(r'(password|secret|token|key|api[_-]?key)', path, re.IGNORECASE):
                 issues.append({
                     "type": "potential_hardcoded_secret",
                     "severity": "critical",

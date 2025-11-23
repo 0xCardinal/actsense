@@ -9,7 +9,7 @@ This guide covers detailed installation instructions for actsense on different p
 
 ### System Requirements
 
-- **Python**: 3.11 or higher
+- **Python**: 3.12 or higher
 - **Node.js**: 20.0 or higher
 - **npm**: Comes with Node.js
 - **Git**: Required for repository cloning features
@@ -153,9 +153,9 @@ The Docker image uses `uv` for fast, reproducible dependency installation.
 **Problem:** `python3: command not found` or Python version too old
 
 **Solution:**
-- macOS: Install via Homebrew: `brew install python@3.11`
-- Linux: `sudo apt-get install python3.11 python3.11-venv`
-- Windows: Download Python 3.11+ from [python.org](https://www.python.org/downloads/)
+- macOS: Install via Homebrew: `brew install python@3.12`
+- Linux: `sudo apt-get install python3.12 python3.12-venv`
+- Windows: Download Python 3.12+ from [python.org](https://www.python.org/downloads/)
 
 **Problem:** `uv: command not found`
 
@@ -199,7 +199,7 @@ uv cache clean
 uv sync
 
 # If issues persist, check Python version
-python3 --version  # Should be 3.11 or higher
+python3 --version  # Should be 3.12 or higher
 ```
 
 ### Verification

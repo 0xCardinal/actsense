@@ -217,8 +217,9 @@ class TestSecurityAuditorMethods:
         }
         content = "name: Test\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n        env:\n          API_KEY: sk_live_123456789012345678901234567890"
         issues = await SecurityAuditor.audit_workflow(workflow, content=content)
-        # Should detect secrets
-        assert any("secret" in issue.get("type", "").lower() for issue in issues)
+        # Should detect secrets - check for potential_hardcoded_secret or secret_in_environment
+        secret_issues = [issue for issue in issues if "secret" in issue.get("type", "").lower() or "potential_hardcoded" in issue.get("type", "")]
+        assert len(secret_issues) > 0, f"No secret issues found. Issues: {[i.get('type') for i in issues]}"
     
     @pytest.mark.asyncio
     async def test_audit_workflow_with_self_hosted(self):

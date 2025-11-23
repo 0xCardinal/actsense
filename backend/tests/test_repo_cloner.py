@@ -38,13 +38,13 @@ class TestRepoCloner:
             assert "owner" in clone_path
             assert "repo" in clone_path
             
-            # Verify git clone was called
-            mock_run.assert_called_once()
-            call_args = mock_run.call_args
-            assert "git" in call_args[0][0]
-            assert "clone" in call_args[0][0]
-            assert "--depth" in call_args[0][0]
-            assert "1" in call_args[0][0]
+            # Verify git clone was called (first call)
+            assert mock_run.call_count >= 1
+            first_call_args = mock_run.call_args_list[0][0][0]
+            assert "git" in first_call_args
+            assert "clone" in first_call_args
+            assert "--depth" in first_call_args
+            assert "1" in first_call_args
     
     @patch('repo_cloner.subprocess.run')
     def test_clone_repository_with_token(self, mock_run):
@@ -54,11 +54,14 @@ class TestRepoCloner:
         with tempfile.TemporaryDirectory() as tmpdir:
             cloner = RepoCloner(base_dir=tmpdir)
             
-            clone_path, _ = cloner.clone_repository("owner", "repo", token="test-token")
+            # Use a valid GitHub token format (40+ characters, alphanumeric)
+            valid_token = "ghp_" + "A" * 36  # GitHub token format
             
-            # Verify token was used in URL
-            call_args = mock_run.call_args
-            assert "test-token" in str(call_args[0][0])
+            clone_path, _ = cloner.clone_repository("owner", "repo", token=valid_token)
+            
+            # Verify token was used in URL (first call is the clone command)
+            first_call_args = mock_run.call_args_list[0][0][0]
+            assert valid_token in str(first_call_args)
     
     @patch('repo_cloner.subprocess.run')
     def test_clone_repository_with_branch(self, mock_run):
@@ -70,10 +73,10 @@ class TestRepoCloner:
             
             clone_path, _ = cloner.clone_repository("owner", "repo", branch="develop")
             
-            # Verify branch was specified
-            call_args = mock_run.call_args
-            assert "-b" in call_args[0][0]
-            assert "develop" in call_args[0][0]
+            # Verify branch was specified in the clone command (first call)
+            first_call_args = mock_run.call_args_list[0][0][0]
+            assert "-b" in first_call_args
+            assert "develop" in first_call_args
     
     @patch('repo_cloner.subprocess.run')
     def test_clone_repository_failure(self, mock_run):

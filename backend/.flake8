@@ -1,0 +1,16 @@
+[flake8]
+exclude =
+    .venv,
+    .git,
+    __pycache__,
+    *.pyc,
+    *.pyo,
+    *.egg-info,
+    build,
+    dist,
+    .eggs
+max-line-length = 127
+max-complexity = 10
+select = E,W,F
+ignore = E501,W503
+
