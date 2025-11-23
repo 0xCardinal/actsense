@@ -91,18 +91,23 @@ fi
 print_status "Activating virtual environment..."
 source venv/bin/activate
 
-# Upgrade pip
-print_status "Upgrading pip..."
-pip install --upgrade pip --quiet
+# Check if uv is installed, install if not
+if ! command -v uv &> /dev/null; then
+    print_status "Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
 
-# Install Python dependencies
-print_status "Installing Python dependencies..."
-pip install -r requirements.txt --quiet
+# Install Python dependencies using uv
+print_status "Installing Python dependencies with uv..."
+cd backend
+uv sync
 
 if [ $? -ne 0 ]; then
     print_error "Failed to install Python dependencies"
     exit 1
 fi
+cd ..
 
 print_success "Backend setup complete"
 deactivate
@@ -146,7 +151,7 @@ echo ""
 print_success "Setup complete! 🎉"
 echo ""
 print_status "Next steps:"
-echo "  1. Run './start-integrated.sh' to start the application"
+echo "  1. Run './start.sh' to start the application"
 echo "  2. Or run backend and frontend separately:"
 echo "     - Backend: cd backend && source venv/bin/activate && uvicorn main:app --reload"
 echo "     - Frontend: cd frontend && npm run dev"

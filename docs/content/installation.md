@@ -9,10 +9,11 @@ This guide covers detailed installation instructions for actsense on different p
 
 ### System Requirements
 
-- **Python**: 3.8 or higher
-- **Node.js**: 16.0 or higher
+- **Python**: 3.11 or higher
+- **Node.js**: 20.0 or higher
 - **npm**: Comes with Node.js
-- **Git**: Optional, for repository cloning features
+- **Git**: Required for repository cloning features
+- **uv**: Python package manager (installed automatically by setup script)
 - **Operating System**: macOS, Linux, or Windows
 
 ### Installation Methods
@@ -40,18 +41,15 @@ cd actsense
 ```bash
 cd backend
 
-# Create virtual environment
-python3 -m venv venv
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.cargo/bin:$PATH"
 
-# Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-# On Windows:
-venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies using uv
+uv sync
 ```
+
+**Note:** `uv` is a fast Python package manager that handles dependency locking automatically. The project uses `pyproject.toml` and `uv.lock` for reproducible builds.
 
 **Step 3: Frontend Setup**
 
@@ -101,51 +99,71 @@ EOF
 
 **Integrated Script:**
 ```bash
-./start-integrated.sh
+./start.sh
 ```
 
 **Manual Start:**
 ```bash
 # Terminal 1 - Backend
 cd backend
-source venv/bin/activate
-uvicorn main:app --reload --port 8000
+uv run uvicorn main:app --reload --port 8000
 
 # Terminal 2 - Frontend
 cd frontend
 npm run dev
 ```
 
+**Note:** With `uv`, you don't need to activate a virtual environment. `uv run` automatically manages the environment.
+
 #### Production Mode
 
 **Backend:**
 ```bash
 cd backend
-source venv/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000
+uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 **Frontend:**
 ```bash
 cd frontend
 npm run build
-# Serve the dist/ directory with a web server
+# The backend will automatically serve the built frontend from frontend/dist
 ```
 
-### Docker Installation (Coming Soon)
+### Docker Installation
 
-Docker installation will be available in a future release.
+Docker installation is available and recommended for production use:
+
+```bash
+docker compose up --build
+```
+
+Or with a GitHub token:
+
+```bash
+GITHUB_TOKEN=ghp_your_token_here docker compose up --build
+```
+
+The Docker image uses `uv` for fast, reproducible dependency installation.
 
 ### Troubleshooting
 
 #### Python Issues
 
-**Problem:** `python3: command not found`
+**Problem:** `python3: command not found` or Python version too old
 
 **Solution:**
-- macOS: Install via Homebrew: `brew install python3`
-- Linux: `sudo apt-get install python3 python3-pip`
-- Windows: Download from [python.org](https://www.python.org/downloads/)
+- macOS: Install via Homebrew: `brew install python@3.11`
+- Linux: `sudo apt-get install python3.11 python3.11-venv`
+- Windows: Download Python 3.11+ from [python.org](https://www.python.org/downloads/)
+
+**Problem:** `uv: command not found`
+
+**Solution:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.cargo/bin:$PATH"
+```
 
 #### Node.js Issues
 
@@ -167,24 +185,37 @@ uvicorn main:app --port 8001
 # Change frontend port (edit vite.config.js)
 ```
 
-#### Virtual Environment Issues
+#### uv Issues
 
-**Problem:** `venv` module not found
+**Problem:** `uv sync` fails or dependencies not installing
 
 **Solution:**
 ```bash
-# Install venv
-python3 -m pip install --user virtualenv
+# Ensure you're in the backend directory
+cd backend
+
+# Clear uv cache and reinstall
+uv cache clean
+uv sync
+
+# If issues persist, check Python version
+python3 --version  # Should be 3.11 or higher
 ```
 
 ### Verification
 
 To verify your installation:
 
-1. Start the backend: `cd backend && source venv/bin/activate && uvicorn main:app`
+1. Start the backend: `cd backend && uv run uvicorn main:app`
 2. Visit `http://localhost:8000/docs` - you should see the API documentation
 3. Start the frontend: `cd frontend && npm run dev`
 4. Visit `http://localhost:3000` - you should see the actsense interface
+
+Or use the integrated script:
+```bash
+./start.sh
+```
+Then visit `http://localhost:8000` - the backend serves the built frontend.
 
 ### Next Steps
 

@@ -103,7 +103,7 @@ The application will be available at `http://localhost:8000`.
 Use the integrated development script:
 
 ```bash
-./start-integrated.sh
+./start.sh
 ```
 
 This will:

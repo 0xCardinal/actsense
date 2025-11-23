@@ -31,15 +31,35 @@ WORKDIR /app
 
 # System dependencies required by git operations in the auditor
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git && \
+    apt-get install -y --no-install-recommends git curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Install backend dependencies
-COPY backend/requirements.txt /app/backend/requirements.txt
-RUN pip install --no-cache-dir -r /app/backend/requirements.txt
+# Install uv and copy to /usr/local/bin for easy access
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    if [ -f /root/.cargo/bin/uv ]; then \
+        cp /root/.cargo/bin/uv /usr/local/bin/uv && \
+        chmod +x /usr/local/bin/uv; \
+    elif [ -f /root/.local/bin/uv ]; then \
+        cp /root/.local/bin/uv /usr/local/bin/uv && \
+        chmod +x /usr/local/bin/uv; \
+    else \
+        find /root -name uv -type f -executable 2>/dev/null | head -1 | xargs -I {} cp {} /usr/local/bin/uv && \
+        chmod +x /usr/local/bin/uv; \
+    fi && \
+    uv --version
 
-# Copy backend source
-COPY backend /app/backend
+# Set PATH to include uv
+ENV PATH="/usr/local/bin:/root/.cargo/bin:$PATH"
+
+# Copy backend project files (pyproject.toml and uv.lock for dependency installation)
+COPY backend/pyproject.toml backend/uv.lock /app/backend/
+
+# Install backend dependencies using uv (before copying source for better caching)
+WORKDIR /app/backend
+RUN uv sync --no-dev
+
+# Copy backend source (pyproject.toml and uv.lock already exist, so this is safe)
+COPY backend/ /app/backend/
 
 # Copy built frontend assets into expected location
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
@@ -49,5 +69,5 @@ RUN mkdir -p /app/data/analyses /app/data/clones
 
 EXPOSE 8000
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 

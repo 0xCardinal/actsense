@@ -1,0 +1,90 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Check build output
+        run: |
+          if [ ! -d "frontend/dist" ]; then
+            echo "Build output directory not found"
+            exit 1
+          fi
+          if [ -z "$(ls -A frontend/dist)" ]; then
+            echo "Build output is empty"
+            exit 1
+          fi
+          echo "Build successful - $(du -sh frontend/dist | cut -f1) generated"
+
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.11 git
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          uv sync
+
+      - name: Verify critical imports
+        run: |
+          cd backend
+          uv run python -c "
+          import main
+          import security_auditor
+          import workflow_parser
+          import github_client
+          import graph_builder
+          import repo_cloner
+          import analysis_storage
+          import config_loader
+          from rules import security
+          print('All critical imports successful')
+          "
+
+      - name: Verify FastAPI app can initialize
+        run: |
+          cd backend
+          uv run python -c "
+          from main import app
+          assert app is not None
+          print('FastAPI app initialized successfully')
+          "
+

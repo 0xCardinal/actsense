@@ -20,10 +20,16 @@ fi
 echo "📦 Activating virtual environment..."
 source venv/bin/activate
 
+# Check if uv is installed
+if ! command -v uv &> /dev/null; then
+    echo "📥 Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 # Install/upgrade dependencies
 echo "📥 Installing dependencies..."
-pip install -q --upgrade pip
-pip install -q -r requirements.txt
+uv sync
 
 # Run tests
 echo ""
@@ -31,14 +37,13 @@ echo "🧪 Running tests..."
 echo ""
 
 if [ "$1" == "--verbose" ] || [ "$1" == "-v" ]; then
-    python -m pytest tests/ -v
+    uv run pytest tests/ -v
 elif [ "$1" == "--coverage" ] || [ "$1" == "-c" ]; then
-    pip install -q pytest-cov
-    python -m pytest tests/ --cov=. --cov-report=term-missing
+    uv run pytest tests/ --cov=. --cov-report=term-missing
 elif [ -n "$1" ]; then
-    python -m pytest tests/ -v -k "$1"
+    uv run pytest tests/ -v -k "$1"
 else
-    python -m pytest tests/ -v --tb=short
+    uv run pytest tests/ -v --tb=short
 fi
 
 echo ""

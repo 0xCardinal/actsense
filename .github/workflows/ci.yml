@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.11 git
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          uv sync
+
+      - name: Run tests with coverage
+        run: |
+          cd backend
+          uv run pytest --cov=. --cov-report=term-missing --cov-report=xml --cov-report=html
+
+      - name: Check test coverage
+        run: |
+          cd backend
+          uv run coverage report --format=total
+          echo "Coverage report generated"
+
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Verify build output
+        run: |
+          if [ ! -d "frontend/dist" ]; then
+            echo "Build output directory not found"
+            exit 1
+          fi
+          if [ -z "$(ls -A frontend/dist)" ]; then
+            echo "Build output is empty"
+            exit 1
+          fi
+          echo "Frontend build successful"
+
+  backend-lint:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.11 git
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Sync dependencies (includes flake8)
+        run: |
+          cd backend
+          uv sync
+
+      - name: Run flake8
+        run: |
+          cd backend
+          uv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          uv run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Check build for errors
+        run: |
+          cd frontend
+          if ! npm run build 2>&1 | tee /tmp/build.log; then
+            echo "Build failed"
+            exit 1
+          fi
+          if grep -i "error" /tmp/build.log | grep -v "node_modules"; then
+            echo "Build errors detected"
+            exit 1
+          fi

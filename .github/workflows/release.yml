@@ -13,34 +13,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.11 git
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: |
           cd backend
-          pip install -r requirements.txt
+          uv sync
 
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
           cd backend
-          pytest --cov=. --cov-report=term-missing
+          uv run pytest --cov=. --cov-report=term-missing
 
-  build-frontend:
-    name: Build Frontend
+  build-check:
+    name: Build Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+      - name: Install Node.js
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
 
       - name: Install dependencies
         run: |
@@ -52,16 +55,9 @@ jobs:
           cd frontend
           npm run build
 
-      - name: Upload frontend build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
-          retention-days: 30
-
-  create-release:
+  release:
     name: Create Release
-    needs: [test, build-frontend]
+    needs: [test, build-check]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -72,48 +68,34 @@ jobs:
           fetch-depth: 0
 
       - name: Get tag name
-        id: tag
-        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Generate release notes
-        id: release_notes
         run: |
-          TAG_NAME="${{ steps.tag.outputs.TAG_NAME }}"
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           
           if [ -z "$PREV_TAG" ]; then
-            NOTES="## Release $TAG_NAME
+            echo "RELEASE_BODY=## Release $TAG_NAME
 
-          Initial release of actsense.
-
-          ### Features
-          - Comprehensive security auditing for GitHub Actions
-          - Interactive graph visualization
-          - Detailed vulnerability documentation
-          - Multiple analysis methods"
+          Initial release of actsense." >> $GITHUB_ENV
           else
-            NOTES="## Release $TAG_NAME
+            echo "RELEASE_BODY=## Release $TAG_NAME
 
           ### Changes since $PREV_TAG
 
           \`\`\`
           $(git log --pretty=format:'- %s (%h)' $PREV_TAG..HEAD)
-          \`\`\`"
+          \`\`\`" >> $GITHUB_ENV
           fi
-          
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          name: Release ${{ steps.tag.outputs.TAG_NAME }}
-          body: ${{ steps.release_notes.outputs.notes }}
-          draft: false
-          prerelease: ${{ contains(steps.tag.outputs.TAG_NAME, '-') || contains(steps.tag.outputs.TAG_NAME, 'alpha') || contains(steps.tag.outputs.TAG_NAME, 'beta') || contains(steps.tag.outputs.TAG_NAME, 'rc') }}
-          files: |
-            frontend/dist/**
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            -d "{\"tag_name\":\"$TAG_NAME\",\"name\":\"Release $TAG_NAME\",\"body\":$(echo -n \"$RELEASE_BODY\" | jq -Rs .),\"draft\":false,\"prerelease\":false}"

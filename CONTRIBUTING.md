@@ -95,7 +95,7 @@ All public-facing vulnerability write-ups live under `docs/content/vulnerabiliti
 
 Use the provided script:
 ```bash
-./start-integrated.sh
+./start.sh
 ```
 
 This builds the frontend and starts the backend server.
