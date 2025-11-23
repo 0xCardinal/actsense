@@ -1,6 +1,7 @@
 [flake8]
 exclude =
     .venv,
+    venv,
     .git,
     __pycache__,
     *.pyc,
@@ -8,9 +9,15 @@ exclude =
     *.egg-info,
     build,
     dist,
-    .eggs
+    .eggs,
+    */venv,
+    */.venv,
+    **/venv/**,
+    **/.venv/**
 max-line-length = 127
 max-complexity = 10
 select = E,W,F
 ignore = E501,W503
+per-file-ignores =
+    __pycache__/*:F401
 
