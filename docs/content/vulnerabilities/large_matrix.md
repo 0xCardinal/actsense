@@ -63,7 +63,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Teams often over-provision matrices to match every environment. |
-| Risk | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Operational fatigue increases the chance of missing regressions. |
+| Risk | ![Low](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Operational fatigue increases the chance of missing regressions. |
 | Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Repository-wide CI slows down and may hit concurrency limits. |
 
 ## References

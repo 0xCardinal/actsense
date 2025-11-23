@@ -67,7 +67,7 @@ Compromising `npm test` yields a token with repository-wide write privileges.
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many workflow templates still use `write-all`. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Token abuse lets attackers rewrite history or publish trojans. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Token abuse lets attackers rewrite history or publish trojans. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Every repository resource accessible via the token is exposed. |
 
 ## References

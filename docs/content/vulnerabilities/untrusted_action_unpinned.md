@@ -62,7 +62,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Unpinned untrusted actions are common, and repository compromises can redirect to malicious code. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised actions can exfiltrate secrets, inject backdoors, or compromise entire CI/CD pipelines with minimal detection. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised actions can exfiltrate secrets, inject backdoors, or compromise entire CI/CD pipelines with minimal detection. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised actions can affect all workflows that use them, potentially compromising entire repositories and their secrets. |
 
 ## References

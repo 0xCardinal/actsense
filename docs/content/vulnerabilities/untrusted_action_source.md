@@ -62,7 +62,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many workflows use third-party actions, and supply-chain attacks through compromised actions are increasing. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised actions can exfiltrate secrets, inject backdoors, or compromise entire CI/CD pipelines. |
+| Risk | ![Medium](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised actions can exfiltrate secrets, inject backdoors, or compromise entire CI/CD pipelines. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised actions can affect all workflows that use them, potentially compromising entire repositories and their secrets. |
 
 ## References

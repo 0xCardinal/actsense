@@ -75,7 +75,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many tutorials misuse `pull_request_target` for testing forks. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Attackers gain maintainer-level repo access and secrets. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Attackers gain maintainer-level repo access and secrets. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Entire repository, environments, and registries tied to the token are exposed. |
 
 ## References

@@ -71,7 +71,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Low](https://img.shields.io/badge/-Low-green?style=flat-square) | Token manipulation is less common but creates high risk when present. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Extracted tokens can be used outside workflows to access repository resources, potentially enabling persistent compromise. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Extracted tokens can be used outside workflows to access repository resources, potentially enabling persistent compromise. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised tokens can affect all resources the token can access, potentially including the entire repository and its contents. |
 
 ## References

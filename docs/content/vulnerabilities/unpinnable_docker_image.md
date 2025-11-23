@@ -54,7 +54,7 @@ runs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Docker actions commonly use tags, and registry compromises or tag manipulation can redirect to malicious images. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised Docker images can contain backdoors, malicious code, or exfiltrate secrets, enabling full system compromise. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised Docker images can contain backdoors, malicious code, or exfiltrate secrets, enabling full system compromise. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised Docker actions can affect all workflows that use them, potentially compromising entire CI/CD pipelines and deployments. |
 
 ## References

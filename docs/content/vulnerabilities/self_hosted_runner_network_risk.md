@@ -63,7 +63,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Downloading and executing scripts is common, but unverified downloads create high risk. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Malicious scripts can fully compromise self-hosted runners, providing access to internal networks and secrets. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Malicious scripts can fully compromise self-hosted runners, providing access to internal networks and secrets. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised runners can affect all systems the runner can access, including internal networks, databases, and services. |
 
 ## References

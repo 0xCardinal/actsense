@@ -86,7 +86,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Auto-merge helpers are common in CI templates, especially for dependency updates. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Bypassing branch protection enables unreviewed code (or attacker payloads) to land on protected branches. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Bypassing branch protection enables unreviewed code (or attacker payloads) to land on protected branches. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised main/default branches impact every downstream deployment, release, or package built from them. |
 
 ## References

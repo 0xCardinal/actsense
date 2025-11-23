@@ -89,7 +89,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | File tampering requires compromised dependencies or malicious actions, but supply-chain attacks are increasing. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Tampered artifacts deployed to production can introduce backdoors, exfiltrate data, or compromise downstream systems. |
+| Risk | ![Low](https://img.shields.io/badge/-High-orange?style=flat-square) | Tampered artifacts deployed to production can introduce backdoors, exfiltrate data, or compromise downstream systems. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised build outputs affect all consumers of the artifacts, potentially spreading to production deployments and end users. |
 
 ## References

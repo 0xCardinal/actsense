@@ -28,7 +28,7 @@ toc: false
 </div>
 
 {{< cards cols="3" >}}
-  {{< card link="/vulnerabilities/" title="30+ Security Checks" icon="shield-check" >}}
+  {{< card link="/vulnerabilities/" title="50+ Security Checks" icon="shield-check" >}}
   {{< card link="/usage/" title="Interactive Analysis" icon="chart-bar" >}}
   {{< card link="/getting-started/" title="Self Hosting" icon="document-text" >}}
 {{< /cards >}}

@@ -65,7 +65,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Low](https://img.shields.io/badge/-Low-green?style=flat-square) | Most workflows don't need action write permissions, but when granted, the risk is extreme. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised workflows can inject persistent backdoors into actions, affecting all workflows that use them. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised workflows can inject persistent backdoors into actions, affecting all workflows that use them. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Malicious actions can be used by all workflows in the repository, potentially compromising the entire CI/CD pipeline and codebase. |
 
 ## References

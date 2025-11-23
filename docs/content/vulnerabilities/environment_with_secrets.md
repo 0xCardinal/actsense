@@ -65,7 +65,7 @@ Any actor who can trigger the workflow gains access to `PROD_API_KEY`.
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Many teams add environments but skip configuring protection. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Compromised workflow grants direct access to production secrets and deploy rights. |
+| Risk | ![Medium](https://img.shields.io/badge/-High-orange?style=flat-square) | Compromised workflow grants direct access to production secrets and deploy rights. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any system using the environment’s secrets (prod infra, APIs) is exposed. |
 
 ## References

@@ -66,7 +66,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Repositories often copy legacy workflows without aligning versions. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Older tags may contain public vulnerabilities or missing mitigations. |
+| Risk | ![Low](https://img.shields.io/badge/-High-orange?style=flat-square) | Older tags may contain public vulnerabilities or missing mitigations. |
 | Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Affected workflows continue to run insecure code even after others are patched. |
 
 ## References

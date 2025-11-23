@@ -80,7 +80,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Unvalidated checkout refs are less common but create high risk when present, especially with user input. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Attackers can checkout malicious branches or commits, enabling code injection, secret exfiltration, or system compromise. |
+| Risk | ![Medium](https://img.shields.io/badge/-High-orange?style=flat-square) | Attackers can checkout malicious branches or commits, enabling code injection, secret exfiltration, or system compromise. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised code from untrusted refs can affect all systems the workflow can access, including repositories, secrets, and deployment targets. |
 
 ## References

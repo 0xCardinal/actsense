@@ -53,7 +53,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Many teams leave retention at high values for convenience. |
-| Risk | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Longer retention increases exposure of sensitive artifacts. |
+| Risk | ![Low](https://img.shields.io/badge/-Low-green?style=flat-square) | Longer retention increases exposure of sensitive artifacts. |
 | Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Any secrets or proprietary code in artifacts remain accessible for months. |
 
 ## References

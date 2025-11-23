@@ -64,7 +64,7 @@ If the token leaks or is abused, there’s no record tying the action to a human
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Logging is often skipped to keep workflows simple. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Lack of logs blocks incident response and compliance reporting. |
+| Risk | ![Low](https://img.shields.io/badge/-High-orange?style=flat-square) | Lack of logs blocks incident response and compliance reporting. |
 | Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Any environment touched by the workflow becomes opaque to investigations. |
 
 ## References

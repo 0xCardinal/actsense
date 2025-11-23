@@ -57,7 +57,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Many workflows accept the default depth and never revisit it, especially in legacy repos. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Historical secrets or sensitive files become accessible to any job output or attacker with runner access. |
+| Risk | ![Medium](https://img.shields.io/badge/-High-orange?style=flat-square) | Historical secrets or sensitive files become accessible to any job output or attacker with runner access. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Leakage spans every historical commit—including past environments, credentials, and intellectual property. |
 
 ## References

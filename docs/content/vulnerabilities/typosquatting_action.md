@@ -60,7 +60,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Typosquatting attacks are less common but can be effective when users don't carefully verify action names. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Malicious typosquatting actions can exfiltrate secrets, inject backdoors, or compromise the entire CI/CD pipeline. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Malicious typosquatting actions can exfiltrate secrets, inject backdoors, or compromise the entire CI/CD pipeline. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised actions can affect all workflows that use them, potentially compromising the entire repository and its secrets. |
 
 ## References

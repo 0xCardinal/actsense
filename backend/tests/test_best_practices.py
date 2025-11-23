@@ -223,7 +223,7 @@ class TestMissingActionRepositories:
         
         missing_repo_issues = [i for i in issues if i.get("type") == "missing_action_repository"]
         assert len(missing_repo_issues) > 0
-        assert missing_repo_issues[0]["severity"] == "critical"
+        assert missing_repo_issues[0]["severity"] == "high"
         assert "nonexistent-org/nonexistent-repo" in missing_repo_issues[0]["message"]
         assert "actsense.dev/vulnerabilities/missing_action_repository" in missing_repo_issues[0]["evidence"]["vulnerability"]
     

@@ -83,7 +83,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Unvalidated workflow inputs are common, especially in deployment workflows, and create high risk when used in commands. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Unvalidated inputs can enable command injection, path traversal, or other attacks that compromise the workflow and its permissions. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Unvalidated inputs can enable command injection, path traversal, or other attacks that compromise the workflow and its permissions. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised workflows can affect all systems the workflow can access, including repositories, secrets, and deployment targets. |
 
 ## References

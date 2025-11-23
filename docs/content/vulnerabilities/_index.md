@@ -28,9 +28,7 @@ This section documents all security vulnerabilities detected by actsense. Each v
 ### Secrets & Credentials
 - [Potential Hardcoded Secret](/vulnerabilities/potential_hardcoded_secret/)
 - [Potential Hardcoded Cloud Credentials](/vulnerabilities/potential_hardcoded_cloud_credentials/)
-- [Long Term AWS Credentials](/vulnerabilities/long_term_aws_credentials/)
-- [Long Term Azure Credentials](/vulnerabilities/long_term_azure_credentials/)
-- [Long Term GCP Credentials](/vulnerabilities/long_term_gcp_credentials/)
+- [Long Term Cloud Credentials](/vulnerabilities/long_term_cloud_credentials/)
 - [Secret in Environment](/vulnerabilities/secret_in_environment/)
 - [Secrets Access Untrusted](/vulnerabilities/secrets_access_untrusted/)
 - [Secrets in Matrix](/vulnerabilities/secrets_in_matrix/)

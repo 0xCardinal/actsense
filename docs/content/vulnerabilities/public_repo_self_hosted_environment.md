@@ -66,7 +66,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Public repos with self-hosted runners are less common but create high risk when present. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Attackers can potentially bypass environment protection and access environment secrets through compromised self-hosted runners. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Attackers can potentially bypass environment protection and access environment secrets through compromised self-hosted runners. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised environment access can affect all systems and secrets in that environment, potentially including production infrastructure. |
 
 ## References

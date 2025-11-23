@@ -60,7 +60,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many workflows still use older action versions, and known vulnerabilities in those versions are publicly documented. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Older versions may have unpatched CVEs that allow secret leakage, code injection, or privilege escalation. |
+| Risk | ![Medium](https://img.shields.io/badge/-High-orange?style=flat-square) | Older versions may have unpatched CVEs that allow secret leakage, code injection, or privilege escalation. |
 | Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Impact depends on the specific vulnerability, but can affect all workflows using the outdated action. |
 
 ## References

@@ -56,7 +56,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many repos pin to default `v1` releases and forget to update. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Exploitable vulnerabilities in old action versions give attackers repo or cloud access. |
+| Risk | ![Medium](https://img.shields.io/badge/-High-orange?style=flat-square) | Exploitable vulnerabilities in old action versions give attackers repo or cloud access. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Every workflow using the deprecated action inherits the risk; builds, releases, deploys all affected. |
 
 ## References

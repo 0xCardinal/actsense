@@ -94,7 +94,7 @@ A forked PR can inject arbitrary code into `deploy.sh`; the workflow runs with m
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Many teams use `pull_request_target` or chained workflows for convenience. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Attackers can push unreviewed code to protected environments or access secrets. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Attackers can push unreviewed code to protected environments or access secrets. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised workflow affects all environments linked via `workflow_run` or deployments. |
 
 ## References

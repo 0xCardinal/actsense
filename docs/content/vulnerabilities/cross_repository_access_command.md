@@ -65,7 +65,7 @@ If `inputs.repo` is attacker-controlled, the workflow executes arbitrary code fr
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Pulling helper repos via shell commands is common in monorepos and legacy workflows. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Untrusted code executes with workflow privileges, enabling supply-chain compromise. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Untrusted code executes with workflow privileges, enabling supply-chain compromise. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Any service reachable by the workflow token (packages, infra) can be affected. |
 
 ## References

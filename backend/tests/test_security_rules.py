@@ -55,7 +55,7 @@ class TestLongTermCredentials:
         aws_issues = [i for i in issues if i.get("type") == "long_term_aws_credentials"]
         assert len(aws_issues) > 0
         assert aws_issues[0]["severity"] == "high"
-        assert "actsense.dev/vulnerabilities/long_term_aws_credentials" in aws_issues[0]["evidence"]["vulnerability"]
+        assert "actsense.dev/vulnerabilities/long_term_cloud_credentials" in aws_issues[0]["evidence"]["vulnerability"]
     
     def test_long_term_azure_credentials(self):
         """Test detection of Azure long-term credentials."""
@@ -83,7 +83,7 @@ class TestLongTermCredentials:
         issues = security_rules.check_secrets_in_workflow(workflow)
         azure_issues = [i for i in issues if i.get("type") == "long_term_azure_credentials"]
         assert len(azure_issues) > 0
-        assert "actsense.dev/vulnerabilities/long_term_azure_credentials" in azure_issues[0]["evidence"]["vulnerability"]
+        assert "actsense.dev/vulnerabilities/long_term_cloud_credentials" in azure_issues[0]["evidence"]["vulnerability"]
     
     def test_long_term_gcp_credentials(self):
         """Test detection of GCP long-term credentials."""
@@ -109,7 +109,7 @@ class TestLongTermCredentials:
         issues = security_rules.check_secrets_in_workflow(workflow)
         gcp_issues = [i for i in issues if i.get("type") == "long_term_gcp_credentials"]
         assert len(gcp_issues) > 0
-        assert "actsense.dev/vulnerabilities/long_term_gcp_credentials" in gcp_issues[0]["evidence"]["vulnerability"]
+        assert "actsense.dev/vulnerabilities/long_term_cloud_credentials" in gcp_issues[0]["evidence"]["vulnerability"]
 
 
 class TestSelfHostedRunners:
@@ -209,7 +209,7 @@ class TestDangerousEvents:
         
         pr_target_issues = [i for i in issues if i.get("type") == "insecure_pull_request_target"]
         assert len(pr_target_issues) > 0
-        assert pr_target_issues[0]["severity"] == "critical"
+        assert pr_target_issues[0]["severity"] == "high"
         assert "actsense.dev/vulnerabilities/insecure_pull_request_target" in pr_target_issues[0]["evidence"]["vulnerability"]
     
     def test_dangerous_event_workflow_run(self):

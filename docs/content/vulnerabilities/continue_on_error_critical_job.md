@@ -73,7 +73,7 @@ If `migrate.sh` fails, the job still reports success and continues with deploy, 
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Teams often enable `continue-on-error` temporarily and forget to remove it. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Hidden failures push broken builds or skip security gates. |
+| Risk | ![Medium](https://img.shields.io/badge/-High-orange?style=flat-square) | Hidden failures push broken builds or skip security gates. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | All downstream deployments, migrations, or releases rely on the silently failing step. |
 
 ## References

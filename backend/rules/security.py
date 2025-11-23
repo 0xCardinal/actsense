@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import json
 import os
+import base64
 from github_client import GitHubClient
 from fastapi import HTTPException
 import sys
@@ -82,9 +83,9 @@ def check_secrets_in_workflow(workflow: Dict[str, Any], content: Optional[str] =
                         "job": job_name,
                         "step": step.get("name", "unnamed"),
                         "credential_type": "AWS long-term credentials",
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_aws_credentials"
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
                     },
-                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_aws_credentials"
+                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
                 })
 
             # Check for Azure credentials
@@ -99,9 +100,9 @@ def check_secrets_in_workflow(workflow: Dict[str, Any], content: Optional[str] =
                         "job": job_name,
                         "step": step.get("name", "unnamed"),
                         "credential_type": "Azure long-term credentials",
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_azure_credentials"
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
                     },
-                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_azure_credentials"
+                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
                 })
 
             # Check for GCP credentials
@@ -116,9 +117,9 @@ def check_secrets_in_workflow(workflow: Dict[str, Any], content: Optional[str] =
                         "job": job_name,
                         "step": step.get("name", "unnamed"),
                         "credential_type": "GCP long-term credentials",
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_gcp_credentials"
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
                     },
-                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_gcp_credentials"
+                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
                 })
 
             # Check for hardcoded credentials in run commands
@@ -184,7 +185,7 @@ def check_self_hosted_runners(workflow: Dict[str, Any], is_public_repo: bool = F
         # Basic self-hosted runner warning
         issues.append({
             "type": "self_hosted_runner",
-            "severity": "medium",
+            "severity": "low",
             "message": f"Job '{job_name}' uses self-hosted runner '{runs_on_value}'. Self-hosted runners can be compromised and pose security risks.",
             "job": job_name,
             "runs-on": runs_on_value,
@@ -215,7 +216,7 @@ def check_self_hosted_runners(workflow: Dict[str, Any], is_public_repo: bool = F
         if is_issue_triggered and is_public_repo:
             issues.append({
                 "type": "self_hosted_runner_issue_exposure",
-                "severity": "high",
+                "severity": "critical",
                 "message": f"Self-hosted runner in job '{job_name}' can be triggered by issue events in a public repository, allowing potential abuse.",
                 "job": job_name,
                 "evidence": {
@@ -314,7 +315,7 @@ def check_runner_label_confusion(workflow: Dict[str, Any]) -> List[Dict[str, Any
                 if confusing_label in runner_lower or (len(runners) > 1 and any(confusing_label in str(r).lower() for r in runners)):
                     issues.append({
                         "type": "runner_label_confusion",
-                        "severity": "medium",
+                        "severity": "high",
                         "message": f"Job '{job_name}' uses potentially confusing runner label. {description}",
                         "job": job_name,
                         "runner": runner,
@@ -459,7 +460,7 @@ def check_repository_visibility_risks(workflow: Dict[str, Any], is_public_repo: 
     if has_secrets_access(workflow):
         issues.append({
             "type": "public_repo_self_hosted_secrets",
-            "severity": "high",
+            "severity": "critical",
             "message": "Self-hosted runner in public repository has access to secrets, creating potential exposure risk.",
             "evidence": {
                 "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/public_repo_self_hosted_secrets"
@@ -483,7 +484,7 @@ def check_repository_visibility_risks(workflow: Dict[str, Any], is_public_repo: 
     if has_environment_access(workflow):
         issues.append({
             "type": "public_repo_self_hosted_environment",
-            "severity": "medium",
+            "severity": "high",
             "message": "Self-hosted runner in public repository has environment access, creating potential privilege escalation risk.",
             "evidence": {
                 "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/public_repo_self_hosted_environment"
@@ -518,7 +519,7 @@ def check_dangerous_events(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
                     if not ref or "pull_request.head" in str(ref) or "pull_request.head.sha" in str(ref):
                         issues.append({
                             "type": "insecure_pull_request_target",
-                            "severity": "critical",
+                            "severity": "high",
                             "message": f"Workflow uses pull_request_target with checkout of PR code. This is a critical vulnerability that allows PRs from forks to execute code with write permissions.",
                             "job": job_name,
                             "step": step.get("name", "unnamed"),
@@ -575,7 +576,7 @@ def check_dangerous_events(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
                     # Check if input might be used in dangerous ways
                     issues.append({
                         "type": "unvalidated_workflow_input",
-                        "severity": "medium",
+                        "severity": "high",
                         "message": f"Workflow_call has optional input '{input_name}' without validation. Optional inputs should be validated to prevent security issues.",
                         "input": input_name,
                         "evidence": {
@@ -642,7 +643,7 @@ def check_checkout_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
                 if fetch_depth == 0:
                     issues.append({
                         "type": "checkout_full_history",
-                        "severity": "low",
+                        "severity": "medium",
                         "message": f"Job '{job_name}' fetches full git history (fetch-depth: 0). This may expose sensitive information from commit history.",
                         "job": job_name,
                         "evidence": {
@@ -876,7 +877,7 @@ def check_malicious_curl_pipe_bash(workflow: Dict[str, Any]) -> List[Dict[str, A
                     if re.search(pattern, run, re.IGNORECASE):
                         issues.append({
                             "type": "malicious_curl_pipe_bash",
-                            "severity": "high",
+                            "severity": "critical",
                             "message": f"Job '{job_name}' contains {description}. This pattern can execute malicious code downloaded from the internet.",
                             "job": job_name,
                             "step": step.get("name", "unnamed"),
@@ -894,8 +895,62 @@ def check_malicious_curl_pipe_bash(workflow: Dict[str, Any]) -> List[Dict[str, A
 
 
 def check_malicious_base64_decode(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Check for base64 decode execution patterns, which can hide malicious code."""
+    """Check for base64 decode execution patterns and decode base64 strings to detect hidden malicious code."""
     issues = []
+
+    def is_valid_base64(s: str) -> bool:
+        """Check if a string is valid base64."""
+        try:
+            # Remove whitespace and common quote characters
+            cleaned = s.strip().strip('"\'')
+            # Base64 strings should be at least 4 characters and contain only valid chars
+            if len(cleaned) < 4:
+                return False
+            # Check if it matches base64 pattern (A-Z, a-z, 0-9, +, /, =)
+            if not re.match(r'^[A-Za-z0-9+/=]+$', cleaned):
+                return False
+            # Try to decode it
+            base64.b64decode(cleaned, validate=True)
+            return True
+        except Exception:
+            return False
+
+    def decode_base64(s: str) -> Optional[str]:
+        """Try to decode a base64 string, return None if it fails."""
+        try:
+            cleaned = s.strip().strip('"\'')
+            decoded = base64.b64decode(cleaned, validate=True)
+            return decoded.decode('utf-8', errors='ignore')
+        except Exception:
+            return None
+
+    def check_malicious_content(content: str) -> Optional[str]:
+        """Check decoded content for malicious patterns."""
+        content_lower = content.lower()
+        
+        # Malicious patterns to check for in decoded content
+        malicious_patterns = [
+            (r'curl\s+.*\s*\|\s*(bash|sh|zsh|python|perl)', 'curl piped to shell/interpreter'),
+            (r'wget\s+.*\s*-O\s*-?\s*\|\s*(bash|sh|zsh|python|perl)', 'wget piped to shell/interpreter'),
+            (r'wget\s+.*\s*\|\s*(bash|sh|zsh|python|perl)', 'wget piped to shell/interpreter'),
+            (r'eval\s*\(', 'eval execution'),
+            (r'exec\s*\(', 'exec execution'),
+            (r'system\s*\(', 'system execution'),
+            (r'subprocess\s*\.', 'subprocess execution'),
+            (r'os\.system', 'os.system execution'),
+            (r'rm\s+-rf\s+/', 'dangerous rm -rf /'),
+            (r'mkfifo\s+.*\s*\|\s*(bash|sh|zsh)', 'mkfifo piped to shell'),
+            (r'nc\s+.*\s+-e\s+', 'netcat with execute flag'),
+            (r'python\s+-c\s+["\']import\s+os', 'python os import'),
+            (r'powershell\s+-encodedcommand', 'powershell encoded command'),
+            (r'iex\s*\(', 'powershell invoke expression'),
+            (r'chmod\s+[0-7]{3,4}\s+', 'chmod with numeric permissions'),
+        ]
+        
+        for pattern, description in malicious_patterns:
+            if re.search(pattern, content_lower):
+                return description
+        return None
 
     jobs = workflow.get("jobs", {})
 
@@ -904,33 +959,84 @@ def check_malicious_base64_decode(workflow: Dict[str, Any]) -> List[Dict[str, An
         for step in steps:
             run = step.get("run", "")
             if isinstance(run, str):
-                # Check for base64 decode execution patterns
-                patterns = [
-                    (r'echo\s+["\']?[A-Za-z0-9+/=]+["\']?\s*\|\s*base64\s+-d\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
+                # First, check for base64 decode execution patterns (existing check)
+                decode_patterns = [
+                    (r'echo\s+["\']?([A-Za-z0-9+/=]+)["\']?\s*\|\s*base64\s+-d\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
                     (r'base64\s+-d\s+.*\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
                     (r'base64\s+--decode\s+.*\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
-                    (r'echo\s+["\']?[A-Za-z0-9+/=]+["\']?\s*\|\s*base64\s+--decode\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
+                    (r'echo\s+["\']?([A-Za-z0-9+/=]+)["\']?\s*\|\s*base64\s+--decode\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
                     (r'eval\s*\(\s*base64\s+-d', 'eval with base64 decode'),
                     (r'eval\s*\(\s*base64\s+--decode', 'eval with base64 decode'),
                 ]
 
-                for pattern, description in patterns:
-                    if re.search(pattern, run, re.IGNORECASE):
+                for pattern, description in decode_patterns:
+                    match = re.search(pattern, run, re.IGNORECASE)
+                    if match:
+                        # Try to extract and decode the base64 string
+                        base64_str = None
+                        if match.groups():
+                            # Try to get the base64 string from the match
+                            for group in match.groups():
+                                if group and is_valid_base64(group):
+                                    base64_str = group
+                                    break
+                        
+                        decoded_content = None
+                        if base64_str:
+                            decoded_content = decode_base64(base64_str)
+                        
+                        # Check decoded content for malicious patterns
+                        malicious_desc = None
+                        if decoded_content:
+                            malicious_desc = check_malicious_content(decoded_content)
+                        
                         issues.append({
                             "type": "malicious_base64_decode",
                             "severity": "critical",
-                            "message": f"Job '{job_name}' contains {description}. This pattern can hide and execute malicious code.",
+                            "message": f"Job '{job_name}' contains {description}. This pattern can hide and execute malicious code." + 
+                                      (f" Decoded content contains: {malicious_desc}." if malicious_desc else ""),
                             "job": job_name,
                             "step": step.get("name", "unnamed"),
                             "evidence": {
                                 "job": job_name,
                                 "step": step.get("name", "unnamed"),
                                 "pattern": description,
+                                "decoded_content_detected": malicious_desc if malicious_desc else "No malicious patterns detected in decoded content",
                                 "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/malicious_base64_decode"
                             },
                             "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/malicious_base64_decode"
                         })
                         break  # Only report once per step
+
+                # Second, scan for base64 strings in the workflow and decode them
+                # Look for potential base64 strings (long alphanumeric strings with +/=)
+                base64_pattern = r'["\']?([A-Za-z0-9+/=]{20,})["\']?'
+                base64_matches = re.finditer(base64_pattern, run)
+                
+                for match in base64_matches:
+                    potential_base64 = match.group(1)
+                    if is_valid_base64(potential_base64):
+                        decoded = decode_base64(potential_base64)
+                        if decoded:
+                            # Check if decoded content looks malicious
+                            malicious_desc = check_malicious_content(decoded)
+                            if malicious_desc:
+                                issues.append({
+                                    "type": "malicious_base64_decode",
+                                    "severity": "critical",
+                                    "message": f"Job '{job_name}' contains a base64-encoded string that decodes to content with {malicious_desc}. This may be an attempt to hide malicious code.",
+                                    "job": job_name,
+                                    "step": step.get("name", "unnamed"),
+                                    "evidence": {
+                                        "job": job_name,
+                                        "step": step.get("name", "unnamed"),
+                                        "decoded_content_detected": malicious_desc,
+                                        "base64_length": len(potential_base64),
+                                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/malicious_base64_decode"
+                                    },
+                                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/malicious_base64_decode"
+                                })
+                                break  # Only report once per step
 
     return issues
 
@@ -1006,7 +1112,7 @@ def check_artipacked_vulnerability(workflow: Dict[str, Any]) -> List[Dict[str, A
 
                     for pattern, description in dangerous_patterns:
                         if re.search(pattern, path):
-                            severity = "high" if "../" in path else "medium"
+                            severity = "critical" if "../" in path else "high"
                             issues.append({
                                 "type": "artipacked_vulnerability",
                                 "severity": severity,
@@ -1029,7 +1135,7 @@ def check_artipacked_vulnerability(workflow: Dict[str, Any]) -> List[Dict[str, A
                     if "retention-days" not in with_params:
                         issues.append({
                             "type": "artipacked_vulnerability",
-                            "severity": "low",
+                            "severity": "high",
                             "message": f"Job '{job_name}' uploads artifacts without explicit retention policy. Artifacts may store sensitive data indefinitely.",
                             "job": job_name,
                             "step": step.get("name", "unnamed"),
@@ -1112,7 +1218,7 @@ def check_cross_repository_access(workflow: Dict[str, Any], current_repo: Option
                         if repo.lower() != current_repo.lower():
                             issues.append({
                                 "type": "cross_repository_access",
-                                "severity": "medium",
+                                "severity": "high",
                                 "message": f"Job '{job_name}' accesses a different repository: {repo}. This may have security implications.",
                                 "job": job_name,
                                 "step": step.get("name", "unnamed"),
@@ -1133,7 +1239,7 @@ def check_cross_repository_access(workflow: Dict[str, Any], current_repo: Option
                     if re.search(pattern, run, re.IGNORECASE):
                         issues.append({
                             "type": "cross_repository_access_command",
-                            "severity": "medium",
+                            "severity": "high",
                             "message": f"Job '{job_name}' accesses external repositories via command: {description}. This may have security implications.",
                             "job": job_name,
                             "step": step.get("name", "unnamed"),
@@ -1242,7 +1348,7 @@ def check_secrets_access_untrusted(workflow: Dict[str, Any]) -> List[Dict[str, A
                 if has_secrets:
                     issues.append({
                         "type": "secrets_access_untrusted",
-                        "severity": "high",
+                        "severity": "medium",
                         "message": f"Job '{job_name}' passes secrets to untrusted action '{uses}'. This is a security risk.",
                         "job": job_name,
                         "step": step.get("name", "unnamed"),
@@ -1264,7 +1370,7 @@ def check_secrets_access_untrusted(workflow: Dict[str, Any]) -> List[Dict[str, A
                     if isinstance(env_value, str) and "secrets." in env_value:
                         issues.append({
                             "type": "secret_in_environment",
-                            "severity": "medium",
+                            "severity": "high",
                             "message": f"Job '{job_name}' exposes secret in environment variable '{env_key}'. Secrets in environment variables may be logged or visible.",
                             "job": job_name,
                             "step": step.get("name", "unnamed"),
@@ -1343,7 +1449,7 @@ def check_file_tampering_protection(workflow: Dict[str, Any]) -> List[Dict[str, 
                     if re.search(r'(>|>>|cp\s+|mv\s+|rm\s+|write|overwrite)', run, re.IGNORECASE):
                         issues.append({
                             "type": "no_file_tampering_protection",
-                            "severity": "medium",
+                            "severity": "low",
                             "message": f"Build job '{job_name}' modifies files, which could be tampered with during build. File tampering protection should be implemented.",
                             "job": job_name,
                             "evidence": {
@@ -1440,7 +1546,7 @@ def check_code_injection_via_workflow_inputs(workflow: Dict[str, Any]) -> List[D
                             ]):
                                 issues.append({
                                     "type": "code_injection_via_input",
-                                    "severity": "high",
+                                    "severity": "critical",
                                     "message": f"Workflow_dispatch input '{input_name}' may be vulnerable to code injection. User-controlled input is used in shell commands without proper validation.",
                                     "input": input_name,
                                     "evidence": {
@@ -1851,7 +1957,7 @@ def check_hash_pinning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         if is_tag and not (is_full_sha or is_short_sha):
             issues.append({
                 "type": "no_hash_pinning",
-                "severity": "medium",
+                "severity": "high",
                 "message": f"Action '{action_ref}' uses version tag '{ref}' instead of an immutable commit SHA hash. Tags can be moved or overwritten, creating a security risk.",
                 "action": action_ref,
                 "tag": ref,
@@ -2181,7 +2287,7 @@ def check_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         if permissions == "write-all":
             issues.append({
                 "type": "overly_permissive",
-                "severity": "medium",
+                "severity": "high",
                 "message": "Workflow has write permissions to repository contents. This increases the attack surface if the workflow is compromised.",
                 "permissions": permissions,
                 "evidence": {
@@ -2197,7 +2303,7 @@ def check_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         if permissions.get("contents") == "write":
             issues.append({
                 "type": "overly_permissive",
-                "severity": "medium",
+                "severity": "high",
                 "message": "Workflow has write permissions to repository contents. This increases the attack surface if the workflow is compromised.",
                 "permissions": permissions,
                 "evidence": {
@@ -2248,7 +2354,7 @@ def check_github_token_permissions(workflow: Dict[str, Any]) -> List[Dict[str, A
         if write_permissions:
             issues.append({
                 "type": "github_token_write_permissions",
-                "severity": "medium",
+                "severity": "high",
                 "message": f"GITHUB_TOKEN has write permissions: {', '.join(write_permissions)}. Review if these are necessary.",
                 "permissions": permissions,
                 "evidence": {
@@ -2386,7 +2492,7 @@ def check_excessive_write_permissions(workflow: Dict[str, Any]) -> List[Dict[str
                 if operation in job_name_lower:
                     issues.append({
                         "type": "excessive_write_permissions",
-                        "severity": "medium",
+                        "severity": "high",
                         "message": f"Workflow has write permissions but job '{job_name}' appears to be read-only. Consider using read-only permissions.",
                         "job": job_name,
                         "evidence": {
@@ -2514,7 +2620,7 @@ def check_workflow_dispatch_inputs(workflow: Dict[str, Any]) -> List[Dict[str, A
                             if "run:" in workflow_str:
                                 issues.append({
                                     "type": "unvalidated_workflow_input",
-                                    "severity": "medium",
+                                    "severity": "high",
                                     "message": f"Workflow_dispatch input '{input_name}' may be used without validation. Optional inputs should be validated to prevent security issues.",
                                     "input": input_name,
                                     "evidence": {
@@ -2545,7 +2651,7 @@ def check_environment_secrets(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
                     if "secrets." in job_str:
                         issues.append({
                             "type": "environment_with_secrets",
-                            "severity": "low",
+                            "severity": "medium",
                             "message": f"Job '{job_name}' uses environment '{env_name}' with secrets. Ensure environment protection rules are configured.",
                             "job": job_name,
                             "environment": env_name,
@@ -2618,7 +2724,7 @@ async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[Gi
                 if is_archived is True:
                     issues.append({
                         "type": "deprecated_action",
-                        "severity": "high",
+                        "severity": "medium",
                         "message": f"Job '{job_name}' uses action '{uses}' from archived repository '{repo_key}'. Archived repositories are no longer maintained and may have security vulnerabilities.",
                         "job": job_name,
                         "step": step.get("name", "unnamed"),
@@ -2661,7 +2767,7 @@ async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[Gi
                     if action_name not in ["actions/checkout", "actions/upload-artifact", "actions/download-artifact"]:
                         issues.append({
                             "type": "deprecated_action",
-                            "severity": "low",
+                            "severity": "medium",
                             "message": f"Job '{job_name}' uses action '{uses}' with v1 version. v1 versions are often deprecated in favor of newer versions.",
                             "job": job_name,
                             "step": step.get("name", "unnamed"),
@@ -2757,7 +2863,7 @@ async def check_missing_action_repositories(workflow: Dict[str, Any], client: Op
                 if repo_exists is False:
                     issues.append({
                         "type": "missing_action_repository",
-                        "severity": "critical",
+                        "severity": "high",
                         "message": f"Job '{job_name}' references action '{uses}' from repository '{repo_key}' that does not exist or is not accessible. This will cause workflow failures at runtime.",
                         "job": job_name,
                         "step": step.get("name", "unnamed"),
@@ -2795,7 +2901,7 @@ def check_audit_logging(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         if has_sensitive_ops:
             issues.append({
                 "type": "insufficient_audit_logging",
-                "severity": "medium",
+                "severity": "low",
                 "message": f"Job '{job_name}' performs sensitive operations that should have detailed audit logging. Insufficient logging makes forensic analysis difficult.",
                 "job": job_name,
                 "evidence": {

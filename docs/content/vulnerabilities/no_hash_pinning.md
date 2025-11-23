@@ -60,7 +60,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Tag-based pinning is extremely common, and repository compromises or maintainer mistakes can redirect tags. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised actions can steal secrets, modify code, or deploy backdoors with the workflow's permissions. |
+| Risk | ![High](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised actions can steal secrets, modify code, or deploy backdoors with the workflow's permissions. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | All workflows using the compromised action are affected, potentially impacting all CI/CD pipelines and deployments. |
 
 ## References

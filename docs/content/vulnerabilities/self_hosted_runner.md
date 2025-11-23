@@ -60,7 +60,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Self-hosted runners are common in enterprise environments but require careful security configuration. |
-| Risk | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Compromised self-hosted runners can provide persistent access to infrastructure, networks, and internal systems. |
+| Risk | ![Low](https://img.shields.io/badge/-High-orange?style=flat-square) | Compromised self-hosted runners can provide persistent access to infrastructure, networks, and internal systems. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Compromised runners can affect all systems the runner can access, including internal networks, databases, and services. |
 
 ## References

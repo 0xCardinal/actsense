@@ -68,7 +68,7 @@ jobs:
 | Dimension | Severity | Notes |
 | --- | --- | --- |
 | Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Many workflows use third-party actions, and supply-chain attacks through compromised actions are increasing. |
-| Risk | ![Critical](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised actions can exfiltrate all secrets passed to them, enabling full system compromise and persistent access. |
+| Risk | ![Medium](https://img.shields.io/badge/-Critical-red?style=flat-square) | Compromised actions can exfiltrate all secrets passed to them, enabling full system compromise and persistent access. |
 | Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Stolen secrets can affect all systems the secrets authorize, potentially including production infrastructure, databases, and services. |
 
 ## References
