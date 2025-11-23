@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          cd backend
+          pytest --cov=. --cov-report=term-missing
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Upload frontend build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: [test, build-frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get tag name
+        id: tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          TAG_NAME="${{ steps.tag.outputs.TAG_NAME }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            NOTES="## Release $TAG_NAME
+
+          Initial release of actsense.
+
+          ### Features
+          - Comprehensive security auditing for GitHub Actions
+          - Interactive graph visualization
+          - Detailed vulnerability documentation
+          - Multiple analysis methods"
+          else
+            NOTES="## Release $TAG_NAME
+
+          ### Changes since $PREV_TAG
+
+          \`\`\`
+          $(git log --pretty=format:'- %s (%h)' $PREV_TAG..HEAD)
+          \`\`\`"
+          fi
+          
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.tag.outputs.TAG_NAME }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.TAG_NAME, '-') || contains(steps.tag.outputs.TAG_NAME, 'alpha') || contains(steps.tag.outputs.TAG_NAME, 'beta') || contains(steps.tag.outputs.TAG_NAME, 'rc') }}
+          files: |
+            frontend/dist/**
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
