@@ -44,6 +44,9 @@ class RepoCloner:
                     re.fullmatch(r'^github_pat_[A-Za-z0-9_\-]{20,}$', token) or
                     re.fullmatch(r'^[A-Za-z0-9_\-]{20,100}$', token)):
                 raise ValueError("Invalid GitHub token format")
+            # Additional check for forbidden characters in the token
+            if any(c in token for c in '@:/\\ \n\r\t'):
+                raise ValueError("Token contains forbidden characters")
             # For private repos, use token in URL
             repo_url = f"https://{token}@github.com/{owner}/{repo}.git"
         
