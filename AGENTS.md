@@ -256,7 +256,6 @@ docs/
 - `runner_label_confusion` (high) - Runner label confusion attack
 - `public_repo_self_hosted_secrets` (critical) - Secrets in self-hosted runner in public repo
 - `self_hosted_runner_secrets_in_run` (high) - Secrets in run commands
-- `self_hosted_runner_untrusted_code` (high) - Untrusted code execution
 - `self_hosted_runner_network_risk` (medium) - Network access risks
 
 #### Best Practices

@@ -62,6 +62,10 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
         description: 'This workflow may be vulnerable to script injection through github.event variables used in shell commands.',
         mitigation: 'Sanitize all user inputs and github.event data before using them in shell commands. Use environment variables and proper escaping.'
       },
+      'risky_context_usage': {
+        description: 'This workflow uses risky GitHub context variables (such as github.event.pull_request.title, github.event.issue.body, github.ref_name, etc.) that are user-controllable. These variables can be exploited by attackers to inject malicious code, execute arbitrary commands, or access sensitive information. Never use ${{ github.event.* }} directly in shell commands.',
+        mitigation: 'Move risky context variables to environment variables and add input validation. Never use ${{ github.event.* }} directly in shell commands. Pass context variables through environment variables first, then validate them against allowlists before use. Example: env: { PR_TITLE: ${{ github.event.pull_request.title }} } then validate $PR_TITLE before using it in commands.'
+      },
       'potential_hardcoded_secret': {
         description: 'This workflow may contain hardcoded secrets, passwords, or API keys, which is a critical security vulnerability.',
         mitigation: 'Remove all hardcoded secrets immediately. Use GitHub Secrets or environment secrets instead. Rotate any exposed credentials.'

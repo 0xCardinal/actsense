@@ -325,6 +325,168 @@ class TestScriptInjection:
         ps_issues = [i for i in issues if i.get("type") == "script_injection"]
         assert len(ps_issues) > 0
         assert "actsense.dev/vulnerabilities/script_injection" in ps_issues[0]["evidence"]["vulnerability"]
+    
+
+
+class TestRiskyContextUsage:
+    """Tests for risky GitHub context usage."""
+    
+    def test_risky_context_issue_title(self):
+        """Test detection of risky context usage with issue.title (direct in run command - critical)."""
+        workflow = {
+            "name": "Process Issue",
+            "on": {
+                "issues": {}
+            },
+            "jobs": {
+                "process": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Process",
+                            "run": "echo ${{ github.event.issue.title }}"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = security_rules.check_risky_context_usage(workflow)
+        risky_issues = [i for i in issues if i.get("type") == "risky_context_usage"]
+        assert len(risky_issues) > 0
+        # Direct use in run command should be critical
+        assert risky_issues[0]["severity"] == "critical"
+        assert "github.event.issue.title" in risky_issues[0]["evidence"]["risky_contexts"]
+        assert risky_issues[0]["evidence"]["usage_location"] == "run_command"
+        assert "actsense.dev/vulnerabilities/risky_context_usage" in risky_issues[0]["evidence"]["vulnerability"]
+    
+    def test_risky_context_pull_request_body(self):
+        """Test detection of risky context usage with pull_request.body."""
+        workflow = {
+            "name": "Process PR",
+            "on": {
+                "pull_request": {}
+            },
+            "jobs": {
+                "process": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Process",
+                            "run": "echo ${{ github.event.pull_request.body }}"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = security_rules.check_risky_context_usage(workflow)
+        risky_issues = [i for i in issues if i.get("type") == "risky_context_usage"]
+        assert len(risky_issues) > 0
+        assert risky_issues[0]["severity"] == "critical"
+        assert "github.event.pull_request.body" in risky_issues[0]["evidence"]["risky_contexts"]
+    
+    def test_risky_context_ref_name(self):
+        """Test detection of risky context usage with github.ref_name."""
+        workflow = {
+            "name": "Process Ref",
+            "on": ["push"],
+            "jobs": {
+                "process": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Process",
+                            "run": "echo ${{ github.ref_name }}"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = security_rules.check_risky_context_usage(workflow)
+        risky_issues = [i for i in issues if i.get("type") == "risky_context_usage"]
+        assert len(risky_issues) > 0
+        assert risky_issues[0]["severity"] == "critical"
+        assert "github.ref_name" in risky_issues[0]["evidence"]["risky_contexts"]
+    
+    def test_risky_context_in_env(self):
+        """Test detection of risky context usage in environment variables (should be high severity, not critical)."""
+        workflow = {
+            "name": "Process Issue",
+            "on": {
+                "issues": {}
+            },
+            "jobs": {
+                "process": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Process",
+                            "env": {
+                                "ISSUE_TITLE": "${{ github.event.issue.title }}"
+                            },
+                            "run": "echo $ISSUE_TITLE"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = security_rules.check_risky_context_usage(workflow)
+        risky_issues = [i for i in issues if i.get("type") == "risky_context_usage"]
+        assert len(risky_issues) > 0
+        # When used in env vars (not directly in run), severity should be "high" not "critical"
+        assert risky_issues[0]["severity"] == "high"
+        assert "github.event.issue.title" in risky_issues[0]["evidence"]["risky_contexts"]
+        assert risky_issues[0]["evidence"]["usage_location"] == "environment_variable"
+    
+    def test_risky_context_generic_suffix(self):
+        """Test detection of risky context with generic suffix pattern."""
+        workflow = {
+            "name": "Process Custom",
+            "on": ["push"],
+            "jobs": {
+                "process": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Process",
+                            "run": "echo ${{ github.event.custom_event.body }}"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = security_rules.check_risky_context_usage(workflow)
+        risky_issues = [i for i in issues if i.get("type") == "risky_context_usage"]
+        assert len(risky_issues) > 0
+        assert risky_issues[0]["severity"] == "critical"
+        # Should detect the .body suffix pattern
+        assert any("body" in ctx for ctx in risky_issues[0]["evidence"]["risky_contexts"])
+    
+    def test_no_risky_context(self):
+        """Test workflow without risky context usage."""
+        workflow = {
+            "name": "Safe Workflow",
+            "on": ["push"],
+            "jobs": {
+                "test": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "name": "Test",
+                            "run": "echo ${{ github.repository }}"
+                        }
+                    ]
+                }
+            }
+        }
+        
+        issues = security_rules.check_risky_context_usage(workflow)
+        risky_issues = [i for i in issues if i.get("type") == "risky_context_usage"]
+        assert len(risky_issues) == 0
 
 
 class TestMaliciousPatterns:

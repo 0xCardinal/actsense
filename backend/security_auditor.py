@@ -105,6 +105,10 @@ class SecurityAuditor:
         """Check for PowerShell injection vulnerabilities."""
         return security_rules.check_powershell_injection(workflow)
     @staticmethod
+    def check_risky_context_usage(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for risky GitHub context usage that can be exploited for injection attacks."""
+        return security_rules.check_risky_context_usage(workflow)
+    @staticmethod
     def check_malicious_curl_pipe_bash(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for curl/wget piped to bash/sh/zsh, which can execute malicious code."""
         return security_rules.check_malicious_curl_pipe_bash(workflow)
@@ -415,6 +419,53 @@ class SecurityAuditor:
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(powershell_issues)
+        
+        # Check risky context usage
+        risky_context_issues = SecurityAuditor.check_risky_context_usage(workflow)
+        if content and risky_context_issues:
+            for issue in risky_context_issues:
+                # Try to find line number using the specific context variable
+                risky_contexts = issue.get("evidence", {}).get("risky_contexts", [])
+                line_num = None
+                if risky_contexts:
+                    # Try to find the first risky context in the content
+                    for ctx in risky_contexts:
+                        # Extract just the context name (e.g., "github.event.pull_request.title")
+                        ctx_name = ctx.split(" (")[0] if " (" in ctx else ctx
+                        # Try different search terms
+                        search_terms = [
+                            ctx_name,  # Full context name
+                            ctx_name.replace("github.event.", ""),  # Without github.event prefix
+                            ctx_name.split(".")[-1] if "." in ctx_name else ctx_name,  # Just the last part
+                        ]
+                        for search_term in search_terms:
+                            line_num = security_rules._find_line_number(content, search_term, issue.get("job", ""))
+                            if line_num:
+                                break
+                        if line_num:
+                            break
+                # Fallback to searching for ${{ or run: with job context
+                if not line_num:
+                    # Search for ${{ near the step name or job
+                    step_name = issue.get("step", "")
+                    if step_name and step_name != "unnamed":
+                        line_num = security_rules._find_line_number(content, step_name, issue.get("job", ""))
+                        if line_num:
+                            # Look for ${{ near this line
+                            lines = content.split('\n')
+                            start = max(0, line_num - 3)
+                            end = min(len(lines), line_num + 5)
+                            for i in range(start, end):
+                                if "${{" in lines[i]:
+                                    line_num = i + 1
+                                    break
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "${{", issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(risky_context_issues)
         
         # Check artifact retention
         artifact_issues = SecurityAuditor.check_artifact_retention(workflow)

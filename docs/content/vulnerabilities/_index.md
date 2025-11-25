@@ -65,7 +65,6 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Self Hosted Runner](/vulnerabilities/self_hosted_runner/)
 - [Self Hosted Runner PR Exposure](/vulnerabilities/self_hosted_runner_pr_exposure/)
 - [Self Hosted Runner Issue Exposure](/vulnerabilities/self_hosted_runner_issue_exposure/)
-- [Self Hosted Runner Untrusted Code](/vulnerabilities/self_hosted_runner_untrusted_code/)
 - [Self Hosted Runner Write All](/vulnerabilities/self_hosted_runner_write_all/)
 - [Self Hosted Runner Secrets in Run](/vulnerabilities/self_hosted_runner_secrets_in_run/)
 - [Self Hosted Runner Network Risk](/vulnerabilities/self_hosted_runner_network_risk/)

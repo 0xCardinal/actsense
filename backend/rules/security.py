@@ -160,22 +160,6 @@ def check_self_hosted_runners(workflow: Dict[str, Any], is_public_repo: bool = F
             return any("self-hosted" in str(r).lower() for r in runs_on_value)
         return False
 
-    def has_untrusted_code_execution(job: Dict[str, Any]) -> bool:
-        """Check if job executes potentially untrusted user input."""
-        steps = job.get("steps", [])
-        user_input_patterns = [
-            r'\$\{\{\s*github\.event\.[^}]+\}\}',
-            r'\$\{\{\s*github\.head_ref\s*\}\}',
-            r'\$\{\{\s*github\.base_ref\s*\}\}',
-        ]
-        for step in steps:
-            run = step.get("run", "")
-            if isinstance(run, str):
-                for pattern in user_input_patterns:
-                    if re.search(pattern, run):
-                        return True
-        return False
-
     # Check each job for self-hosted runners
     for job_name, job in jobs.items():
         runs_on_value = job.get("runs-on", "")
@@ -225,21 +209,6 @@ def check_self_hosted_runners(workflow: Dict[str, Any], is_public_repo: bool = F
                     "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/self_hosted_runner_issue_exposure"
                 },
                 "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/self_hosted_runner_issue_exposure"
-            })
-
-        # Check for untrusted code execution (CRITICAL)
-        if has_untrusted_code_execution(job):
-            issues.append({
-                "type": "self_hosted_runner_untrusted_code",
-                "severity": "critical",
-                "message": f"Self-hosted runner in job '{job_name}' executes potentially untrusted user input, creating code injection risk.",
-                "job": job_name,
-                "evidence": {
-                    "job": job_name,
-                    "runner": runs_on_value,
-                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/self_hosted_runner_untrusted_code"
-                },
-                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/self_hosted_runner_untrusted_code"
             })
 
         # Check for write-all permissions (CRITICAL)
@@ -809,6 +778,181 @@ def check_github_script_injection(workflow: Dict[str, Any]) -> List[Dict[str, An
                             })
                             break  # Only report once per step
 
+    return issues
+
+
+def check_risky_context_usage(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for risky GitHub context usage that can be exploited for injection attacks."""
+    issues = []
+    
+    jobs = workflow.get("jobs", {})
+    
+    # Specific risky GitHub context patterns (user-controllable)
+    risky_context_patterns = [
+        # Issue-related
+        (r'\$\{\{\s*github\.event\.issue\.title\s*\}\}', 'github.event.issue.title'),
+        (r'\$\{\{\s*github\.event\.issue\.body\s*\}\}', 'github.event.issue.body'),
+        # Issue comment
+        (r'\$\{\{\s*github\.event\.issue_comment\.body\s*\}\}', 'github.event.issue_comment.body'),
+        (r'\$\{\{\s*github\.event\.comment\.body\s*\}\}', 'github.event.comment.body'),
+        # Pull request related
+        (r'\$\{\{\s*github\.event\.pull_request\.title\s*\}\}', 'github.event.pull_request.title'),
+        (r'\$\{\{\s*github\.event\.pull_request\.body\s*\}\}', 'github.event.pull_request.body'),
+        (r'\$\{\{\s*github\.event\.pull_request\.head_ref\s*\}\}', 'github.event.pull_request.head_ref'),
+        (r'\$\{\{\s*github\.event\.pull_request\.base_ref\s*\}\}', 'github.event.pull_request.base_ref'),
+        # Release related
+        (r'\$\{\{\s*github\.event\.release\.name\s*\}\}', 'github.event.release.name'),
+        (r'\$\{\{\s*github\.event\.release\.tag_name\s*\}\}', 'github.event.release.tag_name'),
+        # Discussion
+        (r'\$\{\{\s*github\.event\.discussion\.body\s*\}\}', 'github.event.discussion.body'),
+        # Ref and branch related
+        (r'\$\{\{\s*github\.event\.ref\s*\}\}', 'github.event.ref'),
+        (r'\$\{\{\s*github\.ref_name\s*\}\}', 'github.ref_name'),
+        (r'\$\{\{\s*github\.event\.repository\.default_branch\s*\}\}', 'github.event.repository.default_branch'),
+        # Label
+        (r'\$\{\{\s*github\.event\.label\.name\s*\}\}', 'github.event.label.name'),
+        # Sender
+        (r'\$\{\{\s*github\.event\.sender\.email\s*\}\}', 'github.event.sender.email'),
+        # Page
+        (r'\$\{\{\s*github\.event\.page_name\s*\}\}', 'github.event.page_name'),
+    ]
+    
+    # Generic patterns for risky suffixes (any context ending in these)
+    risky_suffix_patterns = [
+        (r'\$\{\{\s*github\.event\.[^}]*\.body\s*\}\}', 'context ending in .body'),
+        (r'\$\{\{\s*github\.event\.[^}]*\.title\s*\}\}', 'context ending in .title'),
+        (r'\$\{\{\s*github\.event\.[^}]*\.message\s*\}\}', 'context ending in .message'),
+        (r'\$\{\{\s*github\.event\.[^}]*\.name\s*\}\}', 'context ending in .name'),
+        (r'\$\{\{\s*github\.event\.[^}]*\.ref\s*\}\}', 'context ending in .ref'),
+        (r'\$\{\{\s*github\.event\.[^}]*\.head_ref\s*\}\}', 'context ending in .head_ref'),
+        (r'\$\{\{\s*github\.event\.[^}]*\.default_branch\s*\}\}', 'context ending in .default_branch'),
+        (r'\$\{\{\s*github\.event\.[^}]*\.email\s*\}\}', 'context ending in .email'),
+    ]
+    
+    for job_name, job in jobs.items():
+        steps = job.get("steps", [])
+        for step in steps:
+            found_contexts_in_run = []
+            found_contexts_in_env = []
+            found_contexts_in_with = []
+            
+            # Check in run commands (most dangerous - direct interpolation)
+            run = step.get("run", "")
+            if isinstance(run, str):
+                # Check specific risky contexts
+                for pattern, context_name in risky_context_patterns:
+                    if re.search(pattern, run, re.IGNORECASE):
+                        found_contexts_in_run.append(context_name)
+                
+                # Check generic risky suffix patterns
+                for pattern, suffix_desc in risky_suffix_patterns:
+                    matches = re.finditer(pattern, run, re.IGNORECASE)
+                    for match in matches:
+                        context_expr = match.group(0)
+                        # Extract the actual context name
+                        context_match = re.search(r'github\.event\.([^}]+)', context_expr)
+                        if context_match:
+                            context_name = context_match.group(1)
+                            full_name = f"{context_name} ({suffix_desc})"
+                            if full_name not in found_contexts_in_run:
+                                found_contexts_in_run.append(full_name)
+            
+            # Check in environment variables (safer but still risky without validation)
+            env = step.get("env", {})
+            if isinstance(env, dict):
+                for env_key, env_value in env.items():
+                    if isinstance(env_value, str):
+                        for pattern, context_name in risky_context_patterns:
+                            if re.search(pattern, env_value, re.IGNORECASE):
+                                if context_name not in found_contexts_in_env:
+                                    found_contexts_in_env.append(context_name)
+                        
+                        for pattern, suffix_desc in risky_suffix_patterns:
+                            matches = re.finditer(pattern, env_value, re.IGNORECASE)
+                            for match in matches:
+                                context_expr = match.group(0)
+                                context_match = re.search(r'github\.event\.([^}]+)', context_expr)
+                                if context_match:
+                                    context_name = context_match.group(1)
+                                    full_name = f"{context_name} ({suffix_desc})"
+                                    if full_name not in found_contexts_in_env:
+                                        found_contexts_in_env.append(full_name)
+            
+            # Check in with parameters
+            with_params = step.get("with", {})
+            if isinstance(with_params, dict):
+                for param_key, param_value in with_params.items():
+                    if isinstance(param_value, str):
+                        for pattern, context_name in risky_context_patterns:
+                            if re.search(pattern, param_value, re.IGNORECASE):
+                                if context_name not in found_contexts_in_with:
+                                    found_contexts_in_with.append(context_name)
+                        
+                        for pattern, suffix_desc in risky_suffix_patterns:
+                            matches = re.finditer(pattern, param_value, re.IGNORECASE)
+                            for match in matches:
+                                context_expr = match.group(0)
+                                context_match = re.search(r'github\.event\.([^}]+)', context_expr)
+                                if context_match:
+                                    context_name = context_match.group(1)
+                                    full_name = f"{context_name} ({suffix_desc})"
+                                    if full_name not in found_contexts_in_with:
+                                        found_contexts_in_with.append(full_name)
+            
+            # Report direct use in run commands (most critical)
+            if found_contexts_in_run:
+                all_contexts = found_contexts_in_run + found_contexts_in_env + found_contexts_in_with
+                unique_contexts = list(dict.fromkeys(all_contexts))  # Preserve order, remove duplicates
+                issues.append({
+                    "type": "risky_context_usage",
+                    "severity": "critical",
+                    "message": f"Job '{job_name}' uses risky GitHub context variables directly in shell commands (step: '{step.get('name', 'unnamed')}'). User-controllable context like {', '.join(found_contexts_in_run[:3])}{'...' if len(found_contexts_in_run) > 3 else ''} should be passed through environment variables and validated before use to prevent command injection attacks.",
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "risky_contexts": unique_contexts,
+                        "usage_location": "run_command",
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/risky_context_usage"
+                    },
+                    "recommendation": "Move risky context variables to environment variables and add input validation. Never use ${{ github.event.* }} directly in shell commands. See: https://actsense.dev/vulnerabilities/risky_context_usage"
+                })
+            # Report use in environment variables (still risky without validation, but less critical)
+            elif found_contexts_in_env:
+                issues.append({
+                    "type": "risky_context_usage",
+                    "severity": "high",
+                    "message": f"Job '{job_name}' uses risky GitHub context variables in environment variables (step: '{step.get('name', 'unnamed')}'). While using environment variables is safer than direct interpolation, these values must be validated before use to prevent injection attacks: {', '.join(found_contexts_in_env[:3])}{'...' if len(found_contexts_in_env) > 3 else ''}",
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "risky_contexts": found_contexts_in_env,
+                        "usage_location": "environment_variable",
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/risky_context_usage"
+                    },
+                    "recommendation": "Add input validation for environment variables containing user-controllable context. Validate against allowlists and sanitize before use. See: https://actsense.dev/vulnerabilities/risky_context_usage"
+                })
+            # Report use in with parameters
+            elif found_contexts_in_with:
+                issues.append({
+                    "type": "risky_context_usage",
+                    "severity": "high",
+                    "message": f"Job '{job_name}' uses risky GitHub context variables in action parameters (step: '{step.get('name', 'unnamed')}'). These values should be validated: {', '.join(found_contexts_in_with[:3])}{'...' if len(found_contexts_in_with) > 3 else ''}",
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "risky_contexts": found_contexts_in_with,
+                        "usage_location": "action_parameter",
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/risky_context_usage"
+                    },
+                    "recommendation": "Validate risky context variables before passing to actions. Use allowlists and sanitize input. See: https://actsense.dev/vulnerabilities/risky_context_usage"
+                })
+    
     return issues
 
 
