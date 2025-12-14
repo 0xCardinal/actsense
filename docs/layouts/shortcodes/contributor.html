@@ -1,0 +1,46 @@
+{{- $name := .Get "name" -}}
+{{- $image := .Get "image" -}}
+{{- $linkedin := .Get "linkedin" | default "" -}}
+{{- $twitter := .Get "twitter" | default "" -}}
+{{- $github := .Get "github" | default "" -}}
+{{- $contributions := .Get "contributions" | default "" -}}
+{{- $id := printf "contributor-%s" (replace (lower $name) " " "-") -}}
+<div class="contributor-card" style="text-align: center; padding: 2rem; border-radius: 0.75rem; background: var(--hextra-card-bg, #f8f9fa); border: 1px solid var(--hextra-card-border, #e9ecef); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); position: relative;">
+  <div class="contributor-image-wrapper" style="position: relative; display: inline-block;">
+    <img src="{{ $image }}" alt="{{ $name }}" class="contributor-image" style="width: 150px; height: 150px; border-radius: 50%; margin: 0 auto 1.5rem; object-fit: cover; border: 3px solid var(--hextra-card-border, #e9ecef); display: block; cursor: help;">
+    {{- if $contributions -}}
+    <div class="contributor-tooltip" id="{{ $id }}-tooltip" style="visibility: hidden; opacity: 0; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-10px); margin-bottom: 10px; background-color: #333; color: #fff; text-align: left; padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; white-space: normal; width: 220px; max-width: 90vw; z-index: 1000; transition: opacity 0.3s, visibility 0.3s, transform 0.3s; pointer-events: none; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);">
+      <span style="line-height: 1.5;">{{ $contributions }}</span>
+      <div style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #333;"></div>
+    </div>
+    {{- end -}}
+  </div>
+  <h3 style="margin: 0 0 1rem 0; color: var(--hextra-text, #1a1a1a); font-size: 1.25rem; font-weight: 600;">{{ $name }}</h3>
+  <div style="display: flex; gap: 1rem; justify-content: center; align-items: center;">
+    {{- if $linkedin -}}
+    <a href="{{ $linkedin }}" target="_blank" rel="noopener noreferrer" style="color: #000000; text-decoration: none; transition: transform 0.2s; font-size: 1.125rem;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+      <i class="fab fa-linkedin"></i>
+    </a>
+    {{- end -}}
+    {{- if $twitter -}}
+    <a href="{{ $twitter }}" target="_blank" rel="noopener noreferrer" style="color: #000000; text-decoration: none; transition: transform 0.2s; font-size: 1.125rem;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+      <i class="fab fa-x-twitter"></i>
+    </a>
+    {{- end -}}
+    {{- if $github -}}
+    <a href="{{ $github }}" target="_blank" rel="noopener noreferrer" style="color: #000000; text-decoration: none; transition: transform 0.2s; font-size: 1.125rem;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+      <i class="fab fa-github"></i>
+    </a>
+    {{- end -}}
+  </div>
+</div>
+
+<style>
+.contributor-image-wrapper:hover .contributor-tooltip {
+  visibility: visible !important;
+  opacity: 1 !important;
+  transform: translateX(-50%) translateY(0) !important;
+}
+</style>
+
+

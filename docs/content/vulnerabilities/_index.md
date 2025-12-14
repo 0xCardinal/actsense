@@ -1,6 +1,8 @@
 ---
 title: "Security Vulnerabilities"
 description: "Comprehensive documentation for all security vulnerabilities detected by actsense"
+cascade:
+  type: docs
 ---
 
 This section documents all security vulnerabilities detected by actsense. Each vulnerability includes a detailed description, evidence, and mitigation strategies.

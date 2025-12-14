@@ -25,12 +25,15 @@ menu:
     - name: Vulnerabilities
       pageRef: /vulnerabilities
       weight: 4
-    - name: Search
+    - name: Contributors
+      pageRef: /contributors
       weight: 5
+    - name: Search
+      weight: 6
       params:
         type: search
     - name: GitHub
-      weight: 6
+      weight: 7
       url: "https://github.com/0xCardinal/actsense"
       params:
         icon: github
@@ -90,6 +93,7 @@ params:
   
   # Table of contents
   toc:
+    enable: true
     displayTags: false
 
 # Markup configuration
@@ -103,6 +107,17 @@ markup:
     guessSyntax: true
     lineNos: false
     noClasses: false
+
+# Default front matter for specific sections
+defaults:
+  - scope:
+      path: "vulnerabilities"
+      type: "page"
+    values:
+      toc: true
+      params:
+        page:
+          width: wide
 
 # Output formats
 outputs:
