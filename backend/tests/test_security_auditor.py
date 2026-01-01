@@ -161,9 +161,9 @@ class TestSecurityAuditorIntegration:
         issues = SecurityAuditor.check_obfuscation_detection(workflow_with_obfuscation)
         assert isinstance(issues, list)
     
-    def test_check_artipacked_vulnerability(self, workflow_with_artifact_upload):
-        """Test check_artipacked_vulnerability delegation."""
-        issues = SecurityAuditor.check_artipacked_vulnerability(workflow_with_artifact_upload)
+    def test_check_artifact_exposure_risk(self, workflow_with_artifact_upload):
+        """Test check_artifact_exposure_risk delegation."""
+        issues = SecurityAuditor.check_artifact_exposure_risk(workflow_with_artifact_upload)
         assert isinstance(issues, list)
     
     def test_check_token_permission_escalation(self, workflow_with_token_manipulation):

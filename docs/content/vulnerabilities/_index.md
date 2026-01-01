@@ -87,5 +87,5 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Malicious Curl Pipe Bash](/vulnerabilities/malicious_curl_pipe_bash/)
 - [Malicious Base64 Decode](/vulnerabilities/malicious_base64_decode/)
 - [Obfuscation Detection](/vulnerabilities/obfuscation_detection/)
-- [Artipacked Vulnerability](/vulnerabilities/artipacked_vulnerability/)
+- [Artifact Exposure Risk](/vulnerabilities/artifact_exposure_risk/)
 

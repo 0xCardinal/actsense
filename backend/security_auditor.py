@@ -127,9 +127,9 @@ class SecurityAuditor:
         """Check for code obfuscation patterns that may hide malicious code."""
         return security_rules.check_obfuscation_detection(workflow)
     @staticmethod
-    def check_artipacked_vulnerability(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Check for artifact packing vulnerabilities."""
-        return security_rules.check_artipacked_vulnerability(workflow)
+    def check_artifact_exposure_risk(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for artifact exposure risks from unsafe artifact upload configurations."""
+        return security_rules.check_artifact_exposure_risk(workflow)
     @staticmethod
     def check_token_permission_escalation(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for patterns that could lead to token permission escalation."""
@@ -630,16 +630,16 @@ class SecurityAuditor:
                     issue["line_number"] = line_num
         issues.extend(obfuscation_issues)
         
-        # Check for artifact packing vulnerabilities
-        artipacked_issues = SecurityAuditor.check_artipacked_vulnerability(workflow)
-        if content and artipacked_issues:
-            for issue in artipacked_issues:
+        # Check for artifact exposure risks
+        artifact_exposure_issues = SecurityAuditor.check_artifact_exposure_risk(workflow)
+        if content and artifact_exposure_issues:
+            for issue in artifact_exposure_issues:
                 line_num = security_rules._find_line_number(content, "upload-artifact", issue.get("job", ""))
                 if not line_num:
                     line_num = security_rules._find_line_number(content, "download-artifact", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
-        issues.extend(artipacked_issues)
+        issues.extend(artifact_exposure_issues)
         
         # Check for hash pinning (commit SHA) instead of tags
         hash_issues = SecurityAuditor.check_hash_pinning(workflow)

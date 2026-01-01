@@ -520,14 +520,14 @@ class TestMaliciousPatterns:
 class TestArtifactVulnerabilities:
     """Tests for artifact-related vulnerabilities."""
     
-    def test_artipacked_vulnerability(self, workflow_with_artifact_upload):
-        """Test detection of artifact packing vulnerabilities."""
-        issues = security_rules.check_artipacked_vulnerability(workflow_with_artifact_upload)
+    def test_artifact_exposure_risk(self, workflow_with_artifact_upload):
+        """Test detection of artifact exposure risks."""
+        issues = security_rules.check_artifact_exposure_risk(workflow_with_artifact_upload)
         
-        artifact_issues = [i for i in issues if i.get("type") == "artipacked_vulnerability"]
+        artifact_issues = [i for i in issues if i.get("type") == "artifact_exposure_risk"]
         # May or may not detect depending on path patterns
         if len(artifact_issues) > 0:
-            assert "actsense.dev/vulnerabilities/artipacked_vulnerability" in artifact_issues[0]["evidence"]["vulnerability"]
+            assert "actsense.dev/vulnerabilities/artifact_exposure_risk" in artifact_issues[0]["evidence"]["vulnerability"]
 
 
 class TestTokenPermissionEscalation:

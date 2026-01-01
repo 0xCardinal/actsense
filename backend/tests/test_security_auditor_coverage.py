@@ -715,8 +715,8 @@ class TestSecurityAuditorCoverage:
         assert isinstance(issues, list)
     
     @pytest.mark.asyncio
-    async def test_audit_workflow_line_numbers_artipacked_download_fallback(self):
-        """Test line number assignment for artipacked with download fallback."""
+    async def test_audit_workflow_line_numbers_artifact_exposure_download_fallback(self):
+        """Test line number assignment for artifact exposure risk with download fallback."""
         workflow = {
             "name": "Test",
             "on": ["push"],

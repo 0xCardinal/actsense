@@ -265,7 +265,7 @@ docs/
 - `large_matrix` (low) - Matrix with > 100 combinations
 - `insufficient_audit_logging` (medium) - Missing audit logs
 - `continue_on_error_critical_job` (medium) - Continue-on-error in critical jobs
-- `artipacked_vulnerability` (high) - Artifact packing vulnerability
+- `artifact_exposure_risk` (high) - Artifact exposure risk from unsafe upload configurations
 - `token_permission_escalation` (high) - Token permission escalation
 - `cross_repository_access` (high) - Unauthorized cross-repository access
 - `environment_bypass_risk` (high) - Environment protection bypass

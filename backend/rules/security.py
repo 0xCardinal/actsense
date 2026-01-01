@@ -1228,67 +1228,173 @@ def check_obfuscation_detection(workflow: Dict[str, Any]) -> List[Dict[str, Any]
     return issues
 
 
-def check_artipacked_vulnerability(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Check for artifact packing vulnerabilities."""
-    issues = []
+def check_artifact_exposure_risk(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for artifact exposure risks from unsafe artifact upload configurations."""
+    issues: List[Dict[str, Any]] = []
 
     jobs = workflow.get("jobs", {})
 
     for job_name, job in jobs.items():
-        steps = job.get("steps", [])
+        steps = job.get("steps", []) or []
+
+        # 1. Detect if this job uses actions/checkout with persisted credentials
+        checkout_persists_credentials = False
         for step in steps:
-            uses = step.get("uses", "")
+            uses = str(step.get("uses", "")).lower()
+            if "actions/checkout" in uses:
+                with_params = step.get("with", {}) or {}
+                persist = with_params.get("persist-credentials")
+                # Default is True when not set
+                if persist is None or str(persist).lower() != "false":
+                    checkout_persists_credentials = True
+                    break
+
+        for idx, step in enumerate(steps):
+            uses = str(step.get("uses", "")).lower()
             if "upload-artifact" in uses or "download-artifact" in uses:
-                with_params = step.get("with", {})
+                with_params = step.get("with", {}) or {}
+                step_name = step.get("name", f"step_{idx}")
 
-                # Check for overly broad path patterns
-                if "path" in with_params:
-                    path = str(with_params["path"])
+                # 2. Check for overly broad / dangerous path patterns
+                if "path" in with_params and "upload-artifact" in uses:
+                    path = str(with_params["path"]).strip()
 
-                    # Dangerous patterns
+                    # Patterns that are too broad or likely to include .git / secrets
                     dangerous_patterns = [
+                        (r'^\.?/?$', 'Current directory (.)'),
                         (r'^\.$', 'Current directory (.)'),
-                        (r'^/\*$', 'Root wildcard (/*)'),
+                        (r'^\./$', 'Current directory (./)'),
                         (r'^\*\*$', 'Double wildcard (**)'),
+                        (r'^\*$', 'Single wildcard (*)'),
+                        (r'^\*\*/\*$', 'Recursive wildcard (**/*)'),
+                        (r'\${{\s*github\.workspace\s*}}', 'Entire GitHub workspace (${{ github.workspace }})'),
                         (r'\.\./', 'Path traversal (../)'),
                         (r'~', 'Home directory (~)'),
                     ]
 
+                    matched_description = None
                     for pattern, description in dangerous_patterns:
                         if re.search(pattern, path):
-                            severity = "critical" if "../" in path else "high"
-                            issues.append({
-                                "type": "artipacked_vulnerability",
-                                "severity": severity,
-                                "message": f"Job '{job_name}' uses dangerous artifact path pattern: {description}. This may include sensitive files or enable path traversal.",
-                                "job": job_name,
-                                "step": step.get("name", "unnamed"),
-                                "evidence": {
-                                    "job": job_name,
-                                    "step": step.get("name", "unnamed"),
-                                    "path": path,
-                                    "pattern": description,
-                                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/artipacked_vulnerability"
-                                },
-                                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/artipacked_vulnerability"
-                            })
+                            matched_description = description
                             break
 
-                # Check for missing retention policies on upload-artifact
+                    if matched_description:
+                        # Base severity
+                        severity = "high"
+
+                        # Escalate to critical when:
+                        # - checkout persists credentials, AND
+                        # - path is likely to include .git / entire workspace
+                        if checkout_persists_credentials and (
+                            path in (".", "./")
+                            or re.search(r'\${{\s*github\.workspace\s*}}', path)
+                        ):
+                            severity = "critical"
+
+                        message_parts = [
+                            f"Job '{job_name}' uploads artifacts with a broad path pattern: {matched_description}."
+                        ]
+
+                        if checkout_persists_credentials:
+                            message_parts.append(
+                                "This job also uses actions/checkout with persisted credentials, "
+                                "so `.git/config` may contain a credentialed URL with `GITHUB_TOKEN`, "
+                                "and uploading the workspace can expose that token via artifacts."
+                            )
+
+                        issues.append({
+                            "type": "artifact_exposure_risk",
+                            "severity": severity,
+                            "message": " ".join(message_parts),
+                            "job": job_name,
+                            "step": step_name,
+                            "evidence": {
+                                "job": job_name,
+                                "step": step_name,
+                                "path": path,
+                                "pattern": matched_description,
+                                "checkout_persists_credentials": checkout_persists_credentials,
+                                "vulnerability": (
+                                    "For detailed information about this vulnerability, visit: "
+                                    "https://actsense.dev/vulnerabilities/artifact_exposure_risk"
+                                ),
+                                "risk_description": (
+                                    "This path pattern may unintentionally include sensitive internal repositories, "
+                                    "credentials stored in .git/config, build logs, or other confidential files."
+                                ),
+                            },
+                            "recommendation": (
+                                "Use explicit artifact paths instead of broad globs or workspace uploads. "
+                                "Exclude .git/, node_modules/, and other sensitive directories. "
+                                "Set actions/checkout to persist-credentials: false when possible. "
+                                "For more mitigation steps, visit: "
+                                "https://actsense.dev/vulnerabilities/artifact_exposure_risk"
+                            ),
+                        })
+
+                # 3. Check for missing retention policies on upload-artifact
                 if "upload-artifact" in uses:
                     if "retention-days" not in with_params:
                         issues.append({
-                            "type": "artipacked_vulnerability",
-                            "severity": "high",
-                            "message": f"Job '{job_name}' uploads artifacts without explicit retention policy. Artifacts may store sensitive data indefinitely.",
+                            "type": "artifact_exposure_risk",
+                            "severity": "medium",
+                            "message": (
+                                f"Job '{job_name}' uploads artifacts without an explicit `retention-days` value. "
+                                "Artifacts will use the repository default retention, which may be longer than necessary "
+                                "for potentially sensitive data."
+                            ),
                             "job": job_name,
-                            "step": step.get("name", "unnamed"),
+                            "step": step_name,
                             "evidence": {
                                 "job": job_name,
-                                "step": step.get("name", "unnamed"),
-                                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/artipacked_vulnerability"
+                                "step": step_name,
+                                "vulnerability": (
+                                    "For detailed information about this vulnerability, visit: "
+                                    "https://actsense.dev/vulnerabilities/artifact_exposure_risk"
+                                ),
+                                "risk_description": (
+                                    "Missing retention-days configuration increases the exposure window for any sensitive "
+                                    "data that may be included in artifacts."
+                                ),
                             },
-                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/artipacked_vulnerability"
+                            "recommendation": (
+                                "Set retention-days to the minimal necessary value. "
+                                "For mitigation steps, visit: "
+                                "https://actsense.dev/vulnerabilities/artifact_exposure_risk"
+                            ),
+                        })
+
+                    # 4. Upload-artifact not being the last step (exposure window heuristic)
+                    if idx != len(steps) - 1:
+                        issues.append({
+                            "type": "artifact_exposure_risk",
+                            "severity": "low",
+                            "message": (
+                                f"Job '{job_name}' uploads artifacts in step '{step_name}' before the final step. "
+                                "Uploading artifacts earlier in the job increases the exposure window for any sensitive "
+                                "data that may be included in artifacts."
+                            ),
+                            "job": job_name,
+                            "step": step_name,
+                            "evidence": {
+                                "job": job_name,
+                                "step": step_name,
+                                "step_index": idx,
+                                "total_steps": len(steps),
+                                "vulnerability": (
+                                    "For detailed information about this vulnerability, visit: "
+                                    "https://actsense.dev/vulnerabilities/artifact_exposure_risk"
+                                ),
+                                "risk_description": (
+                                    "Artifact uploads occurring before the end of a job increase the exposure window "
+                                    "but the configuration itself is still safe if paths are properly scoped."
+                                ),
+                            },
+                            "recommendation": (
+                                "Move artifact uploads toward the end of the job for safer ordering. "
+                                "For mitigation steps, visit: "
+                                "https://actsense.dev/vulnerabilities/artifact_exposure_risk"
+                            ),
                         })
 
     return issues

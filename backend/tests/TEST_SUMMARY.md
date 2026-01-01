@@ -88,7 +88,7 @@ Integration tests for SecurityAuditor facade:
 ✅ malicious_curl_pipe_bash
 ✅ malicious_base64_decode
 ✅ obfuscation_detection
-✅ artipacked_vulnerability
+✅ artifact_exposure_risk
 ✅ token_permission_escalation
 ✅ cross_repository_access
 ✅ environment_bypass_risk

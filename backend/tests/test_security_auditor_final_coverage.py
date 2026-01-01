@@ -249,8 +249,8 @@ class TestSecurityAuditorFinalCoverage:
                 assert isinstance(issues, list)
     
     @pytest.mark.asyncio
-    async def test_audit_workflow_artipacked_download_fallback(self):
-        """Test line number assignment for artipacked with download-artifact fallback."""
+    async def test_audit_workflow_artifact_exposure_download_fallback(self):
+        """Test line number assignment for artifact exposure risk with download-artifact fallback."""
         workflow = {
             "name": "Test",
             "on": ["push"],
@@ -270,9 +270,9 @@ class TestSecurityAuditorFinalCoverage:
         }
         content = "name: Test\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/download-artifact@v4\n        with:\n          name: artifact"
         # Mock to return issue but upload-artifact not found, should fallback to download-artifact
-        with patch('security_auditor.security_rules.check_artipacked_vulnerability') as mock_check:
+        with patch('security_auditor.security_rules.check_artifact_exposure_risk') as mock_check:
             mock_check.return_value = [{
-                "type": "artipacked_vulnerability",
+                "type": "artifact_exposure_risk",
                 "job": "build",
                 "severity": "high"
             }]
