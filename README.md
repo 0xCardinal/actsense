@@ -17,13 +17,14 @@ A security auditor for GitHub Actions that analyzes workflows and their dependen
 
 ## Features
 
-- 🔍 **Comprehensive Security Auditing**: Detects 30+ security issues in GitHub Actions workflows
+- 🔍 **Comprehensive Security Auditing**: Detects 65+ security issues in GitHub Actions workflows
 - 📊 **Interactive Graph Visualization**: Visualize action dependencies with an interactive graph
 - 🔎 **Powerful Search**: Search security issues and assets with natural language queries (Cmd+K / Ctrl+K)
 - 📋 **Table Views**: View nodes and dependencies in organized table formats
 - 🔗 **Transitive Dependency Analysis**: Automatically resolves and audits all action dependencies
 - 💾 **Analysis History**: Save and load previous analyses
-- 🔐 **Multiple Analysis Methods**: Use GitHub API or clone repositories locally
+- 🔐 **Multiple Analysis Methods**: Use GitHub API, clone repositories locally, or analyze YAML directly
+- ✏️ **YAML Editor**: Paste and analyze workflow YAML directly with real-time validation
 - 📖 **Detailed Issue Documentation**: Each vulnerability links to comprehensive documentation on actsense.dev
 - 🎨 **Modern UI**: Clean, professional interface built with React
 

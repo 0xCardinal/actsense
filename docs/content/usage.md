@@ -142,6 +142,32 @@ Choose how you want to analyze repositories:
 
 - **GitHub API**: Fast analysis using GitHub's API (requires token for private repos)
 - **Repository Cloning**: Deep analysis by cloning repositories locally (more thorough)
+- **YAML Editor**: Paste and analyze workflow YAML directly without a repository
+
+### Workflow YAML Editor
+
+Analyze workflow YAML files directly without needing a GitHub repository. Perfect for testing workflows before committing or analyzing workflows from other sources.
+
+![YAML Editor](/images/yaml-editor.png)
+
+*The YAML editor allows you to paste workflow content directly and get instant security analysis. Edit your workflow, fix issues, and re-analyze to iterate quickly.*
+
+**Features:**
+- **Direct YAML Input**: Paste any GitHub Actions workflow YAML
+- **Real-time Validation**: YAML syntax validation before analysis
+- **Line Numbers**: IDE-like editor with line numbers for easy navigation
+- **Edit & Re-analyze**: Save workflow state and iterate on fixes
+- **Same Analysis**: Full security audit with dependency resolution, just like repository analysis
+- **Error Display**: Clear error messages for validation and analysis issues
+
+**How to use:**
+1. Click "Edit Workflow YAML" button in the sidebar
+2. Paste your workflow YAML content
+3. Click "Analyze Workflow" to run security analysis
+4. View results in the same graph visualization as repository audits
+5. Edit the YAML and re-analyze to iterate on fixes
+
+The editor validates YAML syntax before analysis and displays clear error messages if validation fails. After successful analysis, the workflow content is saved so you can easily edit and re-analyze.
 
 ### Analysis History
 
