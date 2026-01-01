@@ -164,3 +164,59 @@
   }
 }
 
+.form-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 0.5rem 0;
+}
+
+.form-divider::before,
+.form-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.form-divider span {
+  padding: 0 1rem;
+  color: #9ca3af;
+  font-size: 0.8125rem;
+}
+
+.yaml-editor-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  color: #111827;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: 'Inter', sans-serif;
+  width: 100%;
+}
+
+.yaml-editor-button:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.yaml-editor-button:active:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.yaml-editor-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.yaml-editor-button svg {
+  flex-shrink: 0;
+  color: currentColor;
+}

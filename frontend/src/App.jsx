@@ -9,6 +9,7 @@ import NodesTable from './components/NodesTable'
 import IssuesTable from './components/IssuesTable'
 import SearchOverlay from './components/SearchOverlay'
 import SearchResultsPage from './components/SearchResultsPage'
+import YAMLEditorPanel from './components/YAMLEditorPanel'
 import './App.css'
 
 function App() {
@@ -25,6 +26,8 @@ function App() {
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
+  const [showYAMLEditor, setShowYAMLEditor] = useState(false)
+  const [savedYAMLContent, setSavedYAMLContent] = useState(null)
   const inputFormRef = useRef(null)
 
   // Debug: Log when component mounts
@@ -354,7 +357,12 @@ function App() {
               <span>Docs</span>
             </a>
           </div>
-          <InputForm ref={inputFormRef} onAudit={handleAudit} loading={loading} />
+          <InputForm 
+            ref={inputFormRef} 
+            onAudit={handleAudit} 
+            loading={loading}
+            onOpenYAMLEditor={() => setShowYAMLEditor(true)}
+          />
           {statistics && (
             <Statistics 
               data={statistics} 
@@ -500,6 +508,64 @@ function App() {
             setShowSearchOverlay(false)
             setShowSearchResults(true)
           }}
+        />
+      )}
+
+      {showYAMLEditor && (
+        <YAMLEditorPanel
+          onClose={() => setShowYAMLEditor(false)}
+          onAnalyze={async (yamlContent, token) => {
+            setLoading(true)
+            // Don't set error in main app - errors should only show in editor panel
+            
+            try {
+              const response = await fetch('/api/audit/yaml', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  yaml_content: yamlContent,
+                  github_token: token || undefined,
+                }),
+              })
+              
+              if (!response.ok) {
+                let errorData
+                try {
+                  errorData = await response.json()
+                } catch {
+                  errorData = { detail: `HTTP ${response.status}: ${response.statusText}` }
+                }
+                throw new Error(errorData.detail || errorData.message || 'Failed to analyze workflow')
+              }
+              
+              const result = await response.json()
+              setGraphData(result.graph)
+              setStatistics(result.statistics)
+              setGraphFilter(null)
+              setViewMode('graph')
+              
+              // Save YAML content for future editing
+              setSavedYAMLContent(yamlContent)
+              
+              // Close editor after successful analysis
+              setShowYAMLEditor(false)
+              
+              // Refresh analysis history
+              if (window.refreshAnalysisHistory) {
+                window.refreshAnalysisHistory()
+              }
+            } catch (err) {
+              // Re-throw error so YAMLEditorPanel can display it
+              throw err
+            } finally {
+              setLoading(false)
+            }
+          }}
+          githubToken={inputFormRef.current?.getToken?.() || ''}
+          loading={loading}
+          initialContent={savedYAMLContent || ''}
         />
       )}
 
