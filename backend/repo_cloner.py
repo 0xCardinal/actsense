@@ -3,10 +3,13 @@ import subprocess
 import tempfile
 import shutil
 import os
+import logging
 from typing import Optional, Tuple
 from pathlib import Path
 import re
 from urllib.parse import quote
+
+logger = logging.getLogger(__name__)
 
 class RepoCloner:
     """Handle cloning and cleanup of repositories."""
@@ -33,8 +36,9 @@ class RepoCloner:
         Returns:
             Tuple of (clone_path, cleanup_function_name)
         """
-        repo_url = f"https://github.com/{owner}/{repo}.git"
-        
+        public_repo_url = f"https://github.com/{owner}/{repo}.git"
+        repo_url = public_repo_url  # used in subprocess; may contain token
+
         # Use token in URL if provided (for private repos)
         if token:
             # Validate token: GitHub tokens can be:
@@ -77,7 +81,9 @@ class RepoCloner:
             )
             
             if result.returncode != 0:
-                raise Exception(f"Git clone failed: {result.stderr}")
+                # Sanitize stderr before surfacing it — the URL may contain the token.
+                sanitized_stderr = result.stderr.replace(repo_url, public_repo_url) if token else result.stderr
+                raise Exception(f"Git clone failed: {sanitized_stderr}")
             
             # Initialize sparse checkout (if not already done by --sparse flag)
             # Then set it to only include .github/workflows
@@ -114,29 +120,29 @@ class RepoCloner:
                     "sparse-checkout", "init", "--no-cone"
                 ]
                 subprocess.run(sparse_init_no_cone_cmd, capture_output=True, text=True, timeout=30, check=False)
-                
+
                 # Write sparse checkout config manually
                 sparse_config = Path(clone_dir) / ".git" / "info" / "sparse-checkout"
                 sparse_config.parent.mkdir(parents=True, exist_ok=True)
                 with open(sparse_config, 'w') as f:
                     f.write(".github/workflows/*\n")
-            
+
             # Checkout the sparse files
             checkout_cmd = [
                 "git", "-C", str(clone_dir),
                 "checkout"
             ]
-            
+
             result = subprocess.run(
                 checkout_cmd,
                 capture_output=True,
                 text=True,
                 timeout=60
             )
-            
+
             if result.returncode != 0:
                 # If sparse checkout fails completely, fall back to full clone
-                print(f"Warning: Sparse checkout failed, falling back to full clone. Error: {result.stderr}")
+                logger.warning("Sparse checkout failed for %s/%s, falling back to full clone: %s", owner, repo, result.stderr)
                 # The clone already happened, so we can still use it, just with all files
             
             return str(clone_dir), str(clone_dir)

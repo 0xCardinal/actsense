@@ -18,10 +18,18 @@ from analysis_storage import AnalysisStorage
 
 app = FastAPI(title="actsense - GitHub Actions Security Auditor")
 
-# CORS middleware
+# CORS middleware — origins configurable via CORS_ORIGINS env var (comma-separated).
+# Defaults to localhost dev origins when the variable is not set.
+_cors_origins_env = os.environ.get("CORS_ORIGINS", "")
+_cors_origins: list[str] = (
+    [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    if _cors_origins_env
+    else ["http://localhost:3000", "http://localhost:5173"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

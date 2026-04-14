@@ -34,6 +34,11 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends git curl && \
     rm -rf /var/lib/apt/lists/*
 
+# Install TruffleHog for secret detection in workflow files
+# Pinned to a specific version for reproducible builds; update periodically.
+RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+    | sh -s -- -b /usr/local/bin v3.88.1
+
 # Install uv and copy to /usr/local/bin for easy access
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     if [ -f /root/.cargo/bin/uv ]; then \

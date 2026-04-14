@@ -1,24 +1,33 @@
 """Storage for analysis results."""
 import json
+import logging
 import os
 import datetime
+import threading
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import uuid
 
+logger = logging.getLogger(__name__)
+
 
 class AnalysisStorage:
-    """Store and retrieve analysis results."""
-    
+    """Store and retrieve analysis results.
+
+    All write operations (save, delete) are protected by an in-process lock so
+    concurrent audit requests cannot corrupt each other's JSON files.
+    """
+
     def __init__(self, storage_dir: Optional[str] = None):
         """Initialize storage directory."""
         if storage_dir:
             self.storage_dir = Path(storage_dir)
         else:
             self.storage_dir = Path(__file__).parent.parent / "data" / "analyses"
-        
+
         self.storage_dir.mkdir(parents=True, exist_ok=True)
-    
+        self._lock = threading.Lock()
+
     def save_analysis(
         self,
         repository: Optional[str],
@@ -29,7 +38,7 @@ class AnalysisStorage:
     ) -> str:
         """Save an analysis and return its ID."""
         analysis_id = str(uuid.uuid4())
-        
+
         analysis = {
             "id": analysis_id,
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
@@ -39,22 +48,31 @@ class AnalysisStorage:
             "graph": graph_data,
             "statistics": statistics
         }
-        
+
         file_path = self.storage_dir / f"{analysis_id}.json"
-        with open(file_path, 'w') as f:
-            json.dump(analysis, f, indent=2)
-        
+        with self._lock:
+            # Write to a temp file first, then atomically rename so a partial
+            # write never leaves a corrupted JSON file on disk.
+            tmp_path = file_path.with_suffix(".tmp")
+            try:
+                with open(tmp_path, 'w') as f:
+                    json.dump(analysis, f, indent=2)
+                tmp_path.replace(file_path)
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                raise
+
         return analysis_id
-    
+
     def get_analysis(self, analysis_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve an analysis by ID."""
         file_path = self.storage_dir / f"{analysis_id}.json"
         if not file_path.exists():
             return None
-        
+
         with open(file_path, 'r') as f:
             return json.load(f)
-    
+
     def list_analyses(
         self,
         limit: int = 50,
@@ -62,7 +80,7 @@ class AnalysisStorage:
     ) -> List[Dict[str, Any]]:
         """List all analyses, optionally filtered by repository."""
         analyses = []
-        
+
         for file_path in sorted(
             self.storage_dir.glob("*.json"),
             key=lambda p: p.stat().st_mtime,
@@ -71,11 +89,11 @@ class AnalysisStorage:
             try:
                 with open(file_path, 'r') as f:
                     analysis = json.load(f)
-                    
+
                 # Filter by repository if specified
                 if repository and analysis.get("repository") != repository:
                     continue
-                
+
                 # Return only metadata, not full graph data
                 analyses.append({
                     "id": analysis["id"],
@@ -85,20 +103,21 @@ class AnalysisStorage:
                     "method": analysis.get("method", "api"),
                     "statistics": analysis.get("statistics", {})
                 })
-                
+
                 if len(analyses) >= limit:
                     break
-            except Exception as e:
-                print(f"Error reading analysis {file_path}: {e}")
+            except Exception:
+                logger.exception("Error reading analysis file %s", file_path)
                 continue
-        
+
         return analyses
-    
+
     def delete_analysis(self, analysis_id: str) -> bool:
         """Delete an analysis by ID."""
         file_path = self.storage_dir / f"{analysis_id}.json"
-        if file_path.exists():
-            file_path.unlink()
-            return True
+        with self._lock:
+            if file_path.exists():
+                file_path.unlink()
+                return True
         return False
 
