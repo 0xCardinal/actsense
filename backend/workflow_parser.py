@@ -2,6 +2,9 @@
 import yaml
 from typing import List, Dict, Any, Optional, Tuple
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class WorkflowParser:
@@ -18,8 +21,9 @@ class WorkflowParser:
             else:
                 # If YAML parsed to a non-dict type (string, list, etc.), return empty dict
                 return {}
-        except yaml.YAMLError as e:
-            return {"error": str(e)}
+        except yaml.YAMLError:
+            logger.exception("Failed to parse workflow YAML")
+            return {"error": "Invalid YAML content"}
 
     @staticmethod
     def extract_actions(workflow: Dict[str, Any]) -> List[str]:
@@ -103,8 +107,9 @@ class WorkflowParser:
         """Parse an action.yml or action.yaml file."""
         try:
             return yaml.safe_load(content) or {}
-        except yaml.YAMLError as e:
-            return {"error": str(e)}
+        except yaml.YAMLError:
+            logger.exception("Failed to parse action YAML")
+            return {"error": "Invalid YAML content"}
 
     @staticmethod
     def extract_action_dependencies(action_yml: Dict[str, Any]) -> List[str]:
