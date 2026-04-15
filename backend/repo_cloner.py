@@ -56,13 +56,14 @@ class RepoCloner:
         clone_dir = self.base_dir / f"{owner}_{repo}_{os.getpid()}"
         
         try:
-            # Clone the repository with sparse checkout to only get .github/workflows
-            # This is much faster and uses less disk space
+            # Clone with --no-checkout so no files are written yet.
+            # --depth 1 + --filter=tree:0 skips all tree and blob objects
+            # until we explicitly ask for them via sparse-checkout.
             clone_cmd = [
                 "git", "clone",
                 "--depth", "1",
-                "--filter=blob:none",
-                "--sparse",
+                "--filter=tree:0",
+                "--no-checkout",
                 repo_url,
                 str(clone_dir)
             ]
@@ -73,71 +74,38 @@ class RepoCloner:
                 clone_cmd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=60
             )
             
             if result.returncode != 0:
                 raise Exception(f"Git clone failed: {result.stderr}")
             
-            # Initialize sparse checkout (if not already done by --sparse flag)
-            # Then set it to only include .github/workflows
-            sparse_init_cmd = [
-                "git", "-C", str(clone_dir),
-                "sparse-checkout", "init", "--cone"
-            ]
+            # Configure sparse-checkout before any checkout happens.
             subprocess.run(
-                sparse_init_cmd,
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False  # Don't fail if already initialized
+                ["git", "-C", str(clone_dir), "sparse-checkout", "init", "--cone"],
+                capture_output=True, text=True, timeout=15, check=False,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone_dir), "sparse-checkout", "set", ".github/workflows"],
+                capture_output=True, text=True, timeout=15, check=False,
             )
             
-            # Set sparse checkout to only .github/workflows
-            sparse_set_cmd = [
-                "git", "-C", str(clone_dir),
-                "sparse-checkout", "set",
-                ".github/workflows"
-            ]
-            
+            # Single checkout: only fetches blobs for .github/workflows.
             result = subprocess.run(
-                sparse_set_cmd,
-                capture_output=True,
-                text=True,
-                timeout=30
+                ["git", "-C", str(clone_dir), "checkout"],
+                capture_output=True, text=True, timeout=60,
             )
             
             if result.returncode != 0:
-                # Fallback: try without --cone mode
-                sparse_init_no_cone_cmd = [
-                    "git", "-C", str(clone_dir),
-                    "sparse-checkout", "init", "--no-cone"
-                ]
-                subprocess.run(sparse_init_no_cone_cmd, capture_output=True, text=True, timeout=30, check=False)
-                
-                # Write sparse checkout config manually
+                # Fallback for older Git: non-cone sparse-checkout
                 sparse_config = Path(clone_dir) / ".git" / "info" / "sparse-checkout"
                 sparse_config.parent.mkdir(parents=True, exist_ok=True)
                 with open(sparse_config, 'w') as f:
                     f.write(".github/workflows/*\n")
-            
-            # Checkout the sparse files
-            checkout_cmd = [
-                "git", "-C", str(clone_dir),
-                "checkout"
-            ]
-            
-            result = subprocess.run(
-                checkout_cmd,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            if result.returncode != 0:
-                # If sparse checkout fails completely, fall back to full clone
-                print(f"Warning: Sparse checkout failed, falling back to full clone. Error: {result.stderr}")
-                # The clone already happened, so we can still use it, just with all files
+                subprocess.run(
+                    ["git", "-C", str(clone_dir), "checkout"],
+                    capture_output=True, text=True, timeout=60,
+                )
             
             return str(clone_dir), str(clone_dir)
         

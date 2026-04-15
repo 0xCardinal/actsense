@@ -1,5 +1,5 @@
 """Security issue detection for GitHub Actions."""
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from github_client import GitHubClient
 
 # Import rules from rules module
@@ -265,11 +265,13 @@ class SecurityAuditor:
         """Helper to find line number in content."""
         return security_rules._find_line_number(content, search_text, context)
     @staticmethod
-    async def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None, client: Optional[GitHubClient] = None, current_repo: Optional[str] = None, is_public_repo: bool = False) -> List[Dict[str, Any]]:
+    async def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None, client: Optional[GitHubClient] = None, current_repo: Optional[str] = None, is_public_repo: bool = False, log_fn: Optional[Callable[[str], None]] = None) -> List[Dict[str, Any]]:
         """Audit a workflow file for security issues."""
         issues = []
+        _log = log_fn or (lambda _: None)
         
         # Check permissions
+        _log("  Checking permissions & tokens")
         perm_issues = SecurityAuditor.check_permissions(workflow)
         if content and perm_issues:
             for issue in perm_issues:
@@ -287,7 +289,7 @@ class SecurityAuditor:
                     issue["line_number"] = line_num
         issues.extend(token_issues)
         
-        # Check for secrets and long-term credentials
+        _log("  Checking secrets & credentials")
         secret_issues = SecurityAuditor.check_secrets_in_workflow(workflow, content)
         if content and secret_issues:
             for issue in secret_issues:
@@ -321,6 +323,7 @@ class SecurityAuditor:
                             issue["line_number"] = line_num
         issues.extend(secret_issues)
         
+        _log("  Checking runner security")
         runner_issues = SecurityAuditor.check_self_hosted_runners(workflow, is_public_repo=is_public_repo)
         if content and runner_issues:
             for issue in runner_issues:
@@ -367,7 +370,7 @@ class SecurityAuditor:
                     issue["line_number"] = line_num
         issues.extend(visibility_risks_issues)
         
-        # Check dangerous events (includes insecure_pull_request_target)
+        _log("  Checking events & injection vectors")
         event_issues = SecurityAuditor.check_dangerous_events(workflow)
         if content and event_issues:
             for issue in event_issues:
@@ -469,7 +472,7 @@ class SecurityAuditor:
                     issue["line_number"] = line_num
         issues.extend(risky_context_issues)
         
-        # Check artifact retention
+        _log("  Checking best practices & artifacts")
         artifact_issues = SecurityAuditor.check_artifact_retention(workflow)
         if content and artifact_issues:
             for issue in artifact_issues:
@@ -505,7 +508,7 @@ class SecurityAuditor:
                     issue["line_number"] = line_num
         issues.extend(env_issues)
         
-        # Check deprecated actions
+        _log("  Checking supply chain & third-party actions")
         deprecated_issues = await SecurityAuditor.check_deprecated_actions(workflow, client)
         if content and deprecated_issues:
             for issue in deprecated_issues:
@@ -596,7 +599,7 @@ class SecurityAuditor:
                         issue["line_number"] = line_num
         issues.extend(injection_issues)
         
-        # Check for malicious curl pipe bash
+        _log("  Checking malicious patterns & obfuscation")
         curl_pipe_issues = SecurityAuditor.check_malicious_curl_pipe_bash(workflow)
         if content and curl_pipe_issues:
             for issue in curl_pipe_issues:
@@ -643,7 +646,7 @@ class SecurityAuditor:
                     issue["line_number"] = line_num
         issues.extend(artifact_exposure_issues)
         
-        # Check for unpinned container/service images
+        _log("  Checking pinning & version freshness")
         container_issues = SecurityAuditor.check_unpinned_container_images(workflow)
         if content and container_issues:
             for issue in container_issues:
@@ -678,7 +681,7 @@ class SecurityAuditor:
                         issue["line_number"] = line_num
         issues.extend(version_issues)
         
-        # Check token permission escalation
+        _log("  Checking privilege escalation & access control")
         token_escalation_issues = SecurityAuditor.check_token_permission_escalation(workflow)
         if content and token_escalation_issues:
             for issue in token_escalation_issues:

@@ -2,9 +2,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any, Set
+from typing import Optional, List, Dict, Any, Set, Callable
+import asyncio
+import json
 import os
 import uvicorn
 import yaml
@@ -57,13 +59,16 @@ async def resolve_action_dependencies(
     graph: GraphBuilder,
     visited: Set[str],
     depth: int = 0,
-    max_depth: int = 5
+    max_depth: int = 5,
+    log_fn: Optional[Callable[[str], None]] = None
 ):
     """Recursively resolve action dependencies."""
     if depth > max_depth or action_ref in visited:
         return
     
+    _log = log_fn or (lambda _: None)
     visited.add(action_ref)
+    _log(f"Resolving {action_ref}")
     
     # Handle docker images: add as a node but don't try to resolve further
     if action_ref.startswith("docker://"):
@@ -92,7 +97,7 @@ async def resolve_action_dependencies(
                 dependencies = parser.extract_actions(workflow)
                 for dep in dependencies:
                     graph.add_edge(action_ref, dep)
-                    await resolve_action_dependencies(client, dep, graph, visited, depth + 1, max_depth)
+                    await resolve_action_dependencies(client, dep, graph, visited, depth + 1, max_depth, log_fn)
         except Exception:
             pass
         return
@@ -210,7 +215,7 @@ async def resolve_action_dependencies(
             for dep in dependencies:
                 graph.add_edge(action_ref, dep)
                 await resolve_action_dependencies(
-                    client, dep, graph, visited, depth + 1, max_depth
+                    client, dep, graph, visited, depth + 1, max_depth, log_fn
                 )
         except Exception as e:
             # Silently skip if there's an error resolving dependencies
@@ -223,19 +228,22 @@ async def audit_repository(
     repo: str,
     graph: GraphBuilder,
     use_clone: bool = False,
-    token: Optional[str] = None
+    token: Optional[str] = None,
+    log_fn: Optional[Callable[[str], None]] = None
 ):
     """Audit a repository's workflows."""
-    # Add repository as root node
+    _log = log_fn or (lambda _: None)
+    
     repo_node_id = f"{owner}/{repo}"
     graph.add_node(repo_node_id, repo_node_id, "repository", {"owner": owner, "repo": repo})
     
-    # Determine repository visibility for runner security checks
+    _log(f"Checking repository visibility for {owner}/{repo}")
     is_public_repo = False
     try:
         repo_info = await client.get_repository_info(owner, repo)
         if repo_info:
             is_public_repo = not repo_info.get("private", True)
+            _log(f"Repository is {'public' if is_public_repo else 'private'}")
     except Exception:
         pass
     
@@ -246,23 +254,24 @@ async def audit_repository(
     
     try:
         if use_clone:
-            # Clone repository
+            _log(f"Cloning {owner}/{repo}...")
             clone_path, _ = cloner.clone_repository(owner, repo, token)
             workflows = cloner.get_workflow_files(clone_path)
+            _log(f"Found {len(workflows)} workflow(s)")
             
             visited = set()
             
             for workflow_file in workflows:
                 try:
+                    _log(f"Parsing {workflow_file['name']}")
                     content = cloner.get_file_content(clone_path, workflow_file["path"])
                     workflow = parser.parse_workflow(content)
                     
-                    # Skip if workflow is not a dict or has an error
                     if not isinstance(workflow, dict) or "error" in workflow:
                         continue
                     
-                    # Audit workflow with content for line number tracking
-                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client, current_repo=current_repo, is_public_repo=is_public_repo)
+                    _log(f"Auditing {workflow_file['name']}")
+                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client, current_repo=current_repo, is_public_repo=is_public_repo, log_fn=log_fn)
                     workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
                     graph.add_node(
                         workflow_node_id,
@@ -286,15 +295,15 @@ async def audit_repository(
                     for action_ref in actions:
                         graph.add_edge(workflow_node_id, action_ref)
                         await resolve_action_dependencies(
-                            client, action_ref, graph, visited
+                            client, action_ref, graph, visited, log_fn=log_fn
                         )
                     
-                    # Add container/service images as nodes in the graph
                     for img_info in parser.extract_container_images(workflow):
                         img_node_id = f"container://{img_info['image']}"
                         graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
                         graph.add_edge(workflow_node_id, img_node_id)
                 except Exception as e:
+                    _log(f"Error processing {workflow_file['name']}: {e}")
                     graph.add_issues_to_node(repo_node_id, [{
                         "type": "workflow_processing_error",
                         "severity": "low",
@@ -303,22 +312,23 @@ async def audit_repository(
                         "recommendation": "Check if the workflow file is valid YAML and accessible."
                     }])
         else:
-            # Use API method (original)
+            _log(f"Fetching workflows via API...")
             workflows = await client.get_workflows(owner, repo)
+            _log(f"Found {len(workflows)} workflow(s)")
             
             visited = set()
             
             for workflow_file in workflows:
                 try:
+                    _log(f"Parsing {workflow_file['name']}")
                     content = await client.get_file_content(owner, repo, workflow_file["path"])
                     workflow = parser.parse_workflow(content)
                     
-                    # Skip if workflow is not a dict or has an error
                     if not isinstance(workflow, dict) or "error" in workflow:
                         continue
                     
-                    # Audit workflow with content for line number tracking
-                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client, current_repo=current_repo, is_public_repo=is_public_repo)
+                    _log(f"Auditing {workflow_file['name']}")
+                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client, current_repo=current_repo, is_public_repo=is_public_repo, log_fn=log_fn)
                     workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
                     graph.add_node(
                         workflow_node_id,
@@ -342,15 +352,15 @@ async def audit_repository(
                     for action_ref in actions:
                         graph.add_edge(workflow_node_id, action_ref)
                         await resolve_action_dependencies(
-                            client, action_ref, graph, visited
+                            client, action_ref, graph, visited, log_fn=log_fn
                         )
                     
-                    # Add container/service images as nodes in the graph
                     for img_info in parser.extract_container_images(workflow):
                         img_node_id = f"container://{img_info['image']}"
                         graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
                         graph.add_edge(workflow_node_id, img_node_id)
                 except Exception as e:
+                    _log(f"Error processing {workflow_file['name']}: {e}")
                     graph.add_issues_to_node(repo_node_id, [{
                         "type": "workflow_processing_error",
                         "severity": "low",
@@ -359,6 +369,7 @@ async def audit_repository(
                         "recommendation": "Check if the workflow file is valid YAML and accessible."
                     }])
         
+        _log("Checking version consistency across workflows")
         # Check for inconsistent action versions across workflows
         if len(workflow_actions_data) > 1:  # Only check if there are multiple workflows
             inconsistency_issues = auditor.check_inconsistent_action_versions(workflow_actions_data)
@@ -434,6 +445,91 @@ async def audit(request: AuditRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/audit/stream")
+async def audit_stream(request: AuditRequest):
+    """Audit with Server-Sent Events for real-time progress."""
+    log_queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
+
+    def log_callback(msg: str):
+        log_queue.put_nowait(msg)
+
+    async def run_audit():
+        """Execute the audit and push the result (or error) onto the queue."""
+        client = GitHubClient(token=request.github_token)
+        graph = GraphBuilder()
+        try:
+            repository = None
+            action = None
+
+            if request.repository:
+                repo_str = request.repository
+                parsed_url = urlparse(repo_str)
+                if parsed_url.scheme and parsed_url.netloc:
+                    if parsed_url.netloc not in ("github.com", "www.github.com"):
+                        raise HTTPException(status_code=400, detail="Only github.com repository URLs are supported")
+                    path_parts = parsed_url.path.strip("/").split("/")
+                    if len(path_parts) < 2:
+                        raise HTTPException(status_code=400, detail="Invalid repository URL")
+                    owner, repo = path_parts[0], path_parts[1].replace(".git", "")
+                else:
+                    parts = repo_str.split("/")
+                    if len(parts) != 2:
+                        raise HTTPException(status_code=400, detail="Invalid repository format. Use 'owner/repo'")
+                    owner, repo = parts
+
+                repository = f"{owner}/{repo}"
+                await audit_repository(client, owner, repo, graph, request.use_clone, request.github_token, log_fn=log_callback)
+
+            elif request.action:
+                action = request.action
+                visited: Set[str] = set()
+                await resolve_action_dependencies(client, request.action, graph, visited, log_fn=log_callback)
+            else:
+                raise HTTPException(status_code=400, detail="Either repository or action must be provided")
+
+            log_callback("Building final graph...")
+            graph_data = graph.get_graph_data()
+            statistics = graph.get_statistics()
+
+            analysis_id = storage.save_analysis(
+                repository=repository,
+                action=action,
+                graph_data=graph_data,
+                statistics=statistics,
+                method="clone" if request.use_clone else "api"
+            )
+
+            result = {"id": analysis_id, "graph": graph_data, "statistics": statistics}
+            log_queue.put_nowait(("__RESULT__", result))
+        except HTTPException as exc:
+            log_queue.put_nowait(("__ERROR__", exc.detail))
+        except Exception as exc:
+            log_queue.put_nowait(("__ERROR__", str(exc)))
+
+    async def event_generator():
+        task = asyncio.create_task(run_audit())
+        try:
+            while True:
+                msg = await log_queue.get()
+                if msg is None:
+                    break
+                if isinstance(msg, tuple):
+                    kind, payload = msg
+                    if kind == "__RESULT__":
+                        yield f"event: result\ndata: {json.dumps(payload)}\n\n"
+                        break
+                    elif kind == "__ERROR__":
+                        yield f"event: error\ndata: {json.dumps({'detail': payload})}\n\n"
+                        break
+                else:
+                    yield f"event: log\ndata: {json.dumps({'message': msg})}\n\n"
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/audit/yaml")

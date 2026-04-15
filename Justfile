@@ -29,7 +29,7 @@ docs action:
 actsense action:
     @if [ "{{action}}" = "up" ]; then \
         echo "Starting actsense docker containers..."; \
-        docker compose up -d; \
+        docker compose up -d --build; \
     elif [ "{{action}}" = "down" ]; then \
         echo "Stopping actsense docker containers..."; \
         docker compose down; \
