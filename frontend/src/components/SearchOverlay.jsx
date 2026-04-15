@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { getNodeTypeIcon } from '../utils/nodeIcons'
 import './SearchOverlay.css'
 
 function SearchOverlay({ graphData, onClose, onNodeSelect, onViewAll }) {
@@ -365,7 +366,7 @@ function SearchOverlay({ graphData, onClose, onNodeSelect, onViewAll }) {
                         ) : (
                           <>
                             <span className={`asset-badge asset-badge-${result.node.type || 'asset'}`}>
-                              {result.node.type === 'repository' ? '📦' : result.node.type === 'workflow' ? '⚙️' : '🔧'}
+                              {getNodeTypeIcon(result.node.type)}
                             </span>
                             <div className="search-result-content">
                               <div className="search-result-asset-type">{result.node.type || 'Asset'}</div>

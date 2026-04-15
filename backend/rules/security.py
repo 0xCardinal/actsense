@@ -307,9 +307,6 @@ def check_self_hosted_runner_secrets(workflow: Dict[str, Any]) -> List[Dict[str,
 
     jobs = workflow.get("jobs", {})
 
-    # Pattern to detect secrets in run commands
-    secrets_pattern = re.compile(r'\$\{\{\s*secrets\.[^}]+\}\}')
-
     for job_name, job in jobs.items():
         runs_on_value = job.get("runs-on", "")
         if not runs_on_value or "self-hosted" not in str(runs_on_value).lower():
@@ -318,7 +315,14 @@ def check_self_hosted_runner_secrets(workflow: Dict[str, Any]) -> List[Dict[str,
         steps = job.get("steps", [])
         for step in steps:
             run = step.get("run", "")
-            if isinstance(run, str) and secrets_pattern.search(run):
+            if isinstance(run, str):
+                # Normalize whitespace and use substring checks to avoid regex complexity on untrusted input.
+                normalized_run = "".join(run.lower().split())
+                has_secret_expression = "${{secrets." in normalized_run and "}}" in normalized_run
+            else:
+                has_secret_expression = False
+
+            if has_secret_expression:
                 issues.append({
                     "type": "self_hosted_runner_secrets_in_run",
                     "severity": "high",
@@ -2287,13 +2291,12 @@ async def check_older_action_versions(workflow: Dict[str, Any], client: Optional
         return len(ref) >= 7 and re.match(r'^[a-f0-9]+$', ref)
 
     def days_between_dates(date1_str: str, date2_str: str) -> Optional[int]:
-        """Calculate days between two ISO 8601 date strings."""
+        """Calculate how many days date1 is older than date2. Negative means date1 is newer."""
         try:
             from datetime import datetime
             date1 = datetime.fromisoformat(date1_str.replace('Z', '+00:00'))
             date2 = datetime.fromisoformat(date2_str.replace('Z', '+00:00'))
-            delta = abs((date2 - date1).days)
-            return delta
+            return (date2 - date1).days
         except Exception:
             return None
 
@@ -2414,26 +2417,6 @@ async def check_older_action_versions(workflow: Dict[str, Any], client: Optional
             except Exception:
                 # If we can't fetch the latest version, fall back to heuristic
                 pass
-
-        # Fallback heuristic: Flag v1 and v2 as potentially outdated
-        # This is only used when we can't fetch the latest version or client is not available
-        if not version_checked and current_version[0] <= 2:
-            issues.append({
-                "type": "older_action_version",
-                "severity": "medium",
-                "message": f"Action '{action_ref}' uses version '{ref}' which may be outdated. Consider checking for newer versions for security fixes and improvements.",
-                "action": action_ref,
-                "version": ref,
-                "major_version": current_version[0],
-                "evidence": {
-                    "action_reference": action_ref,
-                    "reference_type": "version_tag",
-                    "current_version": ref,
-                    "major_version": current_version[0],
-                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/older_action_version"
-                },
-                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/older_action_version"
-            })
 
     return issues
 
@@ -3045,89 +3028,67 @@ async def check_missing_action_repositories(workflow: Dict[str, Any], client: Op
     jobs = workflow.get("jobs", {})
     checked_repos = {}  # Cache for repository existence status
 
+    async def _check_uses_ref(uses: str, job_name: str, step_name: str = ""):
+        """Check a single uses reference for missing repositories."""
+        if not uses or not isinstance(uses, str):
+            return
+        if uses.startswith(("./", "docker://", "http://", "https://")):
+            return
+
+        action_part = uses.split("@")[0].strip()
+        if "/" not in action_part:
+            return
+
+        parts = action_part.split("/", 1)
+        if len(parts) != 2:
+            return
+
+        action_owner = parts[0].strip()
+        repo_path = parts[1].strip()
+        if not action_owner:
+            return
+
+        repo_path_parts = repo_path.split("/")
+        action_repo = repo_path_parts[0].strip()
+        if not action_repo:
+            return
+
+        repo_key = f"{action_owner}/{action_repo}"
+        if repo_key not in checked_repos:
+            try:
+                repo_info = await client.get_repository_info(action_owner, action_repo)
+                checked_repos[repo_key] = repo_info is not None
+            except (HTTPException, Exception):
+                return
+
+        if checked_repos.get(repo_key) is False:
+            issues.append({
+                "type": "missing_action_repository",
+                "severity": "critical",
+                "message": f"Job '{job_name}' references action '{uses}' from repository '{repo_key}' that does not exist or is not accessible. This will cause workflow failures at runtime.",
+                "job": job_name,
+                "step": step_name,
+                "action": uses,
+                "evidence": {
+                    "job": job_name,
+                    "step": step_name,
+                    "action": uses,
+                    "repository": repo_key,
+                    "exists": False,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/missing_action_repository"
+                },
+                "recommendation": f"Verify the action reference '{uses}' is correct. The repository '{repo_key}' may have been deleted, moved, made private, or the reference may contain a typo. Update the workflow to use a valid action reference."
+            })
+
     for job_name, job in jobs.items():
-        steps = job.get("steps", [])
+        # Check job-level reusable workflows
+        if isinstance(job, dict) and "uses" in job:
+            await _check_uses_ref(job["uses"], job_name)
+
+        # Check step-level actions
+        steps = job.get("steps", []) if isinstance(job, dict) else []
         for step in steps:
-            uses = step.get("uses", "")
-            if not uses or not isinstance(uses, str):
-                continue
-
-            # Skip local paths, docker images, and URLs
-            if uses.startswith(("./", "docker://", "http://", "https://")):
-                continue
-
-            # Extract action owner/repo
-            action_owner = None
-            action_repo = None
-            
-            # Remove version/tag to get just the repo reference
-            action_part = uses.split("@")[0].strip()
-            
-            # Must have at least one slash for owner/repo format
-            if "/" not in action_part:
-                continue
-            
-            # Split into owner and rest
-            parts = action_part.split("/", 1)
-            if len(parts) != 2:
-                continue
-            
-            action_owner = parts[0].strip()
-            repo_path = parts[1].strip()
-            
-            # Validate owner is not empty
-            if not action_owner:
-                continue
-            
-            # Handle subdirectory actions (owner/repo/path/to/action)
-            # The repo name is the first part after owner/
-            repo_path_parts = repo_path.split("/")
-            action_repo = repo_path_parts[0].strip()
-            
-            # Validate repo is not empty
-            if not action_repo:
-                continue
-
-            # Check if repository exists (if client is available)
-            if action_owner and action_repo:
-                repo_key = f"{action_owner}/{action_repo}"
-                if repo_key not in checked_repos:
-                    try:
-                        repo_info = await client.get_repository_info(action_owner, action_repo)
-                        if repo_info is None:
-                            # Repository doesn't exist or is inaccessible (404)
-                            checked_repos[repo_key] = False
-                        else:
-                            # Repository exists
-                            checked_repos[repo_key] = True
-                    except HTTPException as e:
-                        # For HTTP exceptions (rate limits, etc.), skip this check
-                        # Don't assume repo is missing due to API errors
-                        continue
-                    except Exception:
-                        # For other unexpected errors, skip this check
-                        # Don't assume repo is missing due to errors
-                        continue
-                
-                repo_exists = checked_repos.get(repo_key)
-                if repo_exists is False:
-                    issues.append({
-                        "type": "missing_action_repository",
-                        "severity": "high",
-                        "message": f"Job '{job_name}' references action '{uses}' from repository '{repo_key}' that does not exist or is not accessible. This will cause workflow failures at runtime.",
-                        "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "action": uses,
-                        "evidence": {
-                            "job": job_name,
-                            "step": step.get("name", "unnamed"),
-                            "action": uses,
-                            "repository": repo_key,
-                            "exists": False,
-                            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/missing_action_repository"
-                        },
-                        "recommendation": f"Verify the action reference '{uses}' is correct. The repository '{repo_key}' may have been deleted, moved, made private, or the reference may contain a typo. Update the workflow to use a valid action reference."
-                    })
+            await _check_uses_ref(step.get("uses", ""), job_name, step.get("name", "unnamed"))
 
     return issues
 
@@ -3353,4 +3314,65 @@ def _find_line_number(content: str, search_text: str, context: Optional[str] = N
             else:
                 return i
     return None
+
+
+def check_unpinned_container_images(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for unpinned container and service images in workflow jobs.
+
+    Flags images that use mutable tags (e.g. 'node:20', 'postgres:latest')
+    instead of immutable digests (e.g. 'node@sha256:abc...').
+    """
+    issues = []
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return issues
+
+    def _is_pinned(image: str) -> bool:
+        """An image is pinned if it references a digest via @sha256:."""
+        return "@sha256:" in image
+
+    def _check_image(image: str, job_name: str, source: str, service_name: str = ""):
+        if not image or not isinstance(image, str):
+            return
+        # Skip expression-based images that are resolved at runtime
+        if image.startswith("${{"):
+            return
+        if _is_pinned(image):
+            return
+
+        context = f"service '{service_name}' in job" if source == "service" else f"job"
+        issues.append({
+            "type": "unpinned_container_image",
+            "severity": "medium",
+            "message": f"Container image '{image}' used by {context} '{job_name}' is not pinned to a digest. Mutable tags can be overwritten, leading to supply chain attacks.",
+            "job": job_name,
+            "evidence": {
+                "image": image,
+                "job": job_name,
+                "source": source,
+                "service_name": service_name,
+                "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinned_container_image"
+            },
+            "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinned_container_image"
+        })
+
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+
+        container = job.get("container")
+        if isinstance(container, str):
+            _check_image(container, job_name, "container")
+        elif isinstance(container, dict):
+            _check_image(container.get("image", ""), job_name, "container")
+
+        services = job.get("services", {})
+        if isinstance(services, dict):
+            for svc_name, svc in services.items():
+                if isinstance(svc, str):
+                    _check_image(svc, job_name, "service", svc_name)
+                elif isinstance(svc, dict):
+                    _check_image(svc.get("image", ""), job_name, "service", svc_name)
+
+    return issues
 

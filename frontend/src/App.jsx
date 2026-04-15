@@ -16,6 +16,9 @@ function App() {
   const [graphData, setGraphData] = useState(null)
   const [statistics, setStatistics] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [loadingStage, setLoadingStage] = useState('')
+  const [loadingLogs, setLoadingLogs] = useState([])
+  const [showLogs, setShowLogs] = useState(false)
   const [error, setError] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
   const [graphFilter, setGraphFilter] = useState(null)
@@ -29,11 +32,18 @@ function App() {
   const [showYAMLEditor, setShowYAMLEditor] = useState(false)
   const [savedYAMLContent, setSavedYAMLContent] = useState(null)
   const inputFormRef = useRef(null)
+  const auditAbortRef = useRef(null)
+  const logsEndRef = useRef(null)
 
-  // Debug: Log when component mounts
   useEffect(() => {
     console.log('App component mounted')
   }, [])
+
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [loadingLogs])
 
   // Handle Cmd+K / Ctrl+K keyboard shortcut
   useEffect(() => {
@@ -270,52 +280,101 @@ function App() {
   }
 
   const handleAudit = async (data) => {
+    if (auditAbortRef.current) {
+      auditAbortRef.current.abort()
+    }
+    const controller = new AbortController()
+    auditAbortRef.current = controller
+
     setLoading(true)
     setError(null)
-    
+
+    setLoadingLogs([])
+    setLoadingStage('Connecting...')
+
+    const addLog = (text) => {
+      setLoadingLogs(prev => [...prev, { time: new Date(), text }])
+    }
+
     try {
-      // Use relative URL (works in both dev with proxy and production)
-      const apiUrl = '/api/audit'
-      const response = await fetch(apiUrl, {
+      const response = await fetch('/api/audit/stream', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
+        signal: controller.signal,
       })
-      
+
       if (!response.ok) {
         let errorMessage = 'Failed to audit'
         try {
           const errorData = await response.json()
           errorMessage = errorData.detail || errorData.message || errorMessage
         } catch (e) {
-          // If response is not JSON, use status text
           errorMessage = response.statusText || errorMessage
         }
-        
-        // Provide helpful message for rate limit errors
         if (response.status === 403 && errorMessage.includes('rate limit')) {
           errorMessage = 'GitHub API rate limit exceeded. Please provide a GitHub Personal Access Token in the form to increase your rate limit from 60/hour to 5000/hour. You can create a token at https://github.com/settings/tokens'
         }
-        
         throw new Error(errorMessage)
       }
-      
-      const result = await response.json()
-      setGraphData(result.graph)
-      setStatistics(result.statistics)
-      setGraphFilter(null) // Reset filter on new analysis
-      setViewMode('graph') // Reset to graph view
-      
-      // Refresh analysis history after new analysis
-      if (window.refreshAnalysisHistory) {
-        window.refreshAnalysisHistory()
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let eventType = null
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        const parts = buffer.split('\n')
+        buffer = parts.pop() || ''
+
+        for (const line of parts) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim()
+          } else if (line.startsWith('data: ') && eventType) {
+            try {
+              const parsed = JSON.parse(line.slice(6))
+              if (eventType === 'log') {
+                const msg = parsed.message || ''
+                addLog(msg)
+                if (!msg.startsWith('  ')) {
+                  setLoadingStage(msg)
+                }
+              } else if (eventType === 'result') {
+                setGraphData(parsed.graph)
+                setStatistics(parsed.statistics)
+                setGraphFilter(null)
+                setViewMode('graph')
+                addLog('Audit complete')
+                if (window.refreshAnalysisHistory) {
+                  window.refreshAnalysisHistory()
+                }
+              } else if (eventType === 'error') {
+                throw new Error(parsed.detail || 'Audit failed')
+              }
+            } catch (parseErr) {
+              if (parseErr instanceof SyntaxError) continue
+              throw parseErr
+            }
+            eventType = null
+          } else if (line.trim() === '') {
+            eventType = null
+          }
+        }
       }
     } catch (err) {
+      if (err.name === 'AbortError') return
       setError(err.message)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) {
+        setLoading(false)
+        setLoadingStage('')
+        setLoadingLogs([])
+        setShowLogs(false)
+      }
     }
   }
 
@@ -415,6 +474,39 @@ function App() {
                 <span>Search</span>
                 <kbd>{navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘K' : 'Ctrl+K'}</kbd>
               </button>
+            )}
+            {loading && !graphData && (
+              <div className="audit-loading-overlay">
+                <div className="audit-loading-card">
+                  <div className="audit-loading-spinner" />
+                  <div className="audit-loading-stage">{loadingStage}</div>
+                  <div className="audit-loading-bar-track">
+                    <div className="audit-loading-bar-fill" />
+                  </div>
+                  <button
+                    className="audit-loading-toggle"
+                    onClick={() => setShowLogs(prev => !prev)}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showLogs ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                    {showLogs ? 'Hide details' : 'Show details'}
+                  </button>
+                  {showLogs && (
+                    <div className="audit-loading-logs">
+                      {loadingLogs.map((log, i) => (
+                        <div key={i} className="audit-log-line">
+                          <span className="audit-log-time">
+                            {log.time.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </span>
+                          <span className="audit-log-text">{log.text}</span>
+                        </div>
+                      ))}
+                      <div ref={logsEndRef} />
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
             {graphData ? (
               viewMode === 'graph' ? (

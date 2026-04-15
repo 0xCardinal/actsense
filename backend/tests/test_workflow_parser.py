@@ -114,8 +114,8 @@ jobs:
         assert "./local-action" not in actions
         assert "actions/checkout@v4" in actions
     
-    def test_extract_actions_skips_docker(self):
-        """Test that docker:// URLs are skipped."""
+    def test_extract_actions_includes_docker(self):
+        """Test that docker:// references are included for graph visibility."""
         workflow = {
             "jobs": {
                 "test": {
@@ -127,7 +127,7 @@ jobs:
             }
         }
         actions = WorkflowParser.extract_actions(workflow)
-        assert "docker://alpine:latest" not in actions
+        assert "docker://alpine:latest" in actions
         assert "actions/checkout@v4" in actions
     
     def test_extract_actions_skips_http_urls(self):

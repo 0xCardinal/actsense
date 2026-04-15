@@ -12,6 +12,7 @@ import dagre from 'dagre'
 import NodeDetailsPanel from './NodeDetailsPanel'
 import CustomNode from './CustomNode'
 import { filterNodes } from '../utils/nodeFilters'
+import { getNodeTypeIcon } from '../utils/nodeIcons'
 import './ActionGraph.css'
 
 const nodeTypes = {
@@ -37,18 +38,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
     }
   }
 
-  const getNodeType = (type) => {
-    switch (type) {
-      case 'repository':
-        return '📦'
-      case 'workflow':
-        return '⚙️'
-      case 'action':
-        return '🔧'
-      default:
-        return '•'
-    }
-  }
+  const getNodeType = getNodeTypeIcon
 
 
   // Calculate layout based on filter type
@@ -650,16 +640,24 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
       
       <div className={`graph-legend ${selectedNode ? 'panel-open' : ''}`}>
         <div className="legend-item">
-          <span className="legend-icon">📦</span>
+          <span className="legend-icon">{getNodeTypeIcon('repository')}</span>
           <span>Repository</span>
         </div>
         <div className="legend-item">
-          <span className="legend-icon">⚙️</span>
+          <span className="legend-icon">{getNodeTypeIcon('workflow')}</span>
           <span>Workflow</span>
         </div>
         <div className="legend-item">
-          <span className="legend-icon">🔧</span>
+          <span className="legend-icon">{getNodeTypeIcon('action')}</span>
           <span>Action</span>
+        </div>
+        <div className="legend-item">
+          <span className="legend-icon">{getNodeTypeIcon('docker_image')}</span>
+          <span>Docker</span>
+        </div>
+        <div className="legend-item">
+          <span className="legend-icon">{getNodeTypeIcon('container_image')}</span>
+          <span>Container</span>
         </div>
         <div className="legend-severity">
           <div className="legend-severity-item">

@@ -17,7 +17,7 @@ A security auditor for GitHub Actions that analyzes workflows and their dependen
 
 ## Features
 
-- 🔍 **Comprehensive Security Auditing**: Detects 65+ security issues in GitHub Actions workflows
+- 🔍 **Comprehensive Security Auditing**: Detects ~70 security issues and exposures in GitHub Actions workflows
 - 📊 **Interactive Graph Visualization**: Visualize action dependencies with an interactive graph
 - 🔎 **Powerful Search**: Search security issues and assets with natural language queries (Cmd+K / Ctrl+K)
 - 📋 **Table Views**: View nodes and dependencies in organized table formats

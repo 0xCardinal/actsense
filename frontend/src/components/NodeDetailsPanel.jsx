@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import './NodeDetailsPanel.css'
 import IssueDetailsModal from './IssueDetailsModal'
 import ShareModal from './ShareModal'
+import { getNodeTypeIcon } from '../utils/nodeIcons'
 
 function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, onScanRepository, onViewAnalysis, repositoryAuditStatus, onStartAnalysis, setRepositoryInput }) {
   const [selectedIssue, setSelectedIssue] = useState(null)
@@ -194,18 +195,7 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
     }
   }
 
-  const getNodeTypeIcon = (type) => {
-    switch (type) {
-      case 'repository':
-        return '📦'
-      case 'workflow':
-        return '⚙️'
-      case 'action':
-        return '🔧'
-      default:
-        return '•'
-    }
-  }
+  
 
   // Helper function to get GitHub URL for any node
   const getNodeGitHubUrl = (nodeData) => {
