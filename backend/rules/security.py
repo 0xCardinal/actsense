@@ -3227,8 +3227,22 @@ def check_unpinnable_composite_action(action_yml: Dict[str, Any], action_ref: st
 
                     run = step.get("run", "")
                     if isinstance(run, str):
+                        normalized_run = " ".join(run.lower().split())
                         # Check for NPM install without version locking
-                        if re.search(r'npm\s+install\s+(?!.*@)', run, re.IGNORECASE) or re.search(r'npm\s+install\s+.*@latest', run, re.IGNORECASE):
+                        npm_install_index = normalized_run.find("npm install ")
+                        if npm_install_index != -1:
+                            install_tail = normalized_run[npm_install_index + len("npm install "):]
+                            install_tokens = [t for t in install_tail.split() if t and not t.startswith("-")]
+                            has_latest = any("@latest" in token for token in install_tokens)
+                            has_pinned_version = any(
+                                (token.count("@") >= 2) if token.startswith("@") else ("@" in token)
+                                for token in install_tokens
+                            )
+                        else:
+                            has_latest = False
+                            has_pinned_version = True
+
+                        if npm_install_index != -1 and (has_latest or not has_pinned_version):
                             issues.append({
                                 "type": "unpinned_npm_packages",
                                 "severity": "high",
@@ -3256,7 +3270,10 @@ def check_unpinnable_composite_action(action_yml: Dict[str, Any], action_ref: st
                             })
 
                         # Check for downloading external resources without checksums
-                        if re.search(r'(wget|curl)\s+.*http', run, re.IGNORECASE) and not re.search(r'(sha256|sha512|md5|checksum)', run, re.IGNORECASE):
+                        has_download = ("wget " in normalized_run) or ("curl " in normalized_run)
+                        references_http = "http" in normalized_run
+                        has_checksum = any(marker in normalized_run for marker in ("sha256", "sha512", "md5", "checksum"))
+                        if has_download and references_http and not has_checksum:
                             issues.append({
                                 "type": "unpinned_external_resources",
                                 "severity": "high",

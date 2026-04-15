@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import re
+import logging
 import uvicorn
 import yaml
 from urllib.parse import urlparse
@@ -34,6 +35,7 @@ parser = WorkflowParser()
 auditor = SecurityAuditor()
 cloner = RepoCloner()
 storage = AnalysisStorage()
+logger = logging.getLogger(__name__)
 
 # Serve frontend static files if they exist (for production builds)
 # This must be added AFTER API routes
@@ -1131,7 +1133,8 @@ async def audit_yaml(request: AuditYAMLRequest):
     except yaml.YAMLError as e:
         raise HTTPException(status_code=400, detail=f"YAML parsing error: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Unexpected error during YAML audit")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/health")
