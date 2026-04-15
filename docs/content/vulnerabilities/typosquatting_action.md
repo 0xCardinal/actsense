@@ -10,14 +10,18 @@ Workflows using actions with suspicious naming patterns (similar to popular acti
 - Action may be a typosquatting attempt to trick users.
 - Malicious action can compromise workflows and exfiltrate secrets.
 
+Common typosquatting patterns seen in the wild:
+
 ```yaml
-name: Build with Suspicious Action
+name: Build with Suspicious Actions
 on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: action/checkout@v4  # Suspicious - should be actions/checkout
+      - uses: action/checkout@v4        # missing 's' — should be actions/checkout
+      - uses: actions/setup-nodejs@v4   # extra 'js' — should be actions/setup-node
+      - uses: github/codeql-actions/analyze@v3  # extra 's' — should be github/codeql-action
       - run: npm test
 ```
 
@@ -43,15 +47,21 @@ jobs:
 
 ### Secure Version
 
+Correct the action names to the official publishers and pin to full commit SHAs so a re-tagged or re-pointed tag can never silently swap in different code:
+
 ```diff
- name: Build with Verified Action
+ name: Build with Verified Actions
  on: [push]
  jobs:
    build:
      runs-on: ubuntu-latest
      steps:
--      - uses: action/checkout@v4  # Suspicious - should be actions/checkout
-+      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Official, pinned
+-      - uses: action/checkout@v4        # typo — wrong org
++      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+-      - uses: actions/setup-nodejs@v4   # typo — wrong action name
++      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+-      - uses: github/codeql-actions/analyze@v3  # typo — wrong action name
++      - uses: github/codeql-action/analyze@28deaeda66b76a05916b6923827895f2b14ab387  # v3.28.16
        - run: npm test
 ```
 
