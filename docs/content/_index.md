@@ -10,11 +10,15 @@ toc: false
   <p>
     Comprehensive security auditing for GitHub Actions workflows. Detect vulnerabilities and exposures, analyze dependencies, and secure your CI/CD pipelines.
   </p>
-  <div class="hero-command-wrap">
-    <div id="hero-command-card" class="hero-command-card" role="button" tabindex="0" aria-label="Copy docker run command">
-      <div class="hero-command-label">Quick start</div>
-      <code id="hero-docker-command" class="hero-command-text">docker run -p 8000:8000 0xcardinal/actsense:latest</code>
-      <span id="hero-command-hint" class="hero-command-hint" aria-live="polite">Click to copy</span>
+  <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; align-items: center;">
+    <div class="docker-pull-box">
+      <span style="margin-right: 1rem; user-select: all; color: hsl(var(--muted-foreground));">$ </span><span style="margin-right: 1rem; user-select: all;">docker pull ghcr.io/0xcardinal/actsense:latest</span>
+      <button onclick="navigator.clipboard.writeText('docker pull ghcr.io/0xcardinal/actsense:latest'); const icon = this.querySelector('svg'); const original = icon.innerHTML; icon.innerHTML = '<polyline points=\'20 6 9 17 4 12\'></polyline>'; this.style.color = 'hsl(142 71% 45%)'; setTimeout(() => { icon.innerHTML = original; this.style.color = ''; }, 2000);" style="background: transparent; border: none; cursor: pointer; color: hsl(var(--muted-foreground)); padding: 0.25rem; display: flex; align-items: center; transition: all 0.2s; border-radius: 0.25rem;" onmouseover="this.style.color='hsl(var(--foreground))'; this.style.backgroundColor='hsl(var(--muted))'" onmouseout="this.style.color=''; this.style.backgroundColor='transparent'" title="Copy command" aria-label="Copy docker pull command">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </button>
     </div>
   </div>
 </div>

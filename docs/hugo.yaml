@@ -121,7 +121,10 @@ defaults:
 
 # Output formats
 outputs:
-  home: [html, rss]
+  home: [html]
   page: [html]
+  section: [html]
+  taxonomy: [html]
+  term: [html]
 
 copyright: "© {{ now.Format \"2006\" }} actsense"

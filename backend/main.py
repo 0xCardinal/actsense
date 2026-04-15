@@ -65,13 +65,36 @@ async def resolve_action_dependencies(
     
     visited.add(action_ref)
     
+    # Handle docker images: add as a node but don't try to resolve further
+    if action_ref.startswith("docker://"):
+        graph.add_node(action_ref, action_ref, "docker_image", {"image": action_ref})
+        issues = auditor.audit_action(action_ref, None, None, None)
+        if issues:
+            graph.add_issues_to_node(action_ref, issues)
+        return
+    
     # Parse action reference
     owner, repo, ref, subdir = client.parse_action_reference(action_ref)
     if not owner or not repo:
         return
     
-    # Skip workflow files - they shouldn't be treated as actions
+    # Handle reusable workflows
     if subdir and (".github/workflows" in subdir or subdir.endswith((".yml", ".yaml"))):
+        display_name = f"{owner}/{repo}/{subdir}@{ref}"
+        graph.add_node(action_ref, display_name, "reusable_workflow", {"owner": owner, "repo": repo, "ref": ref, "subdir": subdir})
+        try:
+            workflow_content = await client.get_file_content(owner, repo, subdir)
+            workflow = parser.parse_workflow(workflow_content)
+            if isinstance(workflow, dict) and "error" not in workflow:
+                workflow_issues = await auditor.audit_workflow(workflow, content=workflow_content, client=client)
+                if workflow_issues:
+                    graph.add_issues_to_node(action_ref, workflow_issues)
+                dependencies = parser.extract_actions(workflow)
+                for dep in dependencies:
+                    graph.add_edge(action_ref, dep)
+                    await resolve_action_dependencies(client, dep, graph, visited, depth + 1, max_depth)
+        except Exception:
+            pass
         return
     
     # Add node to graph
@@ -207,6 +230,17 @@ async def audit_repository(
     repo_node_id = f"{owner}/{repo}"
     graph.add_node(repo_node_id, repo_node_id, "repository", {"owner": owner, "repo": repo})
     
+    # Determine repository visibility for runner security checks
+    is_public_repo = False
+    try:
+        repo_info = await client.get_repository_info(owner, repo)
+        if repo_info:
+            is_public_repo = not repo_info.get("private", True)
+    except Exception:
+        pass
+    
+    current_repo = f"{owner}/{repo}"
+    
     clone_path = None
     workflow_actions_data = []  # Collect actions from all workflows for inconsistency checking
     
@@ -228,7 +262,7 @@ async def audit_repository(
                         continue
                     
                     # Audit workflow with content for line number tracking
-                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client)
+                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client, current_repo=current_repo, is_public_repo=is_public_repo)
                     workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
                     graph.add_node(
                         workflow_node_id,
@@ -254,8 +288,20 @@ async def audit_repository(
                         await resolve_action_dependencies(
                             client, action_ref, graph, visited
                         )
+                    
+                    # Add container/service images as nodes in the graph
+                    for img_info in parser.extract_container_images(workflow):
+                        img_node_id = f"container://{img_info['image']}"
+                        graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
+                        graph.add_edge(workflow_node_id, img_node_id)
                 except Exception as e:
-                    print(f"Error processing workflow {workflow_file['name']}: {e}")
+                    graph.add_issues_to_node(repo_node_id, [{
+                        "type": "workflow_processing_error",
+                        "severity": "low",
+                        "message": f"Failed to process workflow '{workflow_file['name']}': {e}",
+                        "evidence": {"workflow": workflow_file["name"], "error": str(e)},
+                        "recommendation": "Check if the workflow file is valid YAML and accessible."
+                    }])
         else:
             # Use API method (original)
             workflows = await client.get_workflows(owner, repo)
@@ -272,7 +318,7 @@ async def audit_repository(
                         continue
                     
                     # Audit workflow with content for line number tracking
-                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client)
+                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client, current_repo=current_repo, is_public_repo=is_public_repo)
                     workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
                     graph.add_node(
                         workflow_node_id,
@@ -298,8 +344,20 @@ async def audit_repository(
                         await resolve_action_dependencies(
                             client, action_ref, graph, visited
                         )
+                    
+                    # Add container/service images as nodes in the graph
+                    for img_info in parser.extract_container_images(workflow):
+                        img_node_id = f"container://{img_info['image']}"
+                        graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
+                        graph.add_edge(workflow_node_id, img_node_id)
                 except Exception as e:
-                    print(f"Error processing workflow {workflow_file['name']}: {e}")
+                    graph.add_issues_to_node(repo_node_id, [{
+                        "type": "workflow_processing_error",
+                        "severity": "low",
+                        "message": f"Failed to process workflow '{workflow_file['name']}': {e}",
+                        "evidence": {"workflow": workflow_file["name"], "error": str(e)},
+                        "recommendation": "Check if the workflow file is valid YAML and accessible."
+                    }])
         
         # Check for inconsistent action versions across workflows
         if len(workflow_actions_data) > 1:  # Only check if there are multiple workflows
@@ -441,6 +499,12 @@ async def audit_yaml(request: AuditYAMLRequest):
             await resolve_action_dependencies(
                 client, action_ref, graph, visited, depth=0, max_depth=5
             )
+        
+        # Add container/service images as nodes in the graph
+        for img_info in parser.extract_container_images(workflow):
+            img_node_id = f"container://{img_info['image']}"
+            graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
+            graph.add_edge(workflow_node_id, img_node_id)
         
         graph_data = graph.get_graph_data()
         statistics = graph.get_statistics()

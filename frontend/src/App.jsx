@@ -29,6 +29,7 @@ function App() {
   const [showYAMLEditor, setShowYAMLEditor] = useState(false)
   const [savedYAMLContent, setSavedYAMLContent] = useState(null)
   const inputFormRef = useRef(null)
+  const auditAbortRef = useRef(null)
 
   // Debug: Log when component mounts
   useEffect(() => {
@@ -270,11 +271,16 @@ function App() {
   }
 
   const handleAudit = async (data) => {
+    if (auditAbortRef.current) {
+      auditAbortRef.current.abort()
+    }
+    const controller = new AbortController()
+    auditAbortRef.current = controller
+
     setLoading(true)
     setError(null)
     
     try {
-      // Use relative URL (works in both dev with proxy and production)
       const apiUrl = '/api/audit'
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -282,6 +288,7 @@ function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(data),
+        signal: controller.signal,
       })
       
       if (!response.ok) {
@@ -313,9 +320,12 @@ function App() {
         window.refreshAnalysisHistory()
       }
     } catch (err) {
+      if (err.name === 'AbortError') return
       setError(err.message)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) {
+        setLoading(false)
+      }
     }
   }
 

@@ -485,3 +485,42 @@ html {
   font-size: 0.875rem !important;
   margin: 0;
 }
+
+/* Docker Pull Box Animated Border */
+.docker-pull-box {
+  display: flex;
+  align-items: center;
+  background: hsl(var(--muted) / 0.5);
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 0.5rem 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  color: hsl(var(--foreground));
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  animation: border-pulse 3s infinite ease-in-out;
+  transition: all 0.3s ease;
+}
+
+.docker-pull-box:hover {
+  background: hsl(var(--muted) / 0.8);
+}
+
+@keyframes border-pulse {
+  0% { 
+    border-color: hsl(var(--border)); 
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
+  }
+  33% { 
+    border-color: #3b82f6; 
+    box-shadow: 0 0 15px 0 rgba(59, 130, 246, 0.4); 
+  }
+  66% { 
+    border-color: #8b5cf6; 
+    box-shadow: 0 0 15px 0 rgba(139, 92, 246, 0.4); 
+  }
+  100% { 
+    border-color: hsl(var(--border)); 
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
+  }
+}

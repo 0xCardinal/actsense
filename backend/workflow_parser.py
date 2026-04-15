@@ -30,13 +30,13 @@ class WorkflowParser:
             """Check if a string is likely an action reference."""
             if not isinstance(value, str):
                 return False
-            # Skip local paths, docker images, and URLs
-            if value.startswith(("./", "docker://", "http://", "https://")):
+            # Skip local paths and plain URLs
+            if value.startswith(("./", "http://", "https://")):
                 return False
-            # Skip workflow file paths
-            if ".github/workflows" in value or value.endswith((".yml", ".yaml")):
-                return False
-            # Action references typically have owner/repo@ref format
+            # Include docker images as references so they appear in the graph
+            if value.startswith("docker://"):
+                return True
+            # Action references (including reusable workflows) have owner/repo@ref format
             if "/" in value and "@" in value:
                 parts = value.split("@")
                 if len(parts) == 2 and "/" in parts[0]:
@@ -59,6 +59,44 @@ class WorkflowParser:
         
         extract_from_value(workflow)
         return list(set(actions))
+
+    @staticmethod
+    def extract_container_images(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract container and service images from workflow jobs.
+
+        Returns a list of dicts with keys: image, job, source ('container' or 'service'),
+        and optionally service_name.
+        """
+        images = []
+        jobs = workflow.get("jobs", {})
+        if not isinstance(jobs, dict):
+            return images
+
+        for job_name, job in jobs.items():
+            if not isinstance(job, dict):
+                continue
+
+            # jobs.<id>.container
+            container = job.get("container")
+            if isinstance(container, str) and container:
+                images.append({"image": container, "job": job_name, "source": "container"})
+            elif isinstance(container, dict):
+                img = container.get("image", "")
+                if isinstance(img, str) and img:
+                    images.append({"image": img, "job": job_name, "source": "container"})
+
+            # jobs.<id>.services.<svc>.image
+            services = job.get("services", {})
+            if isinstance(services, dict):
+                for svc_name, svc in services.items():
+                    if isinstance(svc, str) and svc:
+                        images.append({"image": svc, "job": job_name, "source": "service", "service_name": svc_name})
+                    elif isinstance(svc, dict):
+                        img = svc.get("image", "")
+                        if isinstance(img, str) and img:
+                            images.append({"image": img, "job": job_name, "source": "service", "service_name": svc_name})
+
+        return images
 
     @staticmethod
     def parse_action_yml(content: str) -> Dict[str, Any]:

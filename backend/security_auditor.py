@@ -211,6 +211,11 @@ class SecurityAuditor:
         """Check for code injection via workflow inputs."""
         return security_rules.check_code_injection_via_workflow_inputs(workflow)
     @staticmethod
+    def check_unpinned_container_images(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for unpinned container and service images in workflow jobs."""
+        return security_rules.check_unpinned_container_images(workflow)
+
+    @staticmethod
     def check_unpinnable_docker_action(action_yml: Dict[str, Any], action_ref: str, dockerfile_content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Check for unpinnable Docker actions (using mutable tags instead of digests)."""
         return security_rules.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content)
@@ -260,7 +265,7 @@ class SecurityAuditor:
         """Helper to find line number in content."""
         return security_rules._find_line_number(content, search_text, context)
     @staticmethod
-    async def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None, client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
+    async def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None, client: Optional[GitHubClient] = None, current_repo: Optional[str] = None, is_public_repo: bool = False) -> List[Dict[str, Any]]:
         """Audit a workflow file for security issues."""
         issues = []
         
@@ -316,10 +321,7 @@ class SecurityAuditor:
                             issue["line_number"] = line_num
         issues.extend(secret_issues)
         
-        # Check self-hosted runners (with repository visibility context)
-        # Note: is_public_repo would need to be passed from the caller if available
-        # For now, we'll default to False (conservative approach)
-        runner_issues = SecurityAuditor.check_self_hosted_runners(workflow, is_public_repo=False)
+        runner_issues = SecurityAuditor.check_self_hosted_runners(workflow, is_public_repo=is_public_repo)
         if content and runner_issues:
             for issue in runner_issues:
                 line_num = security_rules._find_line_number(content, "self-hosted", issue.get("job", ""))
@@ -357,7 +359,7 @@ class SecurityAuditor:
         issues.extend(runner_env_issues)
         
         # Check repository visibility risks
-        visibility_risks_issues = SecurityAuditor.check_repository_visibility_risks(workflow, is_public_repo=False)
+        visibility_risks_issues = SecurityAuditor.check_repository_visibility_risks(workflow, is_public_repo=is_public_repo)
         if content and visibility_risks_issues:
             for issue in visibility_risks_issues:
                 line_num = security_rules._find_line_number(content, "runs-on")
@@ -641,6 +643,17 @@ class SecurityAuditor:
                     issue["line_number"] = line_num
         issues.extend(artifact_exposure_issues)
         
+        # Check for unpinned container/service images
+        container_issues = SecurityAuditor.check_unpinned_container_images(workflow)
+        if content and container_issues:
+            for issue in container_issues:
+                line_num = security_rules._find_line_number(content, issue.get("evidence", {}).get("image", ""), issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "image:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(container_issues)
+        
         # Check for hash pinning (commit SHA) instead of tags
         hash_issues = SecurityAuditor.check_hash_pinning(workflow)
         if content and hash_issues:
@@ -664,14 +677,6 @@ class SecurityAuditor:
                     if line_num:
                         issue["line_number"] = line_num
         issues.extend(version_issues)
-        
-        # Advanced privilege analysis checks
-        # Extract current repository from client if available
-        current_repo = None
-        if client:
-            # Try to infer from workflow path or other context
-            # For now, we'll pass None and let the check handle it
-            pass
         
         # Check token permission escalation
         token_escalation_issues = SecurityAuditor.check_token_permission_escalation(workflow)
