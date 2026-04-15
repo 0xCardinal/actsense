@@ -33,6 +33,11 @@ class RepoCloner:
         Returns:
             Tuple of (clone_path, cleanup_function_name)
         """
+        self._validate_repo_identifier(owner, "owner")
+        self._validate_repo_identifier(repo, "repository")
+        if branch:
+            self._validate_branch_name(branch)
+
         repo_url = f"https://github.com/{owner}/{repo}.git"
         
         # Use token in URL if provided (for private repos)
@@ -116,6 +121,28 @@ class RepoCloner:
             if clone_dir.exists():
                 shutil.rmtree(clone_dir, ignore_errors=True)
             raise
+
+    @staticmethod
+    def _validate_repo_identifier(value: str, field_name: str) -> None:
+        """Validate owner/repository identifiers before using them in git commands."""
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"Invalid {field_name}")
+        if "/" in value or value.startswith("-"):
+            raise ValueError(f"Invalid {field_name}")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", value):
+            raise ValueError(f"Invalid {field_name}")
+
+    @staticmethod
+    def _validate_branch_name(branch: str) -> None:
+        """Validate branch names to prevent command/option injection."""
+        if not isinstance(branch, str) or not branch:
+            raise ValueError("Invalid branch name")
+        if branch.startswith("-") or ".." in branch or "@{" in branch or branch.endswith("."):
+            raise ValueError("Invalid branch name")
+        if "\\" in branch or " " in branch or "//" in branch or branch.endswith("/"):
+            raise ValueError("Invalid branch name")
+        if not re.fullmatch(r"[A-Za-z0-9._/\-]{1,200}", branch):
+            raise ValueError("Invalid branch name")
     
     def get_file_content(self, clone_path: str, file_path: str) -> str:
         """Read file content from cloned repository."""
