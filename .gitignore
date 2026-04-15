@@ -34,6 +34,7 @@ Thumbs.db
 data/
 
 # Hugo
+.hugo.pid
 .hugo_build.lock
 resources/_gen/
 .hugo_cache/
