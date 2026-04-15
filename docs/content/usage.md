@@ -142,26 +142,26 @@ Choose how you want to analyze repositories:
 
 - **GitHub API**: Fast analysis using GitHub's API (requires token for private repos)
 - **Repository Cloning**: Deep analysis by cloning repositories locally (more thorough)
-- **YAML Editor**: Paste and analyze workflow YAML directly without a repository
+- **Secure Workflow Editor**: Paste, analyze, and harden workflow YAML directly without a repository
 
-### Workflow YAML Editor
+### Secure Workflow Editor
 
-Analyze workflow YAML files directly without needing a GitHub repository. Perfect for testing workflows before committing or analyzing workflows from other sources.
+Analyze workflow YAML files directly without needing a GitHub repository. Use the secure editor flow to test workflow changes before committing and iterate quickly on remediation.
 
-![YAML Editor](/images/yaml-editor.png)
+![Secure Workflow Editor](/images/secure-workflow-editor.png)
 
-*The YAML editor allows you to paste workflow content directly and get instant security analysis. Edit your workflow, fix issues, and re-analyze to iterate quickly.*
+*The Secure Workflow Editor lets you paste workflow content, run instant security analysis, apply fixes, and re-analyze in a tight loop.*
 
 **Features:**
 - **Direct YAML Input**: Paste any GitHub Actions workflow YAML
 - **Real-time Validation**: YAML syntax validation before analysis
 - **Line Numbers**: IDE-like editor with line numbers for easy navigation
-- **Edit & Re-analyze**: Save workflow state and iterate on fixes
+- **Edit & Re-analyze**: Save workflow state and iterate on security fixes
 - **Same Analysis**: Full security audit with dependency resolution, just like repository analysis
 - **Error Display**: Clear error messages for validation and analysis issues
 
 **How to use:**
-1. Click "Edit Workflow YAML" button in the sidebar
+1. Click the secure workflow editor entry in the sidebar
 2. Paste your workflow YAML content
 3. Click "Analyze Workflow" to run security analysis
 4. View results in the same graph visualization as repository audits
