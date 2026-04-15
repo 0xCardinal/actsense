@@ -2300,6 +2300,31 @@ async def check_older_action_versions(workflow: Dict[str, Any], client: Optional
         except Exception:
             return None
 
+    async def repository_exists(owner: Optional[str], repo: Optional[str]) -> Optional[bool]:
+        """Return repository existence when detectable, otherwise None."""
+        if not client or not owner or not repo:
+            return None
+
+        get_repo_info = getattr(client, "get_repository_info", None)
+        if not callable(get_repo_info):
+            return None
+
+        cache_key = f"{owner}/{repo}"
+        cached = repo_existence_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            repo_info = await get_repo_info(owner, repo)
+            exists = repo_info is not None
+            repo_existence_cache[cache_key] = exists
+            return exists
+        except Exception:
+            # Do not guess repository existence on API errors.
+            return None
+
+    repo_existence_cache: Dict[str, bool] = {}
+
     # Check each action for older versions
     for action_ref in actions_used:
         if "@" not in action_ref:
@@ -2307,6 +2332,12 @@ async def check_older_action_versions(workflow: Dict[str, Any], client: Optional
 
         ref = action_ref.split("@")[-1]
         owner, repo, _, subdir = client.parse_action_reference(action_ref) if client else (None, None, None, None)
+
+        # If repository is confirmed missing, skip older-version checks.
+        # A missing repository is handled by check_missing_action_repositories.
+        repo_exists = await repository_exists(owner, repo)
+        if repo_exists is False:
+            continue
 
         # Check if it's a SHA-based reference
         if is_sha(ref):
@@ -2994,6 +3025,13 @@ async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[Gi
             else:
                 # Check for generic v1 versions (potentially deprecated)
                 if "@v1" in uses and uses not in deprecated_actions:
+                    # Don't emit generic "deprecated v1" finding when repository existence
+                    # couldn't be determined (for example, deleted/non-existent/private repos).
+                    # In those cases, check_missing_action_repositories is the source of truth.
+                    if client and action_owner and action_repo:
+                        repo_key = f"{action_owner}/{action_repo}"
+                        if checked_repos.get(repo_key) is None:
+                            continue
                     # Extract action name without version
                     action_name = uses.split("@")[0]
                     # Skip if it's a well-known action that might legitimately use v1
