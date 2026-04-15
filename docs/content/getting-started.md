@@ -15,6 +15,7 @@ Before you begin, ensure you have:
 - **Python 3.12+** installed (for manual installation)
 - **Node.js 16+** and npm installed (for manual installation)
 - **Git** (optional, for repository cloning)
+- **just** (optional but recommended for one-command local workflows)
 
 ## Installation
 
@@ -97,6 +98,25 @@ docker compose up
 ```
 
 The application will be available at `http://localhost:8000`.
+
+### Using Just (Recommended Local Commands)
+
+If you have [`just`](https://github.com/casey/just) installed, you can use the project recipes instead of remembering multiple commands:
+
+```bash
+just up
+```
+
+This starts both:
+- actsense containers (`docker compose up -d --build` - http://localhost:8000)
+- docs server (`http://localhost:1313`)
+
+Useful companion commands:
+
+```bash
+just status
+just down
+```
 
 ### Development Mode (Local Installation)
 
