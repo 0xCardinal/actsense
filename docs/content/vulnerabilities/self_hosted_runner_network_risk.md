@@ -49,14 +49,19 @@ jobs:
    setup:
      runs-on: self-hosted
      steps:
+-      - run: curl https://example.com/script.sh | bash  # Dangerous - no verification
 +      - name: Download script
 +        run: |
-+          curl -o script.sh https://example.com/script.sh
-+          echo "expected_sha256" | sha256sum -c script.sh
-+      - name: Review and execute
-+        run: bash script.sh
--      - run: curl https://example.com/script.sh | bash  # Dangerous - no verification
++          curl -fsSL -o setup.sh https://releases.example.com/v1.2.3/setup.sh
++      - name: Verify checksum before execution
++        run: |
++          # Format: "<sha256hash>  <filename>" (two spaces between hash and filename)
++          echo "a3f5b1c2d4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2  setup.sh" | sha256sum -c -
++      - name: Execute verified script
++        run: bash setup.sh
 ```
+
+> **Note:** The correct `sha256sum` verification syntax pipes `"<hash>  <filename>"` (two spaces) into `sha256sum -c -`. Running `echo "hash" | sha256sum -c script.sh` is invalid and will not perform any verification.
 
 ## Impact
 

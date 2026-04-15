@@ -37,15 +37,24 @@ RUN pip install requests flask  # Unpinned - versions can change
 
 ### Secure Version
 
+Create a `requirements.txt` with pinned versions and install from it. The Dockerfile diff and the file content are shown separately below.
+
+**`requirements.txt`:**
+
+```text
+requests==2.31.0
+flask==3.1.0
+Werkzeug==3.1.3
+click==8.1.8
+```
+
+**`Dockerfile` diff:**
+
 ```diff
  FROM python:3.9
 +COPY requirements.txt .
--RUN pip install requests flask  # Unpinned - versions can change
-+RUN pip install -r requirements.txt
-+
-+# requirements.txt:
-+# requests==2.31.0
-+# flask==3.0.0
+-RUN pip install requests flask
++RUN pip install --no-cache-dir -r requirements.txt
 ```
 
 ## Impact
