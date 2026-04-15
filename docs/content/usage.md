@@ -17,7 +17,7 @@ actsense provides a powerful, interactive platform for analyzing GitHub Actions 
 
 ### Comprehensive Security Auditing
 
-actsense performs deep security analysis of your GitHub Actions workflows, detecting **65+ types of security vulnerabilities** including:
+actsense performs deep security analysis of your GitHub Actions workflows, detecting **~70 types of security vulnerabilities and exposures** including:
 
 - **Action Security**: Unpinned versions, outdated actions, unpinnable actions (Docker, composite, JavaScript)
 - **Access Control**: Overly permissive permissions, token security, branch protection bypass

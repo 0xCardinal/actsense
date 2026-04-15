@@ -23,7 +23,9 @@ jobs:
 
       - name: Install uv
         run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
+          curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh
+          sh /tmp/uv-install.sh
+          rm -f /tmp/uv-install.sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
@@ -45,7 +47,9 @@ jobs:
 
       - name: Install Node.js
         run: |
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/node-setup.sh
+          sudo bash /tmp/node-setup.sh
+          rm -f /tmp/node-setup.sh
           sudo apt-get install -y nodejs
 
       - name: Install patch-package globally

@@ -97,6 +97,77 @@
   font-weight: 400;
 }
 
+/* Hero Docker command card */
+.hero-command-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.hero-command-card {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem 0.72rem;
+  border-radius: 0.75rem;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  box-shadow: 0 6px 16px -14px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  cursor: copy;
+}
+
+.hero-command-card:hover {
+  border-color: hsl(var(--primary) / 0.4);
+  box-shadow: 0 10px 24px -18px rgba(0, 0, 0, 0.45);
+}
+
+.hero-command-label {
+  position: absolute;
+  top: -0.58rem;
+  left: 0.9rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: hsl(var(--muted-foreground));
+  padding: 0 0.35rem;
+  background-color: hsl(var(--background));
+  line-height: 1.1;
+}
+
+.hero-command-text {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+}
+
+.hero-command-hint {
+  font-size: 0.76rem;
+  color: hsl(var(--muted-foreground));
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  user-select: none;
+}
+
+.hero-command-card:hover .hero-command-hint,
+.hero-command-card:focus-visible .hero-command-hint {
+  opacity: 0.9;
+}
+
+.hero-command-card.copied {
+  border-color: hsl(142 76% 36% / 0.5);
+  background-color: hsl(142 76% 36% / 0.06);
+}
+
+.hero-command-card.copied .hero-command-hint {
+  opacity: 1;
+  color: hsl(142 76% 30%);
+}
+
 /* CTA Button - shadcn button style */
 .actsense-cta {
   font-family: 'Inter', sans-serif;
@@ -291,6 +362,23 @@ a.hextra-card:hover,
   
   .actsense-hero p {
     font-size: 1.125rem;
+  }
+
+  .hero-command-card {
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .hero-command-text {
+    white-space: normal;
+    word-break: break-word;
+    text-align: center;
+  }
+
+  .hero-command-hint {
+    opacity: 0.9;
   }
   
   .actsense-cta {

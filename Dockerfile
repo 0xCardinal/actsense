@@ -35,7 +35,9 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv and copy to /usr/local/bin for easy access
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+RUN curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh && \
+    sh /tmp/uv-install.sh && \
+    rm -f /tmp/uv-install.sh && \
     if [ -f /root/.cargo/bin/uv ]; then \
         cp /root/.cargo/bin/uv /usr/local/bin/uv && \
         chmod +x /usr/local/bin/uv; \
@@ -51,12 +53,15 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 # Set PATH to include uv
 ENV PATH="/usr/local/bin:/root/.cargo/bin:$PATH"
 
-# Copy backend project files (pyproject.toml and uv.lock for dependency installation)
-COPY backend/pyproject.toml backend/uv.lock /app/backend/
+# Copy backend project files (pyproject.toml for dependency installation)
+# Note: uv.lock is optional - uv sync will generate it if missing
+COPY backend/pyproject.toml /app/backend/
 
 # Install backend dependencies using uv (before copying source for better caching)
+# uv sync will work with or without uv.lock - it will generate one if missing
+# Remove .venv after sync so it's recreated at runtime with correct Python path
 WORKDIR /app/backend
-RUN uv sync --no-dev
+RUN uv sync --no-dev && rm -rf .venv
 
 # Copy backend source (pyproject.toml and uv.lock already exist, so this is safe)
 COPY backend/ /app/backend/
@@ -64,10 +69,15 @@ COPY backend/ /app/backend/
 # Copy built frontend assets into expected location
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Create writable directories for analysis data
 RUN mkdir -p /app/data/analyses /app/data/clones
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use entrypoint script to show helpful startup information
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
