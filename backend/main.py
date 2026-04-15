@@ -1042,94 +1042,88 @@ async def audit_fix(request: AuditYAMLRequest):
     return {"issues": issues, "fixes": fixes, "rate_limited": rate_limited}
 
 
+async def _audit_yaml_body(request: AuditYAMLRequest) -> Dict[str, Any]:
+    """Core YAML audit logic; raises HTTPException on client errors."""
+    # Validate YAML syntax first
+    try:
+        parsed_yaml = yaml.safe_load(request.yaml_content)
+        if parsed_yaml is None:
+            raise HTTPException(status_code=400, detail="YAML file is empty or contains no valid content")
+    except yaml.YAMLError as e:
+        if hasattr(e, "problem_mark") and e.problem_mark:
+            line_num = e.problem_mark.line + 1
+            error_msg = f"YAML syntax error at line {line_num}"
+        else:
+            error_msg = "YAML syntax error"
+        raise HTTPException(status_code=400, detail=f"Invalid YAML syntax: {error_msg}")
+
+    workflow = parser.parse_workflow(request.yaml_content)
+
+    if "error" in workflow:
+        raise HTTPException(status_code=400, detail="Invalid workflow YAML")
+
+    if not isinstance(workflow, dict):
+        raise HTTPException(status_code=400, detail="Invalid workflow format: Expected a dictionary")
+
+    if not workflow.get("jobs") and not workflow.get("on"):
+        raise HTTPException(status_code=400, detail="Invalid workflow: Missing required 'jobs' or 'on' fields")
+
+    graph = GraphBuilder()
+    client = GitHubClient(token=request.github_token)
+
+    workflow_node_id = "workflow:inline"
+    graph.add_node(
+        workflow_node_id,
+        "Inline Workflow",
+        "workflow",
+        {"path": "inline", "is_inline": True}
+    )
+
+    workflow_issues = await auditor.audit_workflow(
+        workflow,
+        content=request.yaml_content,
+        client=client
+    )
+
+    graph.add_issues_to_node(workflow_node_id, workflow_issues)
+
+    actions = parser.extract_actions(workflow)
+    visited = set()
+
+    for action_ref in actions:
+        graph.add_edge(workflow_node_id, action_ref)
+        await resolve_action_dependencies(
+            client, action_ref, graph, visited, depth=0, max_depth=5
+        )
+
+    for img_info in parser.extract_container_images(workflow):
+        img_node_id = f"container://{img_info['image']}"
+        graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
+        graph.add_edge(workflow_node_id, img_node_id)
+
+    graph_data = graph.get_graph_data()
+    statistics = graph.get_statistics()
+
+    analysis_id = storage.save_analysis(
+        repository=None,
+        action=None,
+        graph_data=graph_data,
+        statistics=statistics,
+        method="yaml"
+    )
+
+    return {
+        "id": analysis_id,
+        "graph": graph_data,
+        "statistics": statistics
+    }
+
+
 @app.post("/api/audit/yaml")
 async def audit_yaml(request: AuditYAMLRequest):
     """Audit a raw YAML workflow file."""
     try:
-        # Validate YAML syntax first
-        try:
-            parsed_yaml = yaml.safe_load(request.yaml_content)
-            if parsed_yaml is None:
-                raise HTTPException(status_code=400, detail="YAML file is empty or contains no valid content")
-        except yaml.YAMLError as e:
-            # Extract line number if available
-            if hasattr(e, 'problem_mark') and e.problem_mark:
-                line_num = e.problem_mark.line + 1
-                error_msg = f"YAML syntax error at line {line_num}"
-            else:
-                error_msg = "YAML syntax error"
-            raise HTTPException(status_code=400, detail=f"Invalid YAML syntax: {error_msg}")
-        
-        # Parse the YAML content using workflow parser
-        workflow = parser.parse_workflow(request.yaml_content)
-        
-        if "error" in workflow:
-            raise HTTPException(status_code=400, detail=f"Invalid workflow YAML: {workflow['error']}")
-        
-        if not isinstance(workflow, dict):
-            raise HTTPException(status_code=400, detail="Invalid workflow format: Expected a dictionary")
-        
-        # Basic workflow structure validation
-        if not workflow.get("jobs") and not workflow.get("on"):
-            raise HTTPException(status_code=400, detail="Invalid workflow: Missing required 'jobs' or 'on' fields")
-        
-        # Create a graph for the workflow
-        graph = GraphBuilder()
-        client = GitHubClient(token=request.github_token)
-        
-        # Add a synthetic workflow node
-        workflow_node_id = "workflow:inline"
-        graph.add_node(
-            workflow_node_id,
-            "Inline Workflow",
-            "workflow",
-            {"path": "inline", "is_inline": True}
-        )
-        
-        # Audit the workflow
-        workflow_issues = await auditor.audit_workflow(
-            workflow, 
-            content=request.yaml_content, 
-            client=client
-        )
-        
-        # Add issues to the workflow node
-        graph.add_issues_to_node(workflow_node_id, workflow_issues)
-        
-        # Extract actions and resolve dependencies
-        actions = parser.extract_actions(workflow)
-        visited = set()
-        
-        for action_ref in actions:
-            graph.add_edge(workflow_node_id, action_ref)
-            await resolve_action_dependencies(
-                client, action_ref, graph, visited, depth=0, max_depth=5
-            )
-        
-        # Add container/service images as nodes in the graph
-        for img_info in parser.extract_container_images(workflow):
-            img_node_id = f"container://{img_info['image']}"
-            graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
-            graph.add_edge(workflow_node_id, img_node_id)
-        
-        graph_data = graph.get_graph_data()
-        statistics = graph.get_statistics()
-        
-        # Save analysis
-        analysis_id = storage.save_analysis(
-            repository=None,
-            action=None,
-            graph_data=graph_data,
-            statistics=statistics,
-            method="yaml"
-        )
-        
-        return {
-            "id": analysis_id,
-            "graph": graph_data,
-            "statistics": statistics
-        }
-    
+        return await _audit_yaml_body(request)
     except HTTPException:
         raise
     except yaml.YAMLError as e:
@@ -1137,7 +1131,7 @@ async def audit_yaml(request: AuditYAMLRequest):
             line_num = e.problem_mark.line + 1
             raise HTTPException(status_code=400, detail=f"YAML syntax error at line {line_num}")
         raise HTTPException(status_code=400, detail="YAML syntax error")
-    except Exception as e:
+    except Exception:
         logger.exception("Unexpected error during YAML audit")
         raise HTTPException(status_code=500, detail="Internal server error")
 

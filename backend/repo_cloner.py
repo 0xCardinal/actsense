@@ -6,8 +6,6 @@ import os
 from typing import Optional, Tuple
 from pathlib import Path
 import re
-from urllib.parse import quote
-
 class RepoCloner:
     """Handle cloning and cleanup of repositories."""
     
@@ -33,33 +31,26 @@ class RepoCloner:
         Returns:
             Tuple of (clone_path, cleanup_function_name)
         """
-        self._validate_repo_identifier(owner, "owner")
-        self._validate_repo_identifier(repo, "repository")
-        if branch:
-            self._validate_branch_name(branch)
+        safe_owner = RepoCloner._validated_repo_slug(owner, "owner")
+        safe_repo = RepoCloner._validated_repo_slug(repo, "repository")
+        safe_branch = RepoCloner._validated_branch_name(branch) if branch else None
 
-        repo_url = f"https://github.com/{owner}/{repo}.git"
-        
-        # Use token in URL if provided (for private repos)
+        # Credential-less URL; auth is supplied via git config environment (not argv).
+        repo_url = f"https://github.com/{safe_owner}/{safe_repo}.git"
+
+        clone_env: Optional[dict] = None
         if token:
-            # Validate token: GitHub tokens can be:
-            # - Classic tokens: ghp_ followed by 36 alphanumeric characters (40 total)
-            # - Fine-grained tokens: github_pat_ followed by alphanumeric/underscore/dash (longer)
-            # - Legacy tokens: alphanumeric/underscore/dash, 20-100 chars
-            if not (re.fullmatch(r'^ghp_[A-Za-z0-9]{36}$', token) or
-                    re.fullmatch(r'^github_pat_[A-Za-z0-9_\-]{20,}$', token) or
-                    re.fullmatch(r'^[A-Za-z0-9_\-]{20,100}$', token)):
-                raise ValueError("Invalid GitHub token format")
-            # Additional check for forbidden characters in the token
-            if any(c in token for c in '@:/\\ \n\r\t'):
-                raise ValueError("Token contains forbidden characters")
-            # For private repos, use token in URL. URL-encode the token to ensure safety.
-            safe_token = quote(token, safe='')
-            repo_url = f"https://{safe_token}@github.com/{owner}/{repo}.git"
+            safe_token = RepoCloner._validated_github_token(token)
+            clone_env = os.environ.copy()
+            # Pass http.extraHeader via env so the token never appears in subprocess argv.
+            # See git(1) GIT_CONFIG_COUNT / GIT_CONFIG_KEY_* / GIT_CONFIG_VALUE_*.
+            clone_env["GIT_CONFIG_COUNT"] = "1"
+            clone_env["GIT_CONFIG_KEY_0"] = "http.extraheader"
+            clone_env["GIT_CONFIG_VALUE_0"] = f"AUTHORIZATION: bearer {safe_token}"
         
         # Create unique directory for this clone (must stay under base_dir).
         base_resolved = self.base_dir.resolve()
-        clone_dir = (self.base_dir / f"{owner}_{repo}_{os.getpid()}").resolve()
+        clone_dir = (self.base_dir / f"{safe_owner}_{safe_repo}_{os.getpid()}").resolve()
         try:
             clone_dir.relative_to(base_resolved)
         except ValueError:
@@ -77,8 +68,8 @@ class RepoCloner:
                 "--filter=tree:0",
                 "--no-checkout",
             ]
-            if branch:
-                clone_cmd.extend(["-b", branch])
+            if safe_branch:
+                clone_cmd.extend(["-b", safe_branch])
             clone_cmd.extend(["--", repo_url, clone_dir_str])
 
             result = subprocess.run(
@@ -87,6 +78,7 @@ class RepoCloner:
                 text=True,
                 timeout=60,
                 shell=False,
+                env=clone_env,
             )
             
             if result.returncode != 0:
@@ -137,33 +129,48 @@ class RepoCloner:
         
         except subprocess.TimeoutExpired:
             raise Exception("Repository clone timed out")
-        except Exception as e:
+        except Exception:
             # Cleanup on error
             if clone_dir.exists():
                 shutil.rmtree(clone_dir, ignore_errors=True)
             raise
 
     @staticmethod
-    def _validate_repo_identifier(value: str, field_name: str) -> None:
-        """Validate owner/repository identifiers before using them in git commands."""
+    def _validated_repo_slug(value: str, field_name: str) -> str:
+        """Return owner/repo slug after strict validation (allowlisted characters only)."""
         if not isinstance(value, str) or not value:
             raise ValueError(f"Invalid {field_name}")
         if "/" in value or value.startswith("-"):
             raise ValueError(f"Invalid {field_name}")
-        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", value):
+        m = re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", value)
+        if not m:
             raise ValueError(f"Invalid {field_name}")
+        return m.group(0)
 
     @staticmethod
-    def _validate_branch_name(branch: str) -> None:
-        """Validate branch names to prevent command/option injection."""
+    def _validated_branch_name(branch: str) -> str:
+        """Validate branch names to prevent command/option injection; return the branch string."""
         if not isinstance(branch, str) or not branch:
             raise ValueError("Invalid branch name")
         if branch.startswith("-") or ".." in branch or "@{" in branch or branch.endswith("."):
             raise ValueError("Invalid branch name")
         if "\\" in branch or " " in branch or "//" in branch or branch.endswith("/"):
             raise ValueError("Invalid branch name")
-        if not re.fullmatch(r"[A-Za-z0-9._/\-]{1,200}", branch):
+        m = re.fullmatch(r"[A-Za-z0-9._/\-]{1,200}", branch)
+        if not m:
             raise ValueError("Invalid branch name")
+        return m.group(0)
+
+    @staticmethod
+    def _validated_github_token(token: str) -> str:
+        """Validate GitHub token format and return the token string."""
+        if not (re.fullmatch(r"^ghp_[A-Za-z0-9]{36}$", token) or
+                re.fullmatch(r"^github_pat_[A-Za-z0-9_\-]{20,}$", token) or
+                re.fullmatch(r"^[A-Za-z0-9_\-]{20,100}$", token)):
+            raise ValueError("Invalid GitHub token format")
+        if any(c in token for c in "@:/\\ \n\r\t'\""):
+            raise ValueError("Token contains forbidden characters")
+        return token
     
     def get_file_content(self, clone_path: str, file_path: str) -> str:
         """Read file content from cloned repository."""
