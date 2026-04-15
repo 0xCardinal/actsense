@@ -57,29 +57,36 @@ class RepoCloner:
             safe_token = quote(token, safe='')
             repo_url = f"https://{safe_token}@github.com/{owner}/{repo}.git"
         
-        # Create unique directory for this clone
-        clone_dir = self.base_dir / f"{owner}_{repo}_{os.getpid()}"
-        
+        # Create unique directory for this clone (must stay under base_dir).
+        base_resolved = self.base_dir.resolve()
+        clone_dir = (self.base_dir / f"{owner}_{repo}_{os.getpid()}").resolve()
+        try:
+            clone_dir.relative_to(base_resolved)
+        except ValueError:
+            raise ValueError("Invalid clone directory path") from None
+        clone_dir_str = str(clone_dir)
+
         try:
             # Clone with --no-checkout so no files are written yet.
             # --depth 1 + --filter=tree:0 skips all tree and blob objects
             # until we explicitly ask for them via sparse-checkout.
+            # Use list args + -- separator + shell=False to avoid command injection sinks.
             clone_cmd = [
                 "git", "clone",
                 "--depth", "1",
                 "--filter=tree:0",
                 "--no-checkout",
-                repo_url,
-                str(clone_dir)
             ]
             if branch:
                 clone_cmd.extend(["-b", branch])
-            
+            clone_cmd.extend(["--", repo_url, clone_dir_str])
+
             result = subprocess.run(
                 clone_cmd,
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
+                shell=False,
             )
             
             if result.returncode != 0:
@@ -87,18 +94,29 @@ class RepoCloner:
             
             # Configure sparse-checkout before any checkout happens.
             subprocess.run(
-                ["git", "-C", str(clone_dir), "sparse-checkout", "init", "--cone"],
-                capture_output=True, text=True, timeout=15, check=False,
+                ["git", "-C", clone_dir_str, "sparse-checkout", "init", "--cone"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+                shell=False,
             )
             subprocess.run(
-                ["git", "-C", str(clone_dir), "sparse-checkout", "set", ".github/workflows"],
-                capture_output=True, text=True, timeout=15, check=False,
+                ["git", "-C", clone_dir_str, "sparse-checkout", "set", ".github/workflows"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+                shell=False,
             )
-            
+
             # Single checkout: only fetches blobs for .github/workflows.
             result = subprocess.run(
-                ["git", "-C", str(clone_dir), "checkout"],
-                capture_output=True, text=True, timeout=60,
+                ["git", "-C", clone_dir_str, "checkout"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                shell=False,
             )
             
             if result.returncode != 0:
@@ -108,11 +126,14 @@ class RepoCloner:
                 with open(sparse_config, 'w') as f:
                     f.write(".github/workflows/*\n")
                 subprocess.run(
-                    ["git", "-C", str(clone_dir), "checkout"],
-                    capture_output=True, text=True, timeout=60,
+                    ["git", "-C", clone_dir_str, "checkout"],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    shell=False,
                 )
-            
-            return str(clone_dir), str(clone_dir)
+
+            return clone_dir_str, clone_dir_str
         
         except subprocess.TimeoutExpired:
             raise Exception("Repository clone timed out")

@@ -446,8 +446,9 @@ async def audit(request: AuditRequest):
     
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Unexpected error during repository audit")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/api/audit/stream")
@@ -508,8 +509,9 @@ async def audit_stream(request: AuditRequest):
             log_queue.put_nowait(("__RESULT__", result))
         except HTTPException as exc:
             log_queue.put_nowait(("__ERROR__", exc.detail))
-        except Exception as exc:
-            log_queue.put_nowait(("__ERROR__", str(exc)))
+        except Exception:
+            logger.exception("Unexpected error during streaming audit")
+            log_queue.put_nowait(("__ERROR__", "Internal server error"))
 
     async def event_generator():
         task = asyncio.create_task(run_audit())
@@ -1131,7 +1133,10 @@ async def audit_yaml(request: AuditYAMLRequest):
     except HTTPException:
         raise
     except yaml.YAMLError as e:
-        raise HTTPException(status_code=400, detail=f"YAML parsing error: {str(e)}")
+        if hasattr(e, "problem_mark") and e.problem_mark:
+            line_num = e.problem_mark.line + 1
+            raise HTTPException(status_code=400, detail=f"YAML syntax error at line {line_num}")
+        raise HTTPException(status_code=400, detail="YAML syntax error")
     except Exception as e:
         logger.exception("Unexpected error during YAML audit")
         raise HTTPException(status_code=500, detail="Internal server error")
