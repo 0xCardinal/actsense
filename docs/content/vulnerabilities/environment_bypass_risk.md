@@ -46,47 +46,45 @@ A forked PR can inject arbitrary code into `deploy.sh`; the workflow runs with m
 
 ### Secure Version
 
-```diff
- name: PR Validation
- on:
--  pull_request_target:
-+  pull_request:
-     branches: [main]
- jobs:
--  deploy:
--    environment: production
--    permissions:
--      contents: write
--      deployments: write
-+  build:
-     runs-on: ubuntu-latest
-+    permissions:
-+      contents: read
-     steps:
-       - uses: actions/checkout@v4
--        with:
--          ref: ${{ github.event.pull_request.head.sha }}
--      - run: ./scripts/deploy.sh
-+      - run: npm test
-+
-+ name: Deploy (Trusted)
-+ on:
-+  push:
-+    branches: [main]
-+ jobs:
-+  deploy:
-+    environment:
-+      name: production
-+      url: https://prod.example.com
-+    permissions:
-+      contents: read
-+      deployments: write
-+    runs-on: ubuntu-latest
-+    steps:
-+      - uses: actions/checkout@v4
-+      - name: Require manual approval
-+        uses: chrnorm/deployment-gate@v1
-+      - run: ./scripts/deploy.sh
+Split into two separate workflow files. The PR workflow only runs tests; production deploys only on trusted `push` events and require a human reviewer on the environment.
+
+**`.github/workflows/pr-validation.yml`** — safe, read-only PR checks:
+
+```yaml
+name: PR Validation
+on:
+  pull_request:          # NOT pull_request_target
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read     # read-only; no deployment access
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm test
+```
+
+**`.github/workflows/deploy.yml`** — production deploys only on merged commits:
+
+```yaml
+name: Deploy to Production
+on:
+  push:
+    branches: [main]     # only runs after PR is merged and reviewed
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production   # requires a human reviewer to approve in GitHub UI
+      url: https://prod.example.com
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/deploy.sh
 ```
 
 ## Impact
