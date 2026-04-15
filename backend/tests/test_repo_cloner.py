@@ -59,9 +59,13 @@ class TestRepoCloner:
             
             clone_path, _ = cloner.clone_repository("owner", "repo", token=valid_token)
             
-            # Verify token was used in URL (first call is the clone command)
-            first_call_args = mock_run.call_args_list[0][0][0]
-            assert valid_token in str(first_call_args)
+            # Token is passed via git config env vars, not clone argv
+            first_call = mock_run.call_args_list[0]
+            first_call_args = first_call[0][0]
+            first_call_kwargs = first_call[1]
+            assert valid_token in first_call_kwargs["env"]["GIT_CONFIG_VALUE_0"]
+            assert valid_token not in str(first_call_args)
+            assert "https://github.com/owner/repo.git" in first_call_args
     
     @patch('repo_cloner.subprocess.run')
     def test_clone_repository_with_branch(self, mock_run):
