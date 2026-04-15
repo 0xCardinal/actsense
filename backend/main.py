@@ -979,10 +979,11 @@ async def audit_fix(request: AuditYAMLRequest):
             seen_fixes.add(fix_key)
             if line_num and 0 < line_num <= len(lines):
                 original_line = lines[line_num - 1]
-                # Find ${{ ... }} expressions and suggest moving to env
-                expr_match = re.search(r'\$\{\{[^}]+\}\}', original_line)
-                if expr_match:
-                    expr = expr_match.group(0)
+                # Find the first ${{ ... }} expression using index lookups (avoid regex backtracking)
+                expr_start = original_line.find("${{")
+                expr_end = original_line.find("}}", expr_start + 3) if expr_start != -1 else -1
+                if expr_start != -1 and expr_end != -1:
+                    expr = original_line[expr_start:expr_end + 2]
                     # Extract a reasonable env var name
                     inner = expr.strip("${ }")
                     env_name = re.sub(r'[^a-zA-Z0-9]', '_', inner).upper()

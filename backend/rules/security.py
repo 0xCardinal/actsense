@@ -307,9 +307,6 @@ def check_self_hosted_runner_secrets(workflow: Dict[str, Any]) -> List[Dict[str,
 
     jobs = workflow.get("jobs", {})
 
-    # Pattern to detect secrets in run commands
-    secrets_pattern = re.compile(r'\$\{\{\s*secrets\.[^}]+\}\}')
-
     for job_name, job in jobs.items():
         runs_on_value = job.get("runs-on", "")
         if not runs_on_value or "self-hosted" not in str(runs_on_value).lower():
@@ -318,7 +315,14 @@ def check_self_hosted_runner_secrets(workflow: Dict[str, Any]) -> List[Dict[str,
         steps = job.get("steps", [])
         for step in steps:
             run = step.get("run", "")
-            if isinstance(run, str) and secrets_pattern.search(run):
+            if isinstance(run, str):
+                # Normalize whitespace and use substring checks to avoid regex complexity on untrusted input.
+                normalized_run = "".join(run.lower().split())
+                has_secret_expression = "${{secrets." in normalized_run and "}}" in normalized_run
+            else:
+                has_secret_expression = False
+
+            if has_secret_expression:
                 issues.append({
                     "type": "self_hosted_runner_secrets_in_run",
                     "severity": "high",
