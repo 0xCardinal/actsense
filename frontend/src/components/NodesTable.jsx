@@ -1,5 +1,6 @@
 import React from 'react'
 import { filterNodes } from '../utils/nodeFilters'
+import { getNodeTypeIcon } from '../utils/nodeIcons'
 import './NodesTable.css'
 
 function NodesTable({ graphData, filter, onNodeSelect }) {
@@ -18,18 +19,7 @@ function NodesTable({ graphData, filter, onNodeSelect }) {
     }
   }
 
-  const getNodeTypeIcon = (type) => {
-    switch (type) {
-      case 'repository':
-        return '📦'
-      case 'workflow':
-        return '⚙️'
-      case 'action':
-        return '🔧'
-      default:
-        return '•'
-    }
-  }
+  
 
   // Filter nodes based on filter criteria - use shared filtering logic
   const filteredNodes = React.useMemo(() => {

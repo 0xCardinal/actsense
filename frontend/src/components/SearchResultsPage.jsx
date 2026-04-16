@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import './SearchResultsPage.css'
 import IssueDetailsModal from './IssueDetailsModal'
+import { getNodeTypeIcon } from '../utils/nodeIcons'
 
 function SearchResultsPage({ searchQuery, searchResults, graphData, onNodeSelect, onClose }) {
   const [selectedIssue, setSelectedIssue] = useState(null)
@@ -187,7 +188,7 @@ function SearchResultsPage({ searchQuery, searchResults, graphData, onNodeSelect
                   <div key={assetType} className="severity-group">
                     <h3 className="severity-group-title">
                       <span className="asset-type-icon">
-                        {assetType === 'repository' ? '📦' : assetType === 'workflow' ? '⚙️' : '🔧'}
+                        {getNodeTypeIcon(assetType)}
                       </span>
                       {assetType.toUpperCase()} ({results.length})
                     </h3>
@@ -199,7 +200,7 @@ function SearchResultsPage({ searchQuery, searchResults, graphData, onNodeSelect
                         >
                           <div className="result-card-header">
                             <span className="asset-badge">
-                              {result.node.type === 'repository' ? '📦' : result.node.type === 'workflow' ? '⚙️' : '🔧'}
+                              {getNodeTypeIcon(result.node.type)}
                             </span>
                             <span className="result-type">{result.node.type || 'Asset'}</span>
                           </div>

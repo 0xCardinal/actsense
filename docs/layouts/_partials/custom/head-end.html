@@ -21,5 +21,40 @@ document.addEventListener('DOMContentLoaded', function() {
     const lastElement = elements[elements.length - 1];
     lastElement.remove();
   }
+
+  // Copy docker command on homepage hero
+  const commandCard = document.getElementById('hero-command-card');
+  const hintEl = document.getElementById('hero-command-hint');
+  const commandEl = document.getElementById('hero-docker-command');
+
+  if (commandCard && commandEl) {
+    const copyCommand = async function() {
+      const commandText = commandEl.textContent.trim();
+
+      try {
+        await navigator.clipboard.writeText(commandText);
+        commandCard.classList.add('copied');
+        if (hintEl) hintEl.textContent = 'Copied';
+
+        setTimeout(function() {
+          commandCard.classList.remove('copied');
+          if (hintEl) hintEl.textContent = 'Click to copy';
+        }, 1400);
+      } catch (err) {
+        if (hintEl) hintEl.textContent = 'Copy failed';
+        setTimeout(function() {
+          if (hintEl) hintEl.textContent = 'Click to copy';
+        }, 1400);
+      }
+    };
+
+    commandCard.addEventListener('click', copyCommand);
+    commandCard.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        copyCommand();
+      }
+    });
+  }
 });
 </script>

@@ -10,11 +10,12 @@ actsense/
 │   ├── main.py                 # FastAPI application
 │   ├── github_client.py        # GitHub API client
 │   ├── workflow_parser.py       # YAML parsing
-│   ├── security_auditor.py     # Security checks (30+ checks)
+│   ├── security_auditor.py     # Security checks facade (65+ checks)
 │   ├── graph_builder.py         # Dependency graph builder
 │   ├── repo_cloner.py          # Git repository cloning
 │   ├── analysis_storage.py     # Analysis persistence
-│   └── requirements.txt        # Python dependencies
+│   ├── pyproject.toml          # Python dependencies and project metadata
+│   └── uv.lock                 # Locked Python dependency versions
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx             # Main application component
@@ -45,17 +46,18 @@ actsense/
 1. Create virtual environment:
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+uv venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 ```
 
 2. Install dependencies:
 ```bash
-pip install -r requirements.txt
+uv sync --dev
 ```
 
 3. Run development server:
 ```bash
+source .venv/bin/activate  # if not already active
 uvicorn main:app --reload --port 8000
 ```
 
@@ -100,6 +102,20 @@ Use the provided script:
 
 This builds the frontend and starts the backend server.
 
+### Just Commands (Recommended)
+
+If you have [`just`](https://github.com/casey/just) installed, you can run common contributor workflows from the repository root:
+
+```bash
+just up
+just status
+just down
+```
+
+- `just up`: starts the Docker app stack and docs server
+- `just status`: shows app container and docs server status
+- `just down`: stops both app containers and docs server
+
 ## Production Build
 
 1. Build frontend:
@@ -111,7 +127,7 @@ npm run build
 2. Start backend (serves built frontend):
 ```bash
 cd backend
-source venv/bin/activate
+source .venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -315,14 +331,13 @@ issues.extend(SecurityAuditor.check_your_new_check(workflow))
 ### Backend Testing
 ```bash
 cd backend
-source venv/bin/activate
-python -m pytest  # If tests are added
+uv run pytest
 ```
 
 ### Frontend Testing
 ```bash
 cd frontend
-npm test  # If tests are added
+npm run build
 ```
 
 ## Code Style

@@ -19,7 +19,7 @@ class GitHubClient:
         """Get repository contents at a specific path."""
         url = f"{self.base_url}/repos/{owner}/{repo}/contents/{path}"
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=self.headers)
+            response = await client.get(url, headers=self.headers, timeout=10.0)
             if response.status_code == 403:
                 # Check if it's a rate limit error
                 rate_limit_remaining = response.headers.get("X-RateLimit-Remaining", "0")
@@ -87,8 +87,15 @@ class GitHubClient:
                     file_path = filename
                 content = await self.get_file_content(owner, repo, file_path)
                 return {"content": content, "path": file_path}
-            except (httpx.HTTPStatusError, ValueError, HTTPException):
-                # 404 or other errors - try next filename
+            except HTTPException as e:
+                if e.status_code == 403:
+                    raise
+                continue
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 403:
+                    raise HTTPException(status_code=403, detail=f"GitHub API error: {str(e)}")
+                continue
+            except ValueError:
                 continue
         return None
 
@@ -98,21 +105,19 @@ class GitHubClient:
             # Try releases API first (more reliable for versioned releases)
             url = f"{self.base_url}/repos/{owner}/{repo}/releases/latest"
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=self.headers)
+                response = await client.get(url, headers=self.headers, timeout=10.0)
                 if response.status_code == 200:
                     release = response.json()
                     tag_name = release.get("tag_name", "")
                     if tag_name:
                         return tag_name
         except (httpx.HTTPStatusError, Exception):
-            # If releases API fails, try tags API
             pass
         
         try:
-            # Fallback to tags API - get all tags and find the latest version
-            url = f"{self.base_url}/repos/{owner}/{repo}/tags"
+            url = f"{self.base_url}/repos/{owner}/{repo}/tags?per_page=100"
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=self.headers)
+                response = await client.get(url, headers=self.headers, timeout=10.0)
                 if response.status_code == 200:
                     tags = response.json()
                     if tags and len(tags) > 0:
@@ -159,7 +164,7 @@ class GitHubClient:
         try:
             url = f"{self.base_url}/repos/{owner}/{repo}/commits/{sha}"
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=self.headers)
+                response = await client.get(url, headers=self.headers, timeout=10.0)
                 if response.status_code == 200:
                     commit = response.json()
                     commit_info = commit.get("commit", {})
@@ -179,15 +184,13 @@ class GitHubClient:
         try:
             url = f"{self.base_url}/repos/{owner}/{repo}/git/refs/tags/{latest_tag}"
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=self.headers)
+                response = await client.get(url, headers=self.headers, timeout=10.0)
                 if response.status_code == 200:
                     ref_data = response.json()
-                    # The ref might point to a tag object or directly to a commit
                     object_sha = ref_data.get("object", {}).get("sha")
                     if object_sha:
-                        # Check if it's a tag object (needs another API call) or direct commit
                         tag_url = f"{self.base_url}/repos/{owner}/{repo}/git/tags/{object_sha}"
-                        tag_response = await client.get(tag_url, headers=self.headers)
+                        tag_response = await client.get(tag_url, headers=self.headers, timeout=10.0)
                         if tag_response.status_code == 200:
                             tag_data = tag_response.json()
                             commit_sha = tag_data.get("object", {}).get("sha")
@@ -202,7 +205,7 @@ class GitHubClient:
             try:
                 url = f"{self.base_url}/repos/{owner}/{repo}/releases/latest"
                 async with httpx.AsyncClient() as client:
-                    response = await client.get(url, headers=self.headers)
+                    response = await client.get(url, headers=self.headers, timeout=10.0)
                     if response.status_code == 200:
                         release = response.json()
                         commit_sha = release.get("target_commitish")
@@ -211,6 +214,61 @@ class GitHubClient:
             except (httpx.HTTPStatusError, Exception):
                 pass
         return None
+
+    async def resolve_tag_to_sha(self, owner: str, repo: str, tag: str) -> Optional[str]:
+        """Resolve a version tag (e.g. 'v4') to its full 40-char commit SHA.
+
+        Tries the exact ref first, then falls back to matching from the refs list
+        since /git/refs/tags/{prefix} returns an array of prefix matches.
+        Raises HTTPException on rate limits so callers can surface it to the user.
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                url = f"{self.base_url}/repos/{owner}/{repo}/git/refs/tags/{tag}"
+                response = await client.get(url, headers=self.headers, timeout=10.0)
+
+                if response.status_code == 403:
+                    remaining = response.headers.get("X-RateLimit-Remaining", "0")
+                    if remaining == "0":
+                        raise HTTPException(
+                            status_code=403,
+                            detail="GitHub API rate limit exceeded. Provide a GitHub token to resolve SHA hashes."
+                        )
+                if response.status_code != 200:
+                    return None
+
+                data = response.json()
+
+                ref_obj = None
+                if isinstance(data, list):
+                    exact = f"refs/tags/{tag}"
+                    for item in data:
+                        if item.get("ref") == exact:
+                            ref_obj = item
+                            break
+                    if not ref_obj and data:
+                        ref_obj = data[0]
+                elif isinstance(data, dict):
+                    ref_obj = data
+
+                if not ref_obj:
+                    return None
+
+                obj = ref_obj.get("object", {})
+                object_sha = obj.get("sha")
+                if not object_sha:
+                    return None
+
+                if obj.get("type") == "tag":
+                    tag_url = f"{self.base_url}/repos/{owner}/{repo}/git/tags/{object_sha}"
+                    tag_resp = await client.get(tag_url, headers=self.headers, timeout=10.0)
+                    if tag_resp.status_code == 200:
+                        return tag_resp.json().get("object", {}).get("sha", object_sha)
+                return object_sha
+        except HTTPException:
+            raise
+        except Exception:
+            return None
 
     async def get_repository_info(self, owner: str, repo: str) -> Optional[Dict[str, Any]]:
         """Get repository information including archived status.
@@ -235,11 +293,10 @@ class GitHubClient:
                             status_code=403,
                             detail="GitHub API rate limit exceeded. Please provide a GitHub token to increase your rate limit from 60/hour to 5000/hour."
                         )
-                    # For 403 without rate limit, it could be:
-                    # 1. Private repo we don't have access to (treat as inaccessible, return None)
-                    # 2. Some other permission issue
-                    # We'll treat as inaccessible rather than raising, to avoid false positives
-                    return None
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Repository is inaccessible (private or insufficient permissions). Provide a token with appropriate scope."
+                    )
                 else:
                     # Other HTTP errors - raise to let caller handle
                     response.raise_for_status()

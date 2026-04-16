@@ -62,6 +62,34 @@ class TestOlderActionVersions:
         older_version_issues = [i for i in issues if i.get("type") == "older_action_version"]
         if len(older_version_issues) > 0:
             assert "actsense.dev/vulnerabilities/older_action_version" in older_version_issues[0]["evidence"]["vulnerability"]
+
+    @pytest.mark.asyncio
+    async def test_missing_repository_not_flagged_as_older_version(self, mock_github_client):
+        """Missing repositories should not produce older_action_version findings."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        workflow = {
+            "name": "Test Workflow",
+            "on": ["push"],
+            "jobs": {
+                "build-container": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {"uses": "example-org/super-secure-deploy@v1"}
+                    ],
+                }
+            },
+        }
+
+        mock_github_client.parse_action_reference = MagicMock(
+            return_value=("example-org", "super-secure-deploy", None, None)
+        )
+        mock_github_client.get_repository_info = AsyncMock(return_value=None)
+        mock_github_client.get_latest_tag = AsyncMock(return_value="v3.0.0")
+
+        issues = await security_rules.check_older_action_versions(workflow, client=mock_github_client)
+        older_version_issues = [i for i in issues if i.get("type") == "older_action_version"]
+        assert len(older_version_issues) == 0
     
     def test_inconsistent_action_versions(self, workflow_with_inconsistent_versions):
         """Test detection of inconsistent action versions."""
@@ -191,6 +219,33 @@ class TestDeprecatedActions:
         if len(deprecated_issues) > 0:
             assert "actsense.dev/vulnerabilities/deprecated_action" in deprecated_issues[0]["evidence"]["vulnerability"]
 
+    @pytest.mark.asyncio
+    async def test_nonexistent_v1_action_not_flagged_as_deprecated(self, mock_github_client):
+        """Non-existent action repos should be handled by missing_action_repository, not deprecated_action."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        workflow = {
+            "name": "Test Workflow",
+            "on": ["push"],
+            "jobs": {
+                "build-container": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {"uses": "example-org/super-secure-deploy@v1"}
+                    ],
+                }
+            },
+        }
+
+        mock_github_client.get_repository_info = AsyncMock(return_value=None)
+        mock_github_client.parse_action_reference = MagicMock(
+            return_value=("example-org", "super-secure-deploy", "v1", None)
+        )
+
+        issues = await security_rules.check_deprecated_actions(workflow, client=mock_github_client)
+        deprecated_issues = [i for i in issues if i.get("type") == "deprecated_action"]
+        assert len(deprecated_issues) == 0
+
 
 class TestMissingActionRepositories:
     """Tests for missing action repository detection."""
@@ -223,7 +278,7 @@ class TestMissingActionRepositories:
         
         missing_repo_issues = [i for i in issues if i.get("type") == "missing_action_repository"]
         assert len(missing_repo_issues) > 0
-        assert missing_repo_issues[0]["severity"] == "high"
+        assert missing_repo_issues[0]["severity"] == "critical"
         assert "nonexistent-org/nonexistent-repo" in missing_repo_issues[0]["message"]
         assert "actsense.dev/vulnerabilities/missing_action_repository" in missing_repo_issues[0]["evidence"]["vulnerability"]
     

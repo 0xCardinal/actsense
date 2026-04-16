@@ -276,17 +276,20 @@ class TestResolveActionDependencies:
     
     @pytest.mark.asyncio
     async def test_resolve_action_dependencies_workflow_file(self):
-        """Test resolve_action_dependencies skips workflow files."""
+        """Test resolve_action_dependencies adds reusable workflow nodes."""
         mock_client = MagicMock()
         mock_client.parse_action_reference = MagicMock(return_value=("owner", "repo", "v1", ".github/workflows/test.yml"))
+        mock_client.get_file_content = AsyncMock(side_effect=Exception("not found"))
         
         graph = GraphBuilder()
         visited = set()
         
         await resolve_action_dependencies(mock_client, "owner/repo/.github/workflows/test.yml@v1", graph, visited)
         
-        # Should not add node because it's a workflow file
-        assert len(graph.nodes) == 0
+        # Reusable workflows are now added as nodes
+        assert len(graph.nodes) == 1
+        node = list(graph.nodes.values())[0]
+        assert node["type"] == "reusable_workflow"
     
     @pytest.mark.asyncio
     async def test_resolve_action_dependencies_missing_repo(self):

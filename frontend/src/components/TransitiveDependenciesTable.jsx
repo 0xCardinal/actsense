@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback, memo, useRef } from 'react'
+import { getNodeTypeIcon } from '../utils/nodeIcons'
 import './TransitiveDependenciesTable.css'
 
 // AccordionItem component
@@ -326,16 +327,7 @@ function TransitiveDependenciesTable({ graphData, onNodeSelect, filter }) {
 
   // Memoize helper functions to prevent re-creation on every render
   const getNodeTypeIconMemo = useCallback((type) => {
-    switch (type) {
-      case 'repository':
-        return '📦'
-      case 'workflow':
-        return '⚙️'
-      case 'action':
-        return '🔧'
-      default:
-        return '•'
-    }
+    return getNodeTypeIcon(type)
   }, [])
 
   const getSeverityColorMemo = useCallback((severity) => {
