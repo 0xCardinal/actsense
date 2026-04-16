@@ -67,6 +67,15 @@ else
     print_warning "Git is not installed. Repository cloning feature will not work."
 fi
 
+# Check TruffleHog (optional but recommended for secret detection)
+if command_exists trufflehog; then
+    TRUFFLEHOG_VERSION=$(trufflehog --version 2>&1 | head -1)
+    print_success "TruffleHog $TRUFFLEHOG_VERSION found"
+else
+    print_warning "TruffleHog is not installed. Secret detection in workflows will be skipped."
+    print_warning "Install it from: https://github.com/trufflesecurity/trufflehog#installation"
+fi
+
 echo ""
 
 # Setup Backend

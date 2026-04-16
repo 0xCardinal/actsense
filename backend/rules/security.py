@@ -1992,98 +1992,110 @@ def check_untrusted_third_party_actions(workflow: Dict[str, Any]) -> List[Dict[s
     return issues
 
 def _run_trufflehog(content: str) -> List[Dict[str, Any]]:
-    """Run TruffleHog on workflow content to detect secrets."""
+    """Run TruffleHog on workflow content to detect secrets.
+
+    Returns an empty list (without raising) when TruffleHog is not installed or
+    times out, so callers always receive a usable result.  A warning is printed
+    once when the binary is absent so operators are aware that this check is
+    being skipped.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
     issues = []
+    tmp_file_path = None
 
     try:
-        # Create a temporary file with the workflow content
+        # Write content to a temp file.  Assign the path before entering the
+        # inner try so the finally block can always attempt cleanup.
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as tmp_file:
             tmp_file.write(content)
             tmp_file_path = tmp_file.name
 
-        try:
-            # Run TruffleHog on the file
-            # Using --json flag for structured output
-            result = subprocess.run(
-                ['trufflehog', 'filesystem', '--json', '--no-update', tmp_file_path],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+        # Run TruffleHog on the file
+        # Using --json flag for structured output
+        result = subprocess.run(
+            ['trufflehog', 'filesystem', '--json', '--no-update', tmp_file_path],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
 
-            # Parse TruffleHog output (can be multiple JSON objects, one per line)
-            if result.stdout:
-                for line in result.stdout.strip().split('\n'):
-                    if line.strip():
-                        try:
-                            finding = json.loads(line)
-                            # Extract relevant information
-                            detector_name = finding.get('DetectorName', 'Unknown')
-                            verified = finding.get('Verified', False)
-                            raw = finding.get('Raw', '')
+        # Parse TruffleHog output (can be multiple JSON objects, one per line)
+        if result.stdout:
+            for line in result.stdout.strip().split('\n'):
+                if line.strip():
+                    try:
+                        finding = json.loads(line)
+                        # Extract relevant information
+                        detector_name = finding.get('DetectorName', 'Unknown')
+                        verified = finding.get('Verified', False)
 
-                            # Report all secrets (verified and unverified)
-                            severity = "critical" if verified else "high"
-                            verification_status = "verified" if verified else "unverified"
+                        # Report all secrets (verified and unverified)
+                        severity = "critical" if verified else "high"
+                        verification_status = "verified" if verified else "unverified"
 
-                            if verified:
-                                vulnerability_text = (
-                                    f"TruffleHog detected a VERIFIED secret of type '{detector_name}' in the workflow file. "
-                                    f"This means the secret has been verified to be a real, active credential:\n"
-                                    f"  - The secret is exposed in the workflow file\n"
-                                    f"  - Anyone with read access can see and use this credential\n"
-                                    f"  - The secret is stored in git history permanently\n"
-                                    f"  - The credential is active and can be used by attackers immediately\n\n"
-                                    f"Immediate actions required:\n"
-                                    f"  - Rotate/revoke this credential immediately in the target system\n"
-                                    f"  - Review access logs for unauthorized usage\n"
-                                    f"  - Remove the secret from the workflow file\n"
-                                    f"  - Remove from git history if possible"
-                                )
-                            else:
-                                vulnerability_text = (
-                                    f"TruffleHog detected a potential secret of type '{detector_name}' in the workflow file. "
-                                    f"While not verified, this pattern matches known secret formats:\n"
-                                    f"  - The pattern matches a known secret type\n"
-                                    f"  - This could be a real credential or a false positive\n"
-                                    f"  - If it's a real secret, it's exposed to anyone with read access\n"
-                                    f"  - Secrets in workflow files are stored in git history permanently\n\n"
-                                    f"Recommended actions:\n"
-                                    f"  - Verify if this is a real credential\n"
-                                    f"  - If real, rotate/revoke immediately\n"
-                                    f"  - Remove the secret from the workflow file\n"
-                                    f"  - Use GitHub Secrets instead"
-                                )
+                        if verified:
+                            vulnerability_text = (
+                                f"TruffleHog detected a VERIFIED secret of type '{detector_name}' in the workflow file. "
+                                f"This means the secret has been verified to be a real, active credential:\n"
+                                f"  - The secret is exposed in the workflow file\n"
+                                f"  - Anyone with read access can see and use this credential\n"
+                                f"  - The secret is stored in git history permanently\n"
+                                f"  - The credential is active and can be used by attackers immediately\n\n"
+                                f"Immediate actions required:\n"
+                                f"  - Rotate/revoke this credential immediately in the target system\n"
+                                f"  - Review access logs for unauthorized usage\n"
+                                f"  - Remove the secret from the workflow file\n"
+                                f"  - Remove from git history if possible"
+                            )
+                        else:
+                            vulnerability_text = (
+                                f"TruffleHog detected a potential secret of type '{detector_name}' in the workflow file. "
+                                f"While not verified, this pattern matches known secret formats:\n"
+                                f"  - The pattern matches a known secret type\n"
+                                f"  - This could be a real credential or a false positive\n"
+                                f"  - If it's a real secret, it's exposed to anyone with read access\n"
+                                f"  - Secrets in workflow files are stored in git history permanently\n\n"
+                                f"Recommended actions:\n"
+                                f"  - Verify if this is a real credential\n"
+                                f"  - If real, rotate/revoke immediately\n"
+                                f"  - Remove the secret from the workflow file\n"
+                                f"  - Use GitHub Secrets instead"
+                            )
 
-                            issues.append({
-                                "type": "trufflehog_secret_detected",
-                                "severity": severity,
-                                "message": f"TruffleHog detected {verification_status} secret: {detector_name}. This is a security vulnerability.",
-                                "evidence": {
-                                    "detector": detector_name,
-                                    "verified": verified,
-                                    "verification_status": verification_status,
-                                    "vulnerability": vulnerability_text
-                                },
-                                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/trufflehog_secret_detected"
-                            })
-                        except json.JSONDecodeError:
-                            # Skip invalid JSON lines
-                            continue
-        finally:
-            # Clean up temporary file
-            if os.path.exists(tmp_file_path):
-                os.unlink(tmp_file_path)
+                        issues.append({
+                            "type": "trufflehog_secret_detected",
+                            "severity": severity,
+                            "message": f"TruffleHog detected {verification_status} secret: {detector_name}. This is a security vulnerability.",
+                            "evidence": {
+                                "detector": detector_name,
+                                "verified": verified,
+                                "verification_status": verification_status,
+                                "vulnerability": vulnerability_text
+                            },
+                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/trufflehog_secret_detected"
+                        })
+                    except json.JSONDecodeError:
+                        # Skip invalid JSON lines
+                        continue
 
     except subprocess.TimeoutExpired:
-        # TruffleHog timed out, skip silently
-        pass
+        logger.warning("TruffleHog timed out scanning workflow content; skipping TruffleHog check.")
     except FileNotFoundError:
-        # TruffleHog not installed, skip silently
-        pass
-    except Exception as e:
-        # Any other error, skip silently
-        pass
+        logger.warning(
+            "TruffleHog binary not found. Install it (https://github.com/trufflesecurity/trufflehog) "
+            "to enable secret detection. TruffleHog check will be skipped."
+        )
+    except Exception:
+        logger.exception("Unexpected error running TruffleHog; skipping TruffleHog check.")
+    finally:
+        # Always clean up the temporary file, regardless of how the block exits.
+        if tmp_file_path and os.path.exists(tmp_file_path):
+            try:
+                os.unlink(tmp_file_path)
+            except OSError:
+                logger.warning("Failed to delete TruffleHog temp file: %s", tmp_file_path)
 
     return issues
 

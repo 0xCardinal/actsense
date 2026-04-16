@@ -40,34 +40,48 @@ jobs:
 
 ### Secure Version
 
-```diff
- name: PR Validation
- on: pull_request
- jobs:
-   build:
-     runs-on: ubuntu-latest
-     steps:
-       - uses: actions/checkout@v4
-       - run: npm test
+Split into two separate workflow files. The first runs tests safely with read-only access; the second uses `pull_request_target` only for the privileged action it actually needs (labelling) and never touches fork code.
 
- name: PR Target Labeler
- on:
-   pull_request_target:
-     branches: [main]
- jobs:
--  build:
-+  label:
-     runs-on: ubuntu-latest
-+    permissions:
-+      contents: read
-+      pull-requests: write
-     steps:
-       - uses: actions/checkout@v4
-         with:
--          ref: ${{ github.event.pull_request.head.sha }}  # Dangerous
--      - run: npm test
-+          ref: ${{ github.event.pull_request.base.ref }}
-+      - run: gh pr edit ${{ github.event.pull_request.number }} --add-label "triaged"
+**`.github/workflows/pr-test.yml`** — build and test the fork's code safely:
+
+```yaml
+name: PR Validation
+on:
+  pull_request:        # read-only token, fork code can't access secrets
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4   # checks out the fork's code safely
+      - run: npm ci && npm test
+```
+
+**`.github/workflows/pr-label.yml`** — privileged action using `pull_request_target`, but checks out only the base branch:
+
+```yaml
+name: PR Labeler
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize]
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read       # only reading the base branch
+      pull-requests: write # needed to add labels
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}  # base branch only — NOT fork code
+      - name: Add triage label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr edit "$PR_NUMBER" --add-label "needs-review"
 ```
 
 ## Impact

@@ -3,9 +3,12 @@ import subprocess
 import tempfile
 import shutil
 import os
+import logging
 from typing import Optional, Tuple
 from pathlib import Path
 import re
+logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 class RepoCloner:
     """Handle cloning and cleanup of repositories."""
     
@@ -123,6 +126,12 @@ class RepoCloner:
                     text=True,
                     timeout=60,
                     shell=False,
+                )
+
+                logger.warning(
+                    "Sparse checkout fallback used for %s/%s",
+                    safe_owner,
+                    safe_repo,
                 )
 
             return clone_dir_str, clone_dir_str

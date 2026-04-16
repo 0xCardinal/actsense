@@ -10,18 +10,31 @@ Workflows that include secrets in matrix strategy definitions expose those secre
 - All matrix jobs can access the secrets, even if they don't need them.
 - Secrets are visible in workflow YAML and logs.
 
+A realistic case: publishing to npm across Node versions while embedding the token in the matrix:
+
 ```yaml
-name: Build Matrix with Secrets
-on: [push]
+name: Publish to npm
+on:
+  push:
+    tags: ['v*']
 jobs:
-  build:
+  publish:
     strategy:
       matrix:
-        os: [ubuntu, windows, macos]
-        api_key: [${{ secrets.API_KEY }}]  # Dangerous - exposed to all jobs
-    runs-on: ${{ matrix.os }}-latest
+        node: [18, 20, 22]
+        # Secret embedded in matrix — leaked into every job's run context,
+        # visible in the workflow YAML to all contributors, and may appear
+        # in debug logs for all three matrix jobs simultaneously
+        npm_token: [${{ secrets.NPM_TOKEN }}]
+    runs-on: ubuntu-latest
     steps:
-      - run: echo "Using ${{ matrix.api_key }}"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ matrix.npm_token }}
 ```
 
 ## Mitigation Strategies
@@ -46,23 +59,30 @@ jobs:
 
 ### Secure Version
 
+Remove the secret from the matrix entirely. Reference it directly at the step level via `env:` so it is scoped only to the step that needs it and never serialised into the matrix definition:
+
 ```diff
- name: Build Matrix Secure
- on: [push]
+ name: Publish to npm
+ on:
+   push:
+     tags: ['v*']
  jobs:
-   build:
+   publish:
      strategy:
        matrix:
-         os: [ubuntu, windows, macos]
--        api_key: [${{ secrets.API_KEY }}]  # Dangerous - exposed to all jobs
-+        # No secrets here
-     runs-on: ${{ matrix.os }}-latest
+         node: [18, 20, 22]
+-        npm_token: [${{ secrets.NPM_TOKEN }}]  # exposed to all matrix jobs
+     runs-on: ubuntu-latest
      steps:
--      - run: echo "Using ${{ matrix.api_key }}"
-+      - name: Use secret
-+        env:
-+          API_KEY: ${{ secrets.API_KEY }}  # Secret at step level
-+        run: echo "Using API key"
+       - uses: actions/checkout@v4
+       - uses: actions/setup-node@v4
+         with:
+           node-version: ${{ matrix.node }}
+           registry-url: https://registry.npmjs.org
+       - run: npm publish
+         env:
+-          NODE_AUTH_TOKEN: ${{ matrix.npm_token }}
++          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}  # scoped to this step only
 ```
 
 ## Impact
