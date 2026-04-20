@@ -62,7 +62,7 @@ Either replace with the official equivalent action (here: the Slack-maintained a
        - uses: actions/checkout@v4
        - run: npm ci && npm test
 -      - uses: rtCamp/action-slack-notify@v2   # Third-party, unaudited publisher
-+      - uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001  # Official Slack action, pinned to v2.0.0
++      - uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2162c45d02d  # Official Slack action, pinned to v2.0.0
          env:
            SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 ```

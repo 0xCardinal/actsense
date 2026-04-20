@@ -25,8 +25,8 @@ jobs:
 
 ## Mitigation Strategies
 
-1. **Remove persist-credentials or set to false**  
-   Update the checkout step to use `persist-credentials: false` or remove the line entirely (default is false).
+1. **Set persist-credentials to false explicitly**  
+   Update the checkout step to use `persist-credentials: false`. Do not rely on omitting the line — the default is `true`, so omitting it leaves credentials persisted in `.git/config`.
 
 2. **Use GITHUB_TOKEN for pushing**  
    If you need to push changes, use GITHUB_TOKEN with appropriate permissions instead of persisting credentials. GITHUB_TOKEN is automatically available and doesn't need to be persisted.
