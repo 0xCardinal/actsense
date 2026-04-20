@@ -48,6 +48,9 @@ menu:
     - name: "GitHub Repository"
       url: "https://github.com/0xCardinal/actsense"
       weight: 2
+    - name: "pin. by actsense"
+      url: "https://pin.actsense.dev"
+      weight: 3
 
 # Theme parameters
 params:
