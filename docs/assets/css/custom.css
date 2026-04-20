@@ -551,3 +551,24 @@ html {
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
   }
 }
+
+/* RedHunt Labs sponsor logo: dark-background asset for dark theme, standard mark for light */
+.redhunt-sponsor-logo-light {
+  display: block;
+  height: 48px;
+  width: auto;
+}
+
+.redhunt-sponsor-logo-dark {
+  display: none;
+  height: 48px;
+  width: auto;
+}
+
+html[class~="dark"] .redhunt-sponsor-logo-light {
+  display: none;
+}
+
+html[class~="dark"] .redhunt-sponsor-logo-dark {
+  display: block;
+}
