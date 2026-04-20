@@ -37,6 +37,9 @@ menu:
       url: "https://github.com/0xCardinal/actsense"
       params:
         icon: github
+    - name: pin
+      weight: 8
+      url: "https://pin.actsense.dev"
   sidebar:
     - name: More
       params:

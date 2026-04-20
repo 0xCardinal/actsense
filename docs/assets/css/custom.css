@@ -425,6 +425,33 @@ html {
   letter-spacing: -0.025em;
 }
 
+/* Navbar pin logo link */
+.hextra-nav-container a[href*="pin.actsense.dev"] {
+  font-size: 0;
+  line-height: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.1rem;
+  height: 2.75rem;
+  text-decoration: none;
+}
+
+.hextra-nav-container a[href*="pin.actsense.dev"]::before {
+  content: "";
+  width: 2.55rem;
+  height: 1.55rem;
+  display: block;
+  background-image: url("/images/pin-white.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+:is(html[class~="dark"] *) .hextra-nav-container a[href*="pin.actsense.dev"]::before {
+  background-image: url("/images/pin-black.png");
+}
+
 /* Platform image container with background blur */
 .platform-image-container {
   position: relative;
