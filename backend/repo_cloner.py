@@ -7,11 +7,13 @@ import logging
 from typing import Optional, Tuple
 from pathlib import Path
 import re
+
 logger = logging.getLogger(__name__)
-logger = logging.getLogger(__name__)
+
+
 class RepoCloner:
     """Handle cloning and cleanup of repositories."""
-    
+
     def __init__(self, base_dir: Optional[str] = None):
         """Initialize with optional base directory for clones."""
         if base_dir:
@@ -20,7 +22,7 @@ class RepoCloner:
         else:
             self.base_dir = Path(tempfile.gettempdir()) / "actsense-clones"
             self.base_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def clone_repository(
         self,
         owner: str,
@@ -30,7 +32,7 @@ class RepoCloner:
     ) -> Tuple[str, str]:
         """
         Clone a repository and return the path to the cloned directory.
-        
+
         Returns:
             Tuple of (clone_path, cleanup_function_name)
         """
@@ -40,6 +42,7 @@ class RepoCloner:
 
         # Credential-less URL; auth is supplied via git config environment (not argv).
         repo_url = f"https://github.com/{safe_owner}/{safe_repo}.git"
+        public_repo_url = repo_url  # alias used in sanitize step below
 
         clone_env: Optional[dict] = None
         if token:
@@ -50,7 +53,7 @@ class RepoCloner:
             clone_env["GIT_CONFIG_COUNT"] = "1"
             clone_env["GIT_CONFIG_KEY_0"] = "http.extraheader"
             clone_env["GIT_CONFIG_VALUE_0"] = f"AUTHORIZATION: bearer {safe_token}"
-        
+
         # Create unique directory for this clone (must stay under base_dir).
         base_resolved = self.base_dir.resolve()
         clone_dir = (self.base_dir / f"{safe_owner}_{safe_repo}_{os.getpid()}").resolve()
@@ -83,10 +86,12 @@ class RepoCloner:
                 shell=False,
                 env=clone_env,
             )
-            
+
             if result.returncode != 0:
-                raise Exception(f"Git clone failed: {result.stderr}")
-            
+                # Sanitize stderr before surfacing it — the URL may contain the token.
+                sanitized_stderr = result.stderr.replace(repo_url, public_repo_url) if token else result.stderr
+                raise Exception(f"Git clone failed: {sanitized_stderr}")
+
             # Configure sparse-checkout before any checkout happens.
             subprocess.run(
                 ["git", "-C", clone_dir_str, "sparse-checkout", "init", "--cone"],
@@ -113,7 +118,7 @@ class RepoCloner:
                 timeout=60,
                 shell=False,
             )
-            
+
             if result.returncode != 0:
                 # Fallback for older Git: non-cone sparse-checkout
                 sparse_config = Path(clone_dir) / ".git" / "info" / "sparse-checkout"
@@ -135,7 +140,7 @@ class RepoCloner:
                 )
 
             return clone_dir_str, clone_dir_str
-        
+
         except subprocess.TimeoutExpired:
             raise Exception("Repository clone timed out")
         except Exception:
@@ -180,41 +185,40 @@ class RepoCloner:
         if any(c in token for c in "@:/\\ \n\r\t'\""):
             raise ValueError("Token contains forbidden characters")
         return token
-    
+
     def get_file_content(self, clone_path: str, file_path: str) -> str:
         """Read file content from cloned repository."""
         full_path = Path(clone_path) / file_path
         if not full_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
-        
+
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
-    
+
     def get_workflow_files(self, clone_path: str) -> list:
         """Get all workflow files from cloned repository."""
         workflows_dir = Path(clone_path) / ".github" / "workflows"
         workflows = []
-        
+
         if not workflows_dir.exists():
             return workflows
-        
+
         for file_path in workflows_dir.glob("*.yml"):
             workflows.append({
                 "name": file_path.name,
                 "path": str(file_path.relative_to(clone_path))
             })
-        
+
         for file_path in workflows_dir.glob("*.yaml"):
             workflows.append({
                 "name": file_path.name,
                 "path": str(file_path.relative_to(clone_path))
             })
-        
+
         return workflows
-    
+
     def cleanup(self, clone_path: str):
         """Remove cloned repository directory."""
         path = Path(clone_path)
         if path.exists():
             shutil.rmtree(path, ignore_errors=True)
-
