@@ -68,17 +68,17 @@ The following GitHub context variables are considered risky and user-controllabl
        PR_TITLE: ${{ github.event.pull_request.title }}
        PR_BODY: ${{ github.event.pull_request.body }}
      run: |
-       # Validate inputs
-       if [[ ! "$PR_TITLE" =~ ^[a-zA-Z0-9\s.,!?-]+$ ]]; then
+       # Validate inputs — use POSIX character classes ([[:space:]]) not \s in bash
+       if [[ ! "$PR_TITLE" =~ ^[[:alnum:][:space:].,!?/-]+$ ]]; then
          echo "Invalid PR title"
          exit 1
        fi
-       if [[ ! "$PR_BODY" =~ ^[a-zA-Z0-9\s.,!?\n-]+$ ]]; then
-         echo "Invalid PR body"
+       # For multi-line bodies use a length cap and character allowlist
+       if (( ${#PR_BODY} > 4096 )); then
+         echo "PR body too long"
          exit 1
        fi
        echo "Processing: $PR_TITLE"
-       echo "Description: $PR_BODY"
    ```
 
 3. **Avoid direct interpolation in commands**  
@@ -105,26 +105,26 @@ The following GitHub context variables are considered risky and user-controllabl
  jobs:
    process:
      runs-on: ubuntu-latest
++    permissions:
++      contents: read
      steps:
        - name: Process PR Title
 +        env:
 +          PR_TITLE: ${{ github.event.pull_request.title }}
 +          PR_BODY: ${{ github.event.pull_request.body }}
          run: |
-+          # Validate and sanitize inputs
-+          if [[ ! "$PR_TITLE" =~ ^[a-zA-Z0-9\s.,!?-]+$ ]]; then
-+            echo "Invalid PR title"
++          # Validate — use POSIX [[:space:]] not \s in bash =~ expressions
++          if [[ ! "$PR_TITLE" =~ ^[[:alnum:][:space:].,!?/-]+$ ]]; then
++            echo "Invalid PR title; rejecting"
 +            exit 1
 +          fi
-+          if [[ ! "$PR_BODY" =~ ^[a-zA-Z0-9\s.,!?\n-]+$ ]]; then
-+            echo "Invalid PR body"
++          if (( ${#PR_BODY} > 4096 )); then
++            echo "PR body exceeds length limit; rejecting"
 +            exit 1
 +          fi
-+          # Use validated inputs safely
 -          echo ${{ github.event.pull_request.title }}
 -          echo ${{ github.event.pull_request.body }}
 +          echo "Processing PR: $PR_TITLE"
-+          echo "PR Description: $PR_BODY"
 ```
 
 ## Impact

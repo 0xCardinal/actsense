@@ -2,13 +2,13 @@
 
 ## Description
 
-Workflows that use `actions/checkout` with `persist-credentials: true` create security risks: credentials are stored in the runner's Git configuration, subsequent steps can access and potentially misuse these credentials, and credentials may be exposed in logs or artifacts. If the runner is compromised, credentials are accessible. The default behavior (`persist-credentials: false`) is more secure and should be used unless credentials are explicitly needed for pushing changes. [^gh_checkout]
+Workflows that use `actions/checkout` with `persist-credentials: true` create security risks: credentials are stored in the runner's Git configuration, subsequent steps can access and potentially misuse these credentials, and credentials may be exposed in logs or artifacts. If the runner is compromised, credentials are accessible. **Note:** `persist-credentials` defaults to `true` in `actions/checkout`, so it must be explicitly set to `false` unless your workflow needs to push commits back to the repository. [^gh_checkout]
 
 ## Vulnerable Instance
 
-- Workflow uses `actions/checkout` with `persist-credentials: true`.
-- Credentials are persisted in Git configuration for subsequent steps.
-- Credentials can be accessed by malicious steps or actions.
+- Workflow uses `actions/checkout` without setting `persist-credentials: false` (the default is `true`).
+- Credentials are persisted in Git configuration for all subsequent steps.
+- Any later step or third-party action can read `~/.git-credentials` or the Git credential helper and use the `GITHUB_TOKEN` to make API calls or push commits.
 
 ```yaml
 name: Build
@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: true  # Dangerous - credentials persisted
+        # persist-credentials defaults to true — GITHUB_TOKEN is stored in .git/config
+      - uses: some-third-party/code-analysis@v2  # this action can now read the token
       - run: npm test
 ```
 
@@ -45,6 +45,8 @@ jobs:
 
 ### Secure Version
 
+**For read-only workflows** (tests, linting, builds that don't push):
+
 ```diff
  name: Build
  on: [push]
@@ -52,14 +54,34 @@ jobs:
    build:
      runs-on: ubuntu-latest
 +    permissions:
-+      contents: write  # Only if pushing needed
++      contents: read
      steps:
        - uses: actions/checkout@v4
-         with:
--          persist-credentials: true  # Dangerous - credentials persisted
-+          persist-credentials: false  # Secure - no credential persistence
++        with:
++          persist-credentials: false  # No token left in .git/config after checkout
+       - uses: some-third-party/code-analysis@v2  # can no longer steal the token
        - run: npm test
-+      - run: git push  # Uses GITHUB_TOKEN automatically
+```
+
+**For workflows that need to push commits back** (e.g. auto-formatting, changelogs):
+
+```yaml
+name: Auto-format
+on: [push]
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to push
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true   # required for git push to work
+      - run: npm run format
+      - run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet || git commit -am "style: auto-format" && git push
 ```
 
 ## Impact

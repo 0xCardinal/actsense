@@ -11,14 +11,20 @@ Workflows that pin actions to version tags (e.g., `@v1`, `@v2.0.0`) instead of c
 - The workflow would automatically pull the malicious version on the next run.
 
 ```yaml
-name: Build with Tag
+name: CI
 on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4  # Mutable tag - can be moved
-      - run: npm test
+      - uses: actions/checkout@v4              # mutable — tag can be moved
+      - uses: actions/setup-node@v4            # mutable — tag can be moved
+        with:
+          node-version: 20
+      - uses: actions/upload-artifact@v4       # mutable — tag can be moved
+        with:
+          name: dist
+          path: dist/
 ```
 
 ## Mitigation Strategies
@@ -43,16 +49,33 @@ jobs:
 
 ### Secure Version
 
+Replace every mutable tag with the full 40-character commit SHA. Append a comment with the original tag so humans can tell what version is pinned:
+
 ```diff
- name: Build with SHA
+ name: CI
  on: [push]
  jobs:
    build:
      runs-on: ubuntu-latest
      steps:
--      - uses: actions/checkout@v4  # Mutable tag - can be moved
-+      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Immutable SHA
-       - run: npm test
+-      - uses: actions/checkout@v4
++      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+-      - uses: actions/setup-node@v4
++      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+         with:
+           node-version: 20
+-      - uses: actions/upload-artifact@v4
++      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+         with:
+           name: dist
+           path: dist/
+```
+
+To look up the SHA for any tag yourself:
+
+```bash
+gh api repos/actions/checkout/git/refs/tags/v4.2.2 --jq '.object.sha'
+# → 11bd71901bbe5b1630ceea73d27597364c9af683
 ```
 
 ## Impact

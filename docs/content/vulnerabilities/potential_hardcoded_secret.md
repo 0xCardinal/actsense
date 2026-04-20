@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Connect to database
         run: |
-          mysql -u admin -p'MyHardcodedPassword123!' -h db.example.com
+          mysql -u admin -p'hunter2' -h db.internal.example.com myapp_db
 ```
 
 ## Mitigation Strategies
@@ -44,6 +44,8 @@ jobs:
 
 ### Secure Version
 
+Pass the secret through an environment variable rather than interpolating `${{ secrets.X }}` directly inside the shell command. Inline interpolation can expose the value in process listings and debug logs.
+
 ```diff
  name: Deploy with Secrets
  on: [push]
@@ -52,9 +54,11 @@ jobs:
      runs-on: ubuntu-latest
      steps:
        - name: Connect to database
++        env:
++          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
          run: |
--          mysql -u admin -p'MyHardcodedPassword123!' -h db.example.com
-+          mysql -u admin -p"${{ secrets.DB_PASSWORD }}" -h db.example.com
+-          mysql -u admin -p'hunter2' -h db.internal.example.com myapp_db
++          mysql -u admin -p"${DB_PASSWORD}" -h db.internal.example.com myapp_db
 ```
 
 ## Impact

@@ -11,14 +11,17 @@ Workflows that use actions from untrusted third-party publishers create supply-c
 - Action runs with workflow permissions and can access secrets.
 
 ```yaml
-name: Build
+name: Build and Notify
 on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: untrusted-org/some-action@v1  # Untrusted publisher
-      - run: npm test
+      - uses: actions/checkout@v4
+      - run: npm ci && npm test
+      - uses: rtCamp/action-slack-notify@v2   # Third-party, unaudited publisher
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 ```
 
 ## Mitigation Strategies
@@ -43,18 +46,50 @@ jobs:
 
 ### Secure Version
 
+Either replace with the official equivalent action (here: the Slack-maintained action) pinned to a full commit SHA, or move the notification logic inline to eliminate the third-party dependency entirely.
+
+**Option A — use the official publisher, pin to a commit SHA:**
+
 ```diff
- name: Build
+ name: Build and Notify
  on: [push]
  jobs:
    build:
      runs-on: ubuntu-latest
 +    permissions:
-+      contents: read  # Minimal permissions
++      contents: read
      steps:
--      - uses: untrusted-org/some-action@v1  # Untrusted publisher
-+      - uses: actions/checkout@8f4b7f84884ec3e152e95e913f196d7a537752ca  # Trusted, pinned
-       - run: npm test
+       - uses: actions/checkout@v4
+       - run: npm ci && npm test
+-      - uses: rtCamp/action-slack-notify@v2   # Third-party, unaudited publisher
++      - uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001  # Official Slack action, pinned to v2.0.0
+         env:
+           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+```
+
+**Option B — remove the dependency by calling the Slack API directly:**
+
+```diff
+ name: Build and Notify
+ on: [push]
+ jobs:
+   build:
+     runs-on: ubuntu-latest
++    permissions:
++      contents: read
+     steps:
+       - uses: actions/checkout@v4
+       - run: npm ci && npm test
+-      - uses: rtCamp/action-slack-notify@v2
+-        env:
+-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
++      - name: Notify Slack
++        env:
++          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
++        run: |
++          curl -fsSL -X POST -H 'Content-type: application/json' \
++            --data '{"text":"Build complete on ${{ github.ref_name }}"}' \
++            "$SLACK_WEBHOOK"
 ```
 
 ## Impact
