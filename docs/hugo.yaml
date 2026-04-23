@@ -25,23 +25,20 @@ menu:
     - name: Vulnerabilities
       pageRef: /vulnerabilities
       weight: 4
-    - name: API Reference
-      pageRef: /api-reference
-      weight: 5
     - name: Contributors
       pageRef: /contributors
-      weight: 6
+      weight: 5
     - name: Search
-      weight: 7
+      weight: 6
       params:
         type: search
     - name: GitHub
-      weight: 8
+      weight: 7
       url: "https://github.com/0xCardinal/actsense"
       params:
         icon: github
     - name: pin
-      weight: 9
+      weight: 8
       url: "https://pin.actsense.dev"
   sidebar:
     - name: More

@@ -170,13 +170,9 @@ GITHUB_TOKEN=ghp_your_token_here docker compose up
 **For Local Installation:**
 Enter the token in the web interface when prompted, or set it as an environment variable.
 
-## API reference and automation
+## API and automation
 
-### API documentation
-
-- **[API Reference](/api-reference/)** on this site — generated tables for routes, parameters, and schemas.
-- **OpenAPI JSON:** with the app running, open `GET /openapi.json` (for example `http://localhost:8000/openapi.json`).
-- **Interactive UIs:** `GET /docs` (Swagger UI) and `GET /redoc` (ReDoc) on the same host and port as the API.
+The full **HTTP API** (routes, request and response models, and schemas) is on **[API Reference](/api-reference/)** — that page is the single source for endpoint details. When the app is running, you can also use `GET /openapi.json`, `GET /docs` (Swagger UI), and `GET /redoc` on the same base URL (for example `http://localhost:8000`).
 
 ### Trigger a scan via the API
 
@@ -216,7 +212,7 @@ curl -sS -X POST http://localhost:8000/api/audit \
 
 **Streaming** (progress log lines as Server-Sent Events): use **`POST /api/audit/stream`** with the same JSON body as `/api/audit`.
 
-**Other endpoints:** `GET /api/analyses`, `GET /api/analyses/{analysis_id}`, `POST /api/audit/yaml` (paste workflow YAML), `POST /api/audit/fix` (audit with fix suggestions). See the [API Reference](/api-reference/) for full detail.
+**Other routes** (e.g. analyses, YAML audit, fix suggestions) are listed in the [API Reference](/api-reference/).
 
 ### Whitelist a GitHub Actions publisher
 
