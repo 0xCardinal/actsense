@@ -62,6 +62,7 @@ function IssuesTable({ graphData, filter, onNodeSelect }) {
           type: node.type,
           issues: node.issues || [],
           nodeType: node.type,
+          originalId: node.id,
         }
       })
     }

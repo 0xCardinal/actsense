@@ -56,6 +56,6 @@ status:
     @just actsense status
     @just docs status
 
-# Generate API reference docs from FastAPI OpenAPI
+# Generate API reference docs from FastAPI OpenAPI (uses backend deps / uv)
 api-docs:
-    @python3 scripts/generate_api_docs.py
+    @cd backend && uv run python ../scripts/generate_api_docs.py

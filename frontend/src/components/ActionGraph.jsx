@@ -317,10 +317,13 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter }) {
   // Handle node click - using custom node component
   const handleNodeClick = useCallback((nodeData) => {
     console.log('Node clicked via handler:', nodeData)
-    // Create a node object from the data
+    // Use graph node id (not the human label) so detail panel and graphData.nodes match
     const nodeObj = {
-      id: nodeData.nodeLabel || nodeData.label || 'unknown',
-      data: nodeData
+      id: nodeData.nodeId || nodeData.originalId || nodeData.label || 'unknown',
+      data: {
+        ...nodeData,
+        originalId: nodeData.nodeId || nodeData.originalId,
+      }
     }
     setSelectedNode(nodeObj)
     if (onNodeSelect) {

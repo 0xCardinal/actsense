@@ -46,3 +46,7 @@ public/
 
 # Documentation
 .cursor/
+
+# Examples
+examples/
+scripts/push_vuln_labs.sh

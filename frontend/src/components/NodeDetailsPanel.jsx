@@ -232,9 +232,28 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
         return 'Workflow'
       case 'action':
         return 'Action'
+      case 'container_image':
+        return 'Container image'
+      case 'docker_image':
+        return 'Docker image'
       default:
         return 'Node'
     }
+  }
+
+  // Job containers link to a parent workflow node (edge: workflow → container image)
+  const getParentWorkflowNode = () => {
+    const graphNodeId = node.data?.originalId || node.id
+    if (!graphData?.edges || !graphData?.nodes || !graphNodeId) {
+      return null
+    }
+    const incoming = graphData.edges.find((e) => e.target === graphNodeId)
+    if (!incoming) return null
+    return (
+      graphData.nodes.find(
+        (n) => n.id === incoming.source && n.type === 'workflow',
+      ) || null
+    )
   }
 
   
@@ -304,6 +323,22 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
           }
         }
       }
+    } else if (nodeType === 'container_image' || nodeType === 'docker_image') {
+      const wf = getParentWorkflowNode()
+      if (wf) {
+        const wpath = wf.metadata?.path
+        if (wpath && wf.id.includes(':')) {
+          const repoId = wf.id.split(':')[0]
+          const wparts = repoId.split('/')
+          if (wparts.length >= 2) {
+            const wowner = wparts[0]
+            const wrepo = wparts[1]
+            const defaultBranch = wf.metadata?.default_branch || getDefaultBranchFromGraph(graphData, wowner, wrepo)
+            return buildWorkflowBlobBaseUrl({ owner: wowner, repo: wrepo, path: wpath, defaultBranch })
+          }
+        }
+      }
+      return null
     } else if (nodeType === 'reusable_workflow') {
       // Reusable workflows live at a specific path (metadata.subdir) inside a
       // remote repo at a pinned ref. Link to that actual file.
@@ -381,6 +416,31 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
     const nodeType = node.data?.nodeType || node.data?.type || originalNode?.type
     const metadata = originalNode?.metadata || node.data?.metadata || {}
     const nodeId = originalNodeId || node.id
+
+    // Job container: issues (e.g. unpinned image) point at lines in the workflow file
+    if (nodeType === 'container_image' || nodeType === 'docker_image') {
+      const wf = getParentWorkflowNode()
+      if (wf) {
+        const wpath = wf.metadata?.path
+        if (wpath && wf.id.includes(':')) {
+          const repoId = wf.id.split(':')[0]
+          const wparts = repoId.split('/')
+          if (wparts.length >= 2) {
+            const wowner = wparts[0]
+            const wrepo = wparts[1]
+            const defaultBranch = wf.metadata?.default_branch || getDefaultBranchFromGraph(graphData, wowner, wrepo)
+            const baseUrl = buildWorkflowBlobBaseUrl({ owner: wowner, repo: wrepo, path: wpath, defaultBranch })
+            if (issue.line_number) {
+              const lineNum = parseInt(issue.line_number, 10)
+              if (!isNaN(lineNum) && lineNum > 0) {
+                return `${baseUrl}#L${lineNum}`
+              }
+            }
+            return baseUrl
+          }
+        }
+      }
+    }
     
     // For workflow issues, link to the workflow file
     if (nodeType === 'workflow') {

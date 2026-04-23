@@ -17,7 +17,7 @@ from github_client import GitHubClient
 from workflow_parser import WorkflowParser
 from security_auditor import SecurityAuditor
 from graph_builder import GraphBuilder
-from repo_cloner import RepoCloner
+from repo_cloner import RepoCloner, CloneError
 from analysis_storage import AnalysisStorage
 
 app = FastAPI(title="actsense - GitHub Actions Security Auditor")
@@ -233,6 +233,30 @@ async def resolve_action_dependencies(
             pass
 
 
+def _add_workflow_container_image_nodes(
+    graph: GraphBuilder,
+    workflow: Dict[str, Any],
+    workflow_node_id: str,
+    workflow_issues: List[Dict[str, Any]],
+) -> None:
+    """Add container_image nodes and copy unpinned-container issues onto them for UI clarity."""
+    for img_info in parser.extract_container_images(workflow):
+        img_node_id = f"container://{img_info['image']}"
+        graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
+        graph.add_edge(workflow_node_id, img_node_id)
+        img = img_info.get("image")
+        if not img:
+            continue
+        related = [
+            i
+            for i in workflow_issues
+            if i.get("type") == "unpinned_container_image"
+            and (i.get("evidence") or {}).get("image") == img
+        ]
+        if related:
+            graph.add_issues_to_node(img_node_id, related)
+
+
 async def audit_repository(
     client: GitHubClient,
     owner: str,
@@ -325,10 +349,9 @@ async def audit_repository(
                             client, action_ref, graph, visited, log_fn=log_fn
                         )
                     
-                    for img_info in parser.extract_container_images(workflow):
-                        img_node_id = f"container://{img_info['image']}"
-                        graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
-                        graph.add_edge(workflow_node_id, img_node_id)
+                    _add_workflow_container_image_nodes(
+                        graph, workflow, workflow_node_id, workflow_issues
+                    )
                 except Exception as e:
                     _log(f"Error processing {workflow_file['name']}: {e}")
                     graph.add_issues_to_node(repo_node_id, [{
@@ -382,10 +405,9 @@ async def audit_repository(
                             client, action_ref, graph, visited, log_fn=log_fn
                         )
                     
-                    for img_info in parser.extract_container_images(workflow):
-                        img_node_id = f"container://{img_info['image']}"
-                        graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
-                        graph.add_edge(workflow_node_id, img_node_id)
+                    _add_workflow_container_image_nodes(
+                        graph, workflow, workflow_node_id, workflow_issues
+                    )
                 except Exception as e:
                     _log(f"Error processing {workflow_file['name']}: {e}")
                     graph.add_issues_to_node(repo_node_id, [{
@@ -470,6 +492,8 @@ async def audit(request: AuditRequest):
     
     except HTTPException:
         raise
+    except CloneError as e:
+        raise HTTPException(status_code=400, detail=e.detail)
     except Exception:
         logger.exception("Unexpected error during repository audit")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -533,6 +557,8 @@ async def audit_stream(request: AuditRequest):
             log_queue.put_nowait(("__RESULT__", result))
         except HTTPException as exc:
             log_queue.put_nowait(("__ERROR__", exc.detail))
+        except CloneError as e:
+            log_queue.put_nowait(("__ERROR__", e.detail))
         except Exception:
             logger.exception("Unexpected error during streaming audit")
             log_queue.put_nowait(("__ERROR__", "Internal server error"))
@@ -1120,10 +1146,7 @@ async def _audit_yaml_body(request: AuditYAMLRequest) -> Dict[str, Any]:
             client, action_ref, graph, visited, depth=0, max_depth=5
         )
 
-    for img_info in parser.extract_container_images(workflow):
-        img_node_id = f"container://{img_info['image']}"
-        graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
-        graph.add_edge(workflow_node_id, img_node_id)
+    _add_workflow_container_image_nodes(graph, workflow, workflow_node_id, workflow_issues)
 
     graph_data = graph.get_graph_data()
     statistics = graph.get_statistics()

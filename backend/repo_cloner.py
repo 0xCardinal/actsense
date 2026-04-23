@@ -11,6 +11,40 @@ import re
 logger = logging.getLogger(__name__)
 
 
+class CloneError(Exception):
+    """User-facing git clone failure (map to HTTP 400, not 500)."""
+
+    def __init__(self, detail: str):
+        self.detail = detail
+        super().__init__(detail)
+
+
+def _clone_failure_user_message(stderr: str, had_token: bool) -> str:
+    err_l = (stderr or "").lower()
+    if (
+        "could not read username" in err_l
+        or "terminal prompts disabled" in err_l
+        or "authentication failed" in err_l
+    ):
+        if not had_token:
+            return (
+                "Git could not access this repository (it may be private or require authentication). "
+                "Provide a token in the request, set the GITHUB_TOKEN environment variable, "
+                "or turn off 'Use clone' and use the API for public repositories."
+            )
+        return (
+            "Git rejected the credentials. Verify the token has access to this repository and "
+            "appropriate scopes (e.g. repo for private repos)."
+        )
+    if "not found" in err_l or "does not exist" in err_l:
+        return "Repository not found. Check the owner and repository name, or your access token."
+    # Keep stderr short: avoid leaking host-specific paths; cap length
+    line = (stderr or "").strip().splitlines()[-1] if (stderr or "").strip() else "unknown error"
+    if len(line) > 400:
+        line = line[:400] + "…"
+    return f"Git clone failed: {line}"
+
+
 class RepoCloner:
     """Handle cloning and cleanup of repositories."""
 
@@ -44,10 +78,21 @@ class RepoCloner:
         repo_url = f"https://github.com/{safe_owner}/{safe_repo}.git"
         public_repo_url = repo_url  # alias used in sanitize step below
 
-        clone_env: Optional[dict] = None
-        if token:
-            safe_token = RepoCloner._validated_github_token(token)
-            clone_env = os.environ.copy()
+        # Explicit API token first, then GITHUB_TOKEN (e.g. container env) for private repos.
+        raw = (token or "").strip() or (os.environ.get("GITHUB_TOKEN") or "").strip()
+        safe_token: Optional[str] = None
+        if raw:
+            try:
+                safe_token = RepoCloner._validated_github_token(raw)
+            except ValueError as e:
+                raise CloneError(
+                    "Invalid github_token or GITHUB_TOKEN format. "
+                    "Use a personal access token (ghp_... or github_pat_...)."
+                ) from e
+
+        clone_env = os.environ.copy()
+        clone_env["GIT_TERMINAL_PROMPT"] = "0"
+        if safe_token:
             # Pass http.extraHeader via env so the token never appears in subprocess argv.
             # See git(1) GIT_CONFIG_COUNT / GIT_CONFIG_KEY_* / GIT_CONFIG_VALUE_*.
             clone_env["GIT_CONFIG_COUNT"] = "1"
@@ -89,8 +134,12 @@ class RepoCloner:
 
             if result.returncode != 0:
                 # Sanitize stderr before surfacing it — the URL may contain the token.
-                sanitized_stderr = result.stderr.replace(repo_url, public_repo_url) if token else result.stderr
-                raise Exception(f"Git clone failed: {sanitized_stderr}")
+                sanitized_stderr = (
+                    result.stderr.replace(repo_url, public_repo_url) if safe_token else result.stderr
+                )
+                raise CloneError(
+                    _clone_failure_user_message(sanitized_stderr, safe_token is not None)
+                ) from None
 
             # Configure sparse-checkout before any checkout happens.
             subprocess.run(
@@ -100,6 +149,7 @@ class RepoCloner:
                 timeout=15,
                 check=False,
                 shell=False,
+                env=clone_env,
             )
             subprocess.run(
                 ["git", "-C", clone_dir_str, "sparse-checkout", "set", ".github/workflows"],
@@ -108,6 +158,7 @@ class RepoCloner:
                 timeout=15,
                 check=False,
                 shell=False,
+                env=clone_env,
             )
 
             # Single checkout: only fetches blobs for .github/workflows.
@@ -117,6 +168,7 @@ class RepoCloner:
                 text=True,
                 timeout=60,
                 shell=False,
+                env=clone_env,
             )
 
             if result.returncode != 0:
@@ -131,6 +183,7 @@ class RepoCloner:
                     text=True,
                     timeout=60,
                     shell=False,
+                    env=clone_env,
                 )
 
                 logger.warning(
@@ -141,8 +194,12 @@ class RepoCloner:
 
             return clone_dir_str, clone_dir_str
 
-        except subprocess.TimeoutExpired:
-            raise Exception("Repository clone timed out")
+        except subprocess.TimeoutExpired as e:
+            raise CloneError("Repository clone timed out. Try again, or use the API method instead of clone.") from e
+        except CloneError:
+            if clone_dir.exists():
+                shutil.rmtree(clone_dir, ignore_errors=True)
+            raise
         except Exception:
             # Cleanup on error
             if clone_dir.exists():

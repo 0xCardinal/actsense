@@ -1,10 +1,11 @@
 """Tests for repo_cloner.py"""
+import os
 import pytest
 import tempfile
 import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from repo_cloner import RepoCloner
+from repo_cloner import RepoCloner, CloneError
 
 
 class TestRepoCloner:
@@ -68,6 +69,20 @@ class TestRepoCloner:
             assert "https://github.com/owner/repo.git" in first_call_args
     
     @patch('repo_cloner.subprocess.run')
+    def test_clone_repository_uses_env_github_token(self, mock_run):
+        """No explicit token: use GITHUB_TOKEN from environment (e.g. Docker)."""
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        valid_token = "ghp_" + "A" * 36
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cloner = RepoCloner(base_dir=tmpdir)
+            with patch.dict(os.environ, {"GITHUB_TOKEN": valid_token}):
+                cloner.clone_repository("owner", "repo", token=None)
+
+        first_call = mock_run.call_args_list[0]
+        assert valid_token in first_call[1]["env"]["GIT_CONFIG_VALUE_0"]
+
+    @patch('repo_cloner.subprocess.run')
     def test_clone_repository_with_branch(self, mock_run):
         """Test cloning a repository with specific branch."""
         mock_run.return_value = MagicMock(returncode=0, stderr="")
@@ -90,7 +105,7 @@ class TestRepoCloner:
         with tempfile.TemporaryDirectory() as tmpdir:
             cloner = RepoCloner(base_dir=tmpdir)
             
-            with pytest.raises(Exception, match="Git clone failed"):
+            with pytest.raises(CloneError, match="Git clone failed:"):
                 cloner.clone_repository("owner", "repo")
     
     @patch('repo_cloner.subprocess.run')
@@ -102,7 +117,7 @@ class TestRepoCloner:
         with tempfile.TemporaryDirectory() as tmpdir:
             cloner = RepoCloner(base_dir=tmpdir)
             
-            with pytest.raises(Exception, match="timed out"):
+            with pytest.raises(CloneError, match="timed out"):
                 cloner.clone_repository("owner", "repo")
     
     @patch('repo_cloner.subprocess.run')

@@ -33,7 +33,10 @@ trusted_publishers:
   - "docker/"              # Docker
   - "hashicorp/"           # HashiCorp (Terraform, Vault, etc.)
   - "step-security/"       # Step Security
-  
+
+  # ActSense vulnerable-by-design lab (composite at infosec-soup/actsense-vuln-lab-composite)
+  - "infosec-soup/"
+
   # Add your trusted publishers below:
   # - "your-org/"          # Your organization
   # - "another-trusted-publisher/"  # Another trusted publisher
