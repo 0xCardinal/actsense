@@ -170,10 +170,76 @@ GITHUB_TOKEN=ghp_your_token_here docker compose up
 **For Local Installation:**
 Enter the token in the web interface when prompted, or set it as an environment variable.
 
+## API reference and automation
+
+### API documentation
+
+- **[API Reference](/api-reference/)** on this site — generated tables for routes, parameters, and schemas.
+- **OpenAPI JSON:** with the app running, open `GET /openapi.json` (for example `http://localhost:8000/openapi.json`).
+- **Interactive UIs:** `GET /docs` (Swagger UI) and `GET /redoc` (ReDoc) on the same host and port as the API.
+
+### Trigger a scan via the API
+
+The primary endpoint is **`POST /api/audit`**. Send JSON with either a **`repository`** or an **`action`** (one of the two audit modes).
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `repository` | string (optional) | `owner/repo` or a `https://github.com/...` URL (github.com only). |
+| `action` | string (optional) | A single action reference, e.g. `actions/checkout@v4`. |
+| `github_token` | string (optional) | GitHub PAT for private repositories or higher rate limits. |
+| `use_clone` | boolean (optional) | If `true`, workflows are loaded by **cloning** the repo instead of the GitHub API. For private repos, also set **`GITHUB_TOKEN`** in the server environment (e.g. Docker) or pass `github_token` in the body. |
+
+Either `repository` or `action` must be present (not both required for every call, but one of them is needed to start an audit).
+
+**Examples** (local default: `http://localhost:8000`):
+
+```bash
+# Scan a public repository (GitHub API mode)
+curl -sS -X POST http://localhost:8000/api/audit \
+  -H "Content-Type: application/json" \
+  -d '{"repository":"octocat/Hello-World"}'
+```
+
+```bash
+# Scan with a token and clone mode
+curl -sS -X POST http://localhost:8000/api/audit \
+  -H "Content-Type: application/json" \
+  -d '{"repository":"owner/private-repo","github_token":"ghp_XXX","use_clone":true}'
+```
+
+```bash
+# Audit a single action and its dependencies
+curl -sS -X POST http://localhost:8000/api/audit \
+  -H "Content-Type: application/json" \
+  -d '{"action":"actions/checkout@v4"}'
+```
+
+**Streaming** (progress log lines as Server-Sent Events): use **`POST /api/audit/stream`** with the same JSON body as `/api/audit`.
+
+**Other endpoints:** `GET /api/analyses`, `GET /api/analyses/{analysis_id}`, `POST /api/audit/yaml` (paste workflow YAML), `POST /api/audit/fix` (audit with fix suggestions). See the [API Reference](/api-reference/) for full detail.
+
+### Whitelist a GitHub Actions publisher
+
+Some rules (for example **untrusted third-party actions** and **secrets passed to untrusted actions**) compare the **owner** part of `uses: owner/repo@ref` against a configurable list.
+
+1. Edit **`backend/config.yaml`** and add an entry under **`trusted_publishers`**, using the **organization or user name** plus a slash, for example:
+
+   ```yaml
+   trusted_publishers:
+     # ...existing entries...
+     - "my-org/"
+   ```
+
+2. **Restart** the actsense API (or rebuild/restart the Docker container) so the list is reloaded.
+
+3. Optionally set environment variable **`TRUSTED_PUBLISHERS_CONFIG`** to the absolute path of a different YAML file if you do not want to edit the copy inside the repo.
+
+Whitelisting applies to the **publisher** (the `owner` in `owner/repo@ref`), not to a single tag or commit. Other checks (unpinned actions, hash pinning, etc.) are separate.
+
 ## Next Steps
 
 - Explore [vulnerability documentation](/vulnerabilities/) to understand security issues
-- Check out the [usage guide](/usage/) to learn about all features
+- Check out the [usage guide](/usage/) for the full platform (graphs, search, editor, and more)
 - Review [installation guide](/installation/) for advanced setup
 
 {{< callout type="info" >}}
