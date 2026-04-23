@@ -246,17 +246,33 @@ async def audit_repository(
     _log = log_fn or (lambda _: None)
     
     repo_node_id = f"{owner}/{repo}"
-    graph.add_node(repo_node_id, repo_node_id, "repository", {"owner": owner, "repo": repo})
-    
-    _log(f"Checking repository visibility for {owner}/{repo}")
+    # default_branch is used for GitHub web URLs (e.g. /blob/<branch>/<path>#L<line>).
+    # `HEAD` is *not* a valid branch name for /blob/ paths in the GitHub UI, so we must
+    # use the repository's real default branch when available.
+    default_branch = "main"
     is_public_repo = False
+    _log(f"Checking repository metadata for {owner}/{repo}")
     try:
         repo_info = await client.get_repository_info(owner, repo)
         if repo_info:
             is_public_repo = not repo_info.get("private", True)
-            _log(f"Repository is {'public' if is_public_repo else 'private'}")
+            if repo_info.get("default_branch"):
+                default_branch = str(repo_info["default_branch"])
+            _log(
+                f"Repository is {'public' if is_public_repo else 'private'} "
+                f"(default branch: {default_branch})"
+            )
     except Exception:
+        # If the repo is missing/private, or GitHub is unavailable, we still continue with a
+        # best-effort default branch for URL construction.
         pass
+
+    graph.add_node(
+        repo_node_id,
+        repo_node_id,
+        "repository",
+        {"owner": owner, "repo": repo, "default_branch": default_branch},
+    )
     
     current_repo = f"{owner}/{repo}"
     

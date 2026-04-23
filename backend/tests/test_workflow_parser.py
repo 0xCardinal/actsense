@@ -129,6 +129,22 @@ jobs:
         actions = WorkflowParser.extract_actions(workflow)
         assert "docker://alpine:latest" in actions
         assert "actions/checkout@v4" in actions
+
+    def test_extract_actions_ignores_plain_image_without_docker_prefix(self):
+        """Plain OCI image refs in `uses` are not treated as action refs (use `docker://`)."""
+        workflow = {
+            "jobs": {
+                "test": {
+                    "steps": [
+                        {"uses": "bitnami/git:latest"},
+                        {"uses": "ghcr.io/org/app:latest"},
+                    ]
+                }
+            }
+        }
+        actions = WorkflowParser.extract_actions(workflow)
+        assert "bitnami/git:latest" not in actions
+        assert "ghcr.io/org/app:latest" not in actions
     
     def test_extract_actions_skips_http_urls(self):
         """Test that HTTP URLs are skipped."""

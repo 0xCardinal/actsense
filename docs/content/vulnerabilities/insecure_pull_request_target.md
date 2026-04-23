@@ -2,7 +2,7 @@
 
 ## Description
 
-`pull_request_target` runs with the base repository’s token (Usually write). If the workflow checks out the PR’s head commit, code from an untrusted fork executes with maintainer permissions—allowing attackers to steal secrets or push malicious commits. GitHub Security Lab explicitly warns against checking out PR code in `pull_request_target` workflows. [^gh_untrusted_input]
+`pull_request_target` runs with the base repository’s token (Usually write). If the workflow checks out the PR’s head commit, code from an untrusted fork executes with maintainer permissions—allowing attackers to steal secrets or push malicious commits. GitHub Security Lab explicitly warns against checking out PR code in `pull_request_target` workflows. [^gh_untrusted_input] A comparison of this trigger with `pull_request`, `workflow_run`, and other event families is in [Dangerous Event](/vulnerabilities/dangerous_event/).
 
 ## Vulnerable Instance
 

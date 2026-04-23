@@ -55,3 +55,7 @@ down:
 status:
     @just actsense status
     @just docs status
+
+# Generate API reference docs from FastAPI OpenAPI
+api-docs:
+    @python3 scripts/generate_api_docs.py

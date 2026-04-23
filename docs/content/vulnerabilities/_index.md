@@ -44,6 +44,7 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Checkout Full History](/vulnerabilities/checkout_full_history/)
 - [Script Injection](/vulnerabilities/script_injection/)
 - [Shell Injection](/vulnerabilities/shell_injection/)
+- [Risky Context Usage](/vulnerabilities/risky_context_usage/)
 - [Code Injection via Input](/vulnerabilities/code_injection_via_input/)
 - [Unvalidated Workflow Input](/vulnerabilities/unvalidated_workflow_input/)
 - [Unsafe Shell](/vulnerabilities/unsafe_shell/)

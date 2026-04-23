@@ -4,6 +4,48 @@ import IssueDetailsModal from './IssueDetailsModal'
 import ShareModal from './ShareModal'
 import { getNodeTypeIcon } from '../utils/nodeIcons'
 
+function encodeGitHubBlobPath(filePath) {
+  if (!filePath) return ''
+  // GitHub file paths in URLs are slash-separated; encode each segment but keep '/'.
+  return filePath
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+}
+
+function getDefaultBranchFromGraph(graphData, owner, repo) {
+  if (!graphData?.nodes || !owner || !repo) return 'main'
+  const wantId = `${owner}/${repo}`
+
+  const direct = graphData.nodes.find(
+    (n) => n.type === 'repository' && n.id === wantId
+  )
+  if (direct?.metadata?.default_branch) {
+    return String(direct.metadata.default_branch)
+  }
+
+  return 'main'
+}
+
+function buildWorkflowBlobBaseUrl({ owner, repo, path, defaultBranch }) {
+  const ref = defaultBranch || 'main'
+  const encodedPath = encodeGitHubBlobPath(path)
+  return `https://github.com/${owner}/${repo}/blob/${ref}/${encodedPath}`
+}
+
+// For action nodes we can't rely on a specific filename (`action.yml` vs
+// `action.yaml`) or on issue line numbers (they come from the workflow file that
+// *uses* the action, not from action.yml itself). Linking to the directory at
+// the pinned ref is always resolvable, avoiding 404s.
+function buildActionDirectoryUrl({ owner, repo, ref, subdir }) {
+  const resolvedRef = ref || 'main'
+  const base = `https://github.com/${owner}/${repo}/tree/${resolvedRef}`
+  if (subdir) {
+    return `${base}/${encodeGitHubBlobPath(subdir)}`
+  }
+  return base
+}
+
 function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, onScanRepository, onViewAnalysis, repositoryAuditStatus, onStartAnalysis, setRepositoryInput }) {
   const [selectedIssue, setSelectedIssue] = useState(null)
   const [showShareModal, setShowShareModal] = useState(false)
@@ -230,7 +272,8 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
           const owner = parts[0]
           const repo = parts[1]
           if (owner && repo && owner !== 'undefined' && repo !== 'undefined') {
-            return `https://github.com/${owner}/${repo}/blob/HEAD/${path}`
+            const defaultBranch = metadata.default_branch || getDefaultBranchFromGraph(graphData, owner, repo)
+            return buildWorkflowBlobBaseUrl({ owner, repo, path, defaultBranch })
           }
         }
       }
@@ -239,31 +282,49 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
       const repo = metadata.repo
       const ref = metadata.ref || 'main'
       const subdir = metadata.subdir
-      
+
       if (owner && repo && owner !== 'undefined' && repo !== 'undefined') {
-        let filePath = 'action.yml'
-        if (subdir) {
-          filePath = `${subdir}/action.yml`
+        return buildActionDirectoryUrl({ owner, repo, ref, subdir })
+      }
+      // Fallback: parse from node ID (format: owner/repo@ref or owner/repo/path@ref)
+      if (nodeId.includes('@')) {
+        const [repoPart, refPart] = nodeId.split('@')
+        const parts = repoPart.split('/')
+        if (parts.length >= 2) {
+          const ownerFromId = parts[0]
+          const repoFromId = parts[1]
+          if (ownerFromId && repoFromId && ownerFromId !== 'undefined' && repoFromId !== 'undefined') {
+            const subdirFromId = parts.length > 2 ? parts.slice(2).join('/') : null
+            return buildActionDirectoryUrl({
+              owner: ownerFromId,
+              repo: repoFromId,
+              ref: refPart || 'main',
+              subdir: subdirFromId,
+            })
+          }
         }
-        return `https://github.com/${owner}/${repo}/blob/${ref}/${filePath}`
-      } else {
-        // Fallback: try to parse from node ID (format: owner/repo@ref or owner/repo/path@ref)
-        if (nodeId.includes('@')) {
-          const [repoPart, refPart] = nodeId.split('@')
-          const parts = repoPart.split('/')
-          if (parts.length >= 2) {
-            const owner = parts[0]
-            const repo = parts[1]
-            if (owner && repo && owner !== 'undefined' && repo !== 'undefined') {
-              const subdir = parts.length > 2 ? parts.slice(2).join('/') : null
-              const ref = refPart || 'main'
-              
-              let filePath = 'action.yml'
-              if (subdir) {
-                filePath = `${subdir}/action.yml`
-              }
-              return `https://github.com/${owner}/${repo}/blob/${ref}/${filePath}`
-            }
+      }
+    } else if (nodeType === 'reusable_workflow') {
+      // Reusable workflows live at a specific path (metadata.subdir) inside a
+      // remote repo at a pinned ref. Link to that actual file.
+      const owner = metadata.owner
+      const repo = metadata.repo
+      const ref = metadata.ref || 'main'
+      const path = metadata.subdir
+
+      if (owner && repo && path) {
+        return `https://github.com/${owner}/${repo}/blob/${ref}/${encodeGitHubBlobPath(path)}`
+      }
+      // Fallback: parse from node ID (format: owner/repo/path@ref)
+      if (nodeId.includes('@')) {
+        const [repoPart, refPart] = nodeId.split('@')
+        const parts = repoPart.split('/')
+        if (parts.length >= 3) {
+          const ownerFromId = parts[0]
+          const repoFromId = parts[1]
+          const pathFromId = parts.slice(2).join('/')
+          if (ownerFromId && repoFromId) {
+            return `https://github.com/${ownerFromId}/${repoFromId}/blob/${refPart || 'main'}/${encodeGitHubBlobPath(pathFromId)}`
           }
         }
       }
@@ -332,25 +393,27 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
           const owner = parts[0]
           const repo = parts[1]
           if (owner && repo && owner !== 'undefined' && repo !== 'undefined') {
+            const defaultBranch = metadata.default_branch || getDefaultBranchFromGraph(graphData, owner, repo)
+            const baseUrl = buildWorkflowBlobBaseUrl({ owner, repo, path, defaultBranch: defaultBranch })
             // Use line_number if available (most accurate) - GitHub will highlight this line
             if (issue.line_number) {
               const lineNum = parseInt(issue.line_number, 10)
               if (!isNaN(lineNum) && lineNum > 0) {
-                return `https://github.com/${owner}/${repo}/blob/HEAD/${path}#L${lineNum}`
+                return `${baseUrl}#L${lineNum}`
               }
             }
             // Fallback to path if it's a number
             if (issue.path && !isNaN(parseInt(issue.path, 10))) {
               const lineNum = parseInt(issue.path, 10)
               if (lineNum > 0) {
-                return `https://github.com/${owner}/${repo}/blob/HEAD/${path}#L${lineNum}`
+                return `${baseUrl}#L${lineNum}`
               }
             }
             // Fallback to job/step context
             if (issue.job && issue.step) {
-              return `https://github.com/${owner}/${repo}/blob/HEAD/${path}`
+              return baseUrl
             }
-            return `https://github.com/${owner}/${repo}/blob/HEAD/${path}`
+            return baseUrl
           }
         }
       }
@@ -359,41 +422,48 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
       const repo = metadata.repo
       const ref = metadata.ref || 'main'
       const subdir = metadata.subdir
-      
+
+      // For action nodes we deliberately avoid `blob/<ref>/action.yml` because:
+      //   * many actions publish `action.yaml` (not `.yml`), producing 404s; and
+      //   * `issue.line_number` on an action node always refers to the workflow
+      //     file that *uses* the action, never to `action.yml` itself, so a
+      //     `#L<n>` anchor would point at the wrong line.
+      // Linking to the directory at the pinned ref always resolves.
       if (owner && repo) {
-        // Try action.yml first, then action.yaml
-        let filePath = 'action.yml'
-        if (subdir) {
-          filePath = `${subdir}/action.yml`
+        return buildActionDirectoryUrl({ owner, repo, ref, subdir })
+      }
+      if (nodeId.includes('@')) {
+        const [repoPart, refPart] = nodeId.split('@')
+        const parts = repoPart.split('/')
+        if (parts.length >= 2) {
+          const ownerFromId = parts[0]
+          const repoFromId = parts[1]
+          const subdirFromId = parts.length > 2 ? parts.slice(2).join('/') : null
+          return buildActionDirectoryUrl({
+            owner: ownerFromId,
+            repo: repoFromId,
+            ref: refPart || 'main',
+            subdir: subdirFromId,
+          })
         }
-        // Link to action.yml with line number if available
+      }
+    } else if (nodeType === 'reusable_workflow') {
+      // Reusable workflows are real workflow files in a remote repo. Issue
+      // line numbers come from parsing that file, so `#L<n>` is meaningful.
+      const owner = metadata.owner
+      const repo = metadata.repo
+      const ref = metadata.ref || 'main'
+      const path = metadata.subdir
+
+      if (owner && repo && path) {
+        const baseUrl = `https://github.com/${owner}/${repo}/blob/${ref}/${encodeGitHubBlobPath(path)}`
         if (issue.line_number) {
           const lineNum = parseInt(issue.line_number, 10)
           if (!isNaN(lineNum) && lineNum > 0) {
-            return `https://github.com/${owner}/${repo}/blob/${ref}/${filePath}#L${lineNum}`
+            return `${baseUrl}#L${lineNum}`
           }
         }
-        // Link to action.yml - GitHub will show the file
-        return `https://github.com/${owner}/${repo}/blob/${ref}/${filePath}`
-      } else {
-        // Fallback: try to parse from node ID
-        const nodeId = node.id
-        if (nodeId.includes('@')) {
-          const [repoPart, refPart] = nodeId.split('@')
-          const parts = repoPart.split('/')
-          if (parts.length >= 2) {
-            const owner = parts[0]
-            const repo = parts[1]
-            const subdir = parts.length > 2 ? parts.slice(2).join('/') : null
-            const ref = refPart || 'main'
-            
-            let filePath = 'action.yml'
-            if (subdir) {
-              filePath = `${subdir}/action.yml`
-            }
-            return `https://github.com/${owner}/${repo}/blob/${ref}/${filePath}`
-          }
-        }
+        return baseUrl
       }
     } else if (nodeType === 'repository') {
       // For repository nodes, link to the repo

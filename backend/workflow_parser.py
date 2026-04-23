@@ -1,7 +1,6 @@
 """Parse GitHub Actions workflows and action.yml files."""
 import yaml
 from typing import List, Dict, Any, Optional, Tuple
-import re
 import logging
 
 logger = logging.getLogger(__name__)
