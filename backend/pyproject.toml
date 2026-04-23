@@ -1,6 +1,6 @@
 [project]
 name = "actsense-backend"
-version = "0.1.0"
+version = "1.0.0"
 description = "Backend for actsense - GitHub Actions Security Auditor"
 requires-python = ">=3.12"
 dependencies = [

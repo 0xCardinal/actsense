@@ -20,7 +20,10 @@ from graph_builder import GraphBuilder
 from repo_cloner import RepoCloner, CloneError
 from analysis_storage import AnalysisStorage
 
-app = FastAPI(title="actsense - GitHub Actions Security Auditor")
+app = FastAPI(
+    title="actsense - GitHub Actions Security Auditor",
+    version="1.0.0",
+)
 
 # CORS middleware — origins configurable via CORS_ORIGINS env var (comma-separated).
 # Defaults to localhost dev origins when the variable is not set.
