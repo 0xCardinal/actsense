@@ -8,7 +8,7 @@ dependencies = [
     "uvicorn>=0.32.0",
     "httpx>=0.27.0",
     "pyyaml>=6.0.1",
-    "python-multipart>=0.0.22",
+    "python-multipart>=0.0.31",
     "pydantic>=2.10.0",
 ]
 
@@ -27,4 +27,3 @@ dev = [
     "flake8>=6.0.0",
     "pygments>=2.20.0",
 ]
-
