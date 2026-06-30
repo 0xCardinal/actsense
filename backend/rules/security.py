@@ -244,18 +244,13 @@ def check_runner_label_confusion(workflow: Dict[str, Any]) -> List[Dict[str, Any
 
     jobs = workflow.get("jobs", {})
 
-    # Common label confusion patterns
-    confusing_labels = {
-        "ubuntu-latest": "May be confused with GitHub-hosted runners",
-        "windows-latest": "May be confused with GitHub-hosted runners",
-        "macos-latest": "May be confused with GitHub-hosted runners",
-        "linux": "Generic label that could be confused",
-        "windows": "Generic label that could be confused",
-        "macos": "Generic label that could be confused",
-        "self-hosted-ubuntu": "Could be confused with ubuntu-latest",
-        "self-hosted-windows": "Could be confused with windows-latest",
-        "self-hosted-macos": "Could be confused with macos-latest",
-    }
+    # GitHub-hosted runner labels. The real confusion vector is a job that lists
+    # `self-hosted` AND one of these hosted-style labels in the SAME runs-on set:
+    # GitHub may route the job to a hosted runner, or an attacker who registers a
+    # self-hosted runner advertising this label could intercept it. Generic OS
+    # labels like `linux`/`windows`/`macos` are legitimate, expected self-hosted
+    # labels and are intentionally NOT flagged.
+    hosted_labels = {"ubuntu-latest", "windows-latest", "macos-latest"}
 
     for job_name, job in jobs.items():
         runs_on_value = job.get("runs-on", "")
@@ -263,40 +258,36 @@ def check_runner_label_confusion(workflow: Dict[str, Any]) -> List[Dict[str, Any
             continue
 
         # Parse runs-on (can be string or list)
-        runners = []
         if isinstance(runs_on_value, str):
             runners = [runs_on_value]
         elif isinstance(runs_on_value, list):
             runners = [str(r) for r in runs_on_value]
-
-        # Check if any runner is self-hosted
-        has_self_hosted = any("self-hosted" in str(r).lower() for r in runners)
-        if not has_self_hosted:
+        else:
             continue
 
-        # Check for confusing label combinations
-        for runner in runners:
-            runner_lower = runner.lower()
-            if "self-hosted" not in runner_lower:
-                continue
+        runner_set = {r.lower() for r in runners}
 
-            for confusing_label, description in confusing_labels.items():
-                if confusing_label in runner_lower or (len(runners) > 1 and any(confusing_label in str(r).lower() for r in runners)):
-                    issues.append({
-                        "type": "runner_label_confusion",
-                        "severity": "high",
-                        "message": f"Job '{job_name}' uses potentially confusing runner label. {description}",
-                        "job": job_name,
-                        "runner": runner,
-                        "evidence": {
-                            "job": job_name,
-                            "runner": runner,
-                            "confusing_label": confusing_label,
-                            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/runner_label_confusion"
-                        },
-                        "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/runner_label_confusion"
-                    })
-                    break  # Only report once per job
+        # Only relevant when the job targets a self-hosted runner.
+        if not any("self-hosted" in r for r in runner_set):
+            continue
+
+        # Flag only when a hosted-style label is mixed in alongside self-hosted.
+        collisions = sorted(runner_set & hosted_labels)
+        if collisions:
+            issues.append({
+                "type": "runner_label_confusion",
+                "severity": "high",
+                "message": f"Job '{job_name}' combines a self-hosted runner with GitHub-hosted runner label(s) {', '.join(collisions)} in the same runs-on. This is ambiguous and can be exploited via runner label confusion.",
+                "job": job_name,
+                "runner": runs_on_value,
+                "evidence": {
+                    "job": job_name,
+                    "runner": runs_on_value,
+                    "confusing_labels": collisions,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/runner_label_confusion"
+                },
+                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/runner_label_confusion"
+            })
 
     return issues
 
@@ -575,8 +566,10 @@ def check_checkout_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
             if "actions/checkout" in uses:
                 with_params = step.get("with", {})
 
-                # Check for persist-credentials
-                if with_params.get("persist-credentials") == "true":
+                # Check for persist-credentials. YAML parses `true` as a boolean,
+                # so accept both the boolean and the string form.
+                persist = with_params.get("persist-credentials")
+                if persist is True or (isinstance(persist, str) and persist.strip().lower() == "true"):
                     issues.append({
                         "type": "unsafe_checkout",
                         "severity": "high",
@@ -1617,9 +1610,12 @@ def check_secrets_access_untrusted(workflow: Dict[str, Any]) -> List[Dict[str, A
                         "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/secrets_access_untrusted"
                     })
 
-            # Check for secrets in environment variables
+            # Check for secrets in environment variables. Only flag this when the
+            # step consumes an untrusted action: passing a secret to a step via a
+            # step-scoped env var is the GitHub-recommended pattern, so flagging it
+            # unconditionally produced a false positive for every safe usage.
             env = step.get("env", {})
-            if env:
+            if uses and is_untrusted_action(uses) and env:
                 for env_key, env_value in env.items():
                     if isinstance(env_value, str) and "secrets." in env_value:
                         issues.append({
@@ -1688,10 +1684,23 @@ def check_file_tampering_protection(workflow: Dict[str, Any]) -> List[Dict[str, 
 
     jobs = workflow.get("jobs", {})
 
-    # Check for build/deployment jobs that modify files
+    # Only consider build/release-style jobs, identified by the job name rather
+    # than a substring match against the whole serialized job (which matched far
+    # too eagerly).
+    build_keywords = ("build", "deploy", "release", "publish", "package")
+
+    # In-place / destructive file operations that genuinely mutate source or
+    # build inputs. A bare `>` / `>>` redirect is intentionally excluded: it
+    # appears in almost every shell command (`echo x > file`, heredocs, `2>&1`)
+    # and produced a false positive for nearly every build job.
+    tamper_pattern = re.compile(
+        r'(?:^|[;&|]|\bsudo\s+)\s*'
+        r'(sed\s+-i|perl\s+-i|mv\b|cp\b|rm\s+-[rf]|install\b|truncate\b|dd\b|tee\b)',
+        re.IGNORECASE,
+    )
+
     for job_name, job in jobs.items():
-        job_str = str(job).lower()
-        is_build_job = any(keyword in job_str for keyword in ["build", "deploy", "release", "publish", "package"])
+        is_build_job = any(keyword in job_name.lower() for keyword in build_keywords)
 
         if is_build_job:
             # Check for file modification operations
@@ -1699,8 +1708,8 @@ def check_file_tampering_protection(workflow: Dict[str, Any]) -> List[Dict[str, 
             for step in steps:
                 run = step.get("run", "")
                 if isinstance(run, str):
-                    # Check for file write operations
-                    if re.search(r'(>|>>|cp\s+|mv\s+|rm\s+|write|overwrite)', run, re.IGNORECASE):
+                    # Check for in-place / destructive file operations
+                    if tamper_pattern.search(run):
                         issues.append({
                             "type": "no_file_tampering_protection",
                             "severity": "low",
@@ -1732,9 +1741,13 @@ def check_branch_protection_bypass(workflow: Dict[str, Any]) -> List[Dict[str, A
                 run = step.get("run", "")
                 uses = step.get("uses", "")
 
-                # Check for auto-approval or auto-merge
+                # Check for auto-approval or auto-merge. Match specific sinks
+                # only: the `gh pr review/merge/approve` CLI commands or a direct
+                # call to the PR reviews API approving the PR. Bare words like
+                # "merge"/"approve"/"bypass" (e.g. `git merge main`) are not flagged.
                 if isinstance(run, str):
-                    if re.search(r'(gh\s+pr\s+(review|merge|approve)|approve|merge|bypass)', run, re.IGNORECASE):
+                    if re.search(r'gh\s+pr\s+(review|merge|approve)\b', run, re.IGNORECASE) or \
+                       re.search(r'pulls/[^/\s]+/reviews', run, re.IGNORECASE):
                         issues.append({
                             "type": "branch_protection_bypass",
                             "severity": "high",
@@ -1768,6 +1781,30 @@ def check_branch_protection_bypass(workflow: Dict[str, Any]) -> List[Dict[str, A
     return issues
 
 
+def _input_used_in_run_command(workflow: Dict[str, Any], input_name: str) -> bool:
+    """Return True if ${{ inputs.<input_name> }} is interpolated inside any run: command.
+
+    Direct interpolation of a workflow input into a shell command is the actual
+    code-injection sink. Using the input elsewhere (an ``if:`` condition, an
+    action ``with:`` parameter, an ``env:`` value) is not equivalent, so callers
+    must not treat mere presence of the input anywhere in the workflow as a hit.
+    """
+    pattern = re.compile(r'\$\{\{\s*inputs\.' + re.escape(input_name) + r'\s*\}\}')
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return False
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            run = step.get("run", "")
+            if isinstance(run, str) and pattern.search(run):
+                return True
+    return False
+
+
 def check_code_injection_via_workflow_inputs(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Check for code injection via workflow inputs."""
     issues = []
@@ -1787,28 +1824,20 @@ def check_code_injection_via_workflow_inputs(workflow: Dict[str, Any]) -> List[D
             if isinstance(input_def, dict):
                 input_type = input_def.get("type", "string")
                 if input_type == "string":
-                    # Check if input is used in run commands without validation
-                    workflow_str = str(workflow)
-                    input_usage = f"${{{{ inputs.{input_name} }}}}"
-                    if input_usage in workflow_str:
-                        # Check if used in potentially dangerous contexts
-                        if "run:" in workflow_str:
-                            # Check for shell injection patterns
-                            if any(pattern in workflow_str for pattern in [
-                                f"${{{{ inputs.{input_name} }}}}",
-                                f"${{{{ inputs.{input_name} }}}}",
-                            ]):
-                                issues.append({
-                                    "type": "code_injection_via_input",
-                                    "severity": "critical",
-                                    "message": f"Workflow_dispatch input '{input_name}' may be vulnerable to code injection. User-controlled input is used in shell commands without proper validation.",
-                                    "input": input_name,
-                                    "evidence": {
-                                        "input": input_name,
-                                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
-                                    },
-                                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
-                                })
+                    # Flag only when the input is interpolated directly into a
+                    # run: command, which is the real injection sink.
+                    if _input_used_in_run_command(workflow, input_name):
+                        issues.append({
+                            "type": "code_injection_via_input",
+                            "severity": "critical",
+                            "message": f"Workflow_dispatch input '{input_name}' may be vulnerable to code injection. User-controlled input is used in shell commands without proper validation.",
+                            "input": input_name,
+                            "evidence": {
+                                "input": input_name,
+                                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
+                            },
+                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
+                        })
 
     return issues
 
@@ -2885,26 +2914,20 @@ def check_workflow_dispatch_inputs(workflow: Dict[str, Any]) -> List[Dict[str, A
 
                 # Check if input is used without validation
                 if not required and input_type == "string":
-                    # Check if it's used in potentially unsafe contexts
-                    workflow_str = str(workflow)
-                    if f"${{{{ inputs.{input_name} }}}}" in workflow_str:
-                        # Check for unsafe usage patterns
-                        if any(pattern in workflow_str for pattern in [
-                            f"${{{{ inputs.{input_name} }}}}",
-                        ]):
-                            # Check if used in shell commands
-                            if "run:" in workflow_str:
-                                issues.append({
-                                    "type": "unvalidated_workflow_input",
-                                    "severity": "high",
-                                    "message": f"Workflow_dispatch input '{input_name}' may be used without validation. Optional inputs should be validated to prevent security issues.",
-                                    "input": input_name,
-                                    "evidence": {
-                                        "input": input_name,
-                                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
-                                    },
-                                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
-                                })
+                    # Flag only when the optional input is interpolated directly
+                    # into a run: command, where lack of validation is exploitable.
+                    if _input_used_in_run_command(workflow, input_name):
+                        issues.append({
+                            "type": "unvalidated_workflow_input",
+                            "severity": "high",
+                            "message": f"Workflow_dispatch input '{input_name}' may be used without validation. Optional inputs should be validated to prevent security issues.",
+                            "input": input_name,
+                            "evidence": {
+                                "input": input_name,
+                                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
+                            },
+                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
+                        })
 
     return issues
 
@@ -3149,15 +3172,33 @@ def check_audit_logging(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     jobs = workflow.get("jobs", {})
 
-    # Check for sensitive operations that should be logged
+    # Strong signals of a genuinely sensitive operation. Weak keywords such as
+    # "token", "secret", "artifact", "upload" and "download" were removed: they
+    # appear in almost every non-trivial job (e.g. any use of GITHUB_TOKEN or
+    # upload-artifact) and made this check fire indiscriminately.
+    sensitive_job_keywords = ("deploy", "publish", "release", "sign", "provision")
+
+    # Deployment / publishing / signing commands seen in step run blocks.
+    sensitive_run_pattern = re.compile(
+        r'\b('
+        r'docker\s+push|npm\s+publish|yarn\s+publish|twine\s+upload|'
+        r'gh\s+release|helm\s+(install|upgrade)|terraform\s+apply|'
+        r'kubectl\s+apply|cosign\s+sign|gpg\s+--sign|aws\s+deploy'
+        r')\b',
+        re.IGNORECASE,
+    )
+
     for job_name, job in jobs.items():
-        job_str = str(job).lower()
-        has_sensitive_ops = any(
-            keyword in job_str for keyword in [
-                "secret", "credential", "token", "deploy", "publish",
-                "registry", "artifact", "upload", "download"
-            ]
-        )
+        has_sensitive_ops = any(kw in job_name.lower() for kw in sensitive_job_keywords)
+
+        if not has_sensitive_ops and isinstance(job, dict):
+            for step in job.get("steps", []) or []:
+                if not isinstance(step, dict):
+                    continue
+                run = step.get("run", "")
+                if isinstance(run, str) and sensitive_run_pattern.search(run):
+                    has_sensitive_ops = True
+                    break
 
         if has_sensitive_ops:
             issues.append({
