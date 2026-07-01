@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import './IssuesTable.css'
 
-function IssuesTable({ graphData, filter, onNodeSelect }) {
+function IssuesTable({ graphData, filter, onNodeSelect, onIssueSelect }) {
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'critical':
@@ -52,6 +52,11 @@ function IssuesTable({ graphData, filter, onNodeSelect }) {
   }, [graphData, filter])
 
   const handleRowClick = (issue) => {
+    if (onIssueSelect) {
+      onIssueSelect(issue)
+      return
+    }
+
     // Find the node for this issue
     const node = graphData.nodes.find(n => n.id === issue.nodeId)
     if (node && onNodeSelect) {

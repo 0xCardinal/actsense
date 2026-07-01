@@ -830,7 +830,13 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
                 const otherInstances = findOtherInstances(issue.type)
                 
                 return (
-                  <div key={index} className="issue-item" style={{ borderLeftColor: color }}>
+                  <div
+                    key={index}
+                    className="issue-item"
+                    style={{ borderLeftColor: color, cursor: 'pointer' }}
+                    onClick={() => setSelectedIssue({ ...issue, otherInstances })}
+                    title="Click to view issue details"
+                  >
                     <div className="issue-header">
                       <span className="issue-severity" style={{ backgroundColor: color }}>
                         {severity.toUpperCase()}
@@ -839,7 +845,10 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
                       <div className="issue-actions">
                         <button
                           className="issue-icon-button"
-                          onClick={() => setSelectedIssue({ ...issue, otherInstances })}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedIssue({ ...issue, otherInstances })
+                          }}
                           title="View details"
                           aria-label="View issue details"
                         >
@@ -851,6 +860,7 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
                             target="_blank"
                             rel="noopener noreferrer"
                             className="issue-icon-button"
+                            onClick={(e) => e.stopPropagation()}
                             title={issue.line_number ? `Open on GitHub (line ${issue.line_number})` : "Open on GitHub"}
                             aria-label={issue.line_number ? `Open on GitHub at line ${issue.line_number}` : "Open on GitHub"}
                           >

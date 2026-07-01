@@ -7,6 +7,7 @@ import AnalysisHistory from './components/AnalysisHistory'
 import TransitiveDependenciesTable from './components/TransitiveDependenciesTable'
 import NodesTable from './components/NodesTable'
 import IssuesTable from './components/IssuesTable'
+import IssueDetailsModal from './components/IssueDetailsModal'
 import SearchOverlay from './components/SearchOverlay'
 import SearchResultsPage from './components/SearchResultsPage'
 import YAMLEditorPanel from './components/YAMLEditorPanel'
@@ -21,6 +22,7 @@ function App() {
   const [showLogs, setShowLogs] = useState(false)
   const [error, setError] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
+  const [selectedIssue, setSelectedIssue] = useState(null)
   const [graphFilter, setGraphFilter] = useState(null)
   const [viewMode, setViewMode] = useState('graph')
   const [shareMode, setShareMode] = useState(false)
@@ -67,6 +69,7 @@ function App() {
     setStatistics(null)
     setError(null)
     setSelectedNode(null)
+    setSelectedIssue(null)
     setGraphFilter(null)
     setViewMode('graph')
     setShareMode(false)
@@ -119,6 +122,34 @@ function App() {
     
     return { isAudited: false }
   }, [graphData])
+
+  const findOtherIssueInstances = useCallback((issue) => {
+    if (!graphData?.nodes || !issue?.type) {
+      return []
+    }
+
+    return graphData.nodes.flatMap(node => {
+      if (node.id === issue.nodeId) {
+        return []
+      }
+
+      return (node.issues || [])
+        .filter(nodeIssue => nodeIssue.type === issue.type)
+        .map(nodeIssue => ({
+          ...nodeIssue,
+          nodeLabel: node.label,
+          id: node.id,
+        }))
+    })
+  }, [graphData])
+
+  const handleIssueSelect = useCallback((issue) => {
+    setSelectedNode(null)
+    setSelectedIssue({
+      ...issue,
+      otherInstances: findOtherIssueInstances(issue),
+    })
+  }, [findOtherIssueInstances])
 
   // Handle share link parsing (only on mount)
   useEffect(() => {
@@ -528,6 +559,7 @@ function App() {
                   <IssuesTable 
                     graphData={graphData}
                     onNodeSelect={setSelectedNode}
+                    onIssueSelect={handleIssueSelect}
                     filter={graphFilter}
                   />
                 ) : (
@@ -586,14 +618,24 @@ function App() {
         />
       )}
 
+      {selectedIssue && (
+        <IssueDetailsModal
+          issue={selectedIssue}
+          otherInstances={selectedIssue.otherInstances || []}
+          onClose={() => setSelectedIssue(null)}
+        />
+      )}
+
       {showSearchOverlay && graphData && (
         <SearchOverlay
           graphData={graphData}
           onClose={() => setShowSearchOverlay(false)}
           onNodeSelect={(node) => {
+            setSelectedIssue(null)
             setSelectedNode(node)
             setShowSearchOverlay(false)
           }}
+          onIssueSelect={handleIssueSelect}
           onViewAll={(query, results) => {
             setSearchQuery(query)
             setSearchResults(results)

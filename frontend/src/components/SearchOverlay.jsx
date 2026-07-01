@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { getNodeTypeIcon } from '../utils/nodeIcons'
 import './SearchOverlay.css'
 
-function SearchOverlay({ graphData, onClose, onNodeSelect, onViewAll }) {
+function SearchOverlay({ graphData, onClose, onNodeSelect, onIssueSelect, onViewAll }) {
   const [searchQuery, setSearchQuery] = useState('')
   const inputRef = useRef(null)
 
@@ -240,6 +240,17 @@ function SearchOverlay({ graphData, onClose, onNodeSelect, onViewAll }) {
   }, [searchQuery, graphData, searchIssues])
 
   const handleResultClick = (result) => {
+    if (result.type === 'issue' && onIssueSelect) {
+      onIssueSelect({
+        ...result.issue,
+        nodeId: result.node.id,
+        nodeLabel: result.node.label,
+        nodeType: result.node.type,
+      })
+      onClose()
+      return
+    }
+
     if (onNodeSelect) {
       onNodeSelect({
         id: result.node.id,

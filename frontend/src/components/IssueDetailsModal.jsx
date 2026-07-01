@@ -4,7 +4,8 @@ import './IssueDetailsModal.css'
 function IssueDetailsModal({ issue, otherInstances, onClose }) {
   if (!issue) return null
 
-  const getIssueDescription = (issueType) => {
+  const getIssueDescription = (issue) => {
+    const issueType = issue?.type
     const descriptions = {
       'unpinned_version': {
         description: 'This action is not pinned to a specific version, tag, or commit SHA. Using unpinned actions means your workflows could break or be compromised if the action is updated with malicious code.',
@@ -147,12 +148,12 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
         mitigation: 'Verify checksums for all downloaded external resources in the Dockerfile using SHA256 or SHA512.'
       },
       'unpinned_npm_packages': {
-        description: 'This composite action installs NPM packages without version locking.',
-        mitigation: 'Use package-lock.json or specify exact versions in package.json. Run npm ci instead of npm install in CI.'
+        description: 'This workflow or action installs NPM packages without version locking. Package names without exact versions can resolve to different code over time, creating a supply-chain risk.',
+        mitigation: 'Use npm ci with a committed package-lock.json for project dependencies, or specify exact package versions when installing directly in a workflow command.'
       },
       'unpinned_python_packages': {
-        description: 'This composite action installs Python packages without version pinning.',
-        mitigation: 'Pin all Python package versions using == syntax (e.g., pip install package==1.2.3). Use requirements.txt with pinned versions.'
+        description: 'This workflow or action installs Python packages without exact version pinning. Unpinned packages can resolve to different releases over time, including compromised or breaking releases.',
+        mitigation: 'Pin Python package versions with == (for example, pip install package==1.2.3) or install from a requirements file with exact pinned versions and hashes.'
       },
       'unpinned_external_resources': {
         description: 'This composite action downloads external resources without checksum verification.',
@@ -220,14 +221,16 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
       }
     }
 
-    return descriptions[issueType] || {
-      description: 'This is a security issue that requires attention.',
-      mitigation: 'Review the issue and implement appropriate security controls.'
+    if (descriptions[issueType]) {
+      return descriptions[issueType]
+    }
+
+    return {
+      description: issue?.message || `${formatTitle(issueType)} was detected in this workflow.`,
+      mitigation: issue?.recommendation || `Open the actsense documentation for ${formatTitle(issueType)} and apply the recommended mitigation for this finding.`
     }
   }
 
-  const issueInfo = getIssueDescription(issue.type)
-  
   // Format issue type as title (convert snake_case to Title Case)
   const formatTitle = (type) => {
     if (!type) return 'Security Issue'
@@ -236,6 +239,8 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ')
   }
+
+  const issueInfo = getIssueDescription(issue)
   
   // Get actsense.dev URL for this vulnerability
   const getActsenseUrl = (type) => {
@@ -417,4 +422,3 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
 }
 
 export default IssueDetailsModal
-
