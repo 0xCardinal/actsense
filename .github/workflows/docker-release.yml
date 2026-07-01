@@ -1,10 +1,10 @@
 name: Docker GHCR Publish
 
 on:
-  push:
-    tags:
-      - "v*"
-      - "[0-9]+.[0-9]+.[0-9]+"
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -13,16 +13,45 @@ permissions:
 jobs:
   docker-build-push:
     name: Build and Publish GHCR image
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Resolve release tag
+        id: release-tag
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -e
+          git fetch --tags --force
+
+          TAG_NAME=""
+          while IFS= read -r tag; do
+            case "$tag" in
+              [0-9]*.[0-9]*.[0-9]*)
+                TAG_NAME="$tag"
+                break
+                ;;
+            esac
+          done < <(git tag --points-at "$HEAD_SHA")
+
+          if [ -z "$TAG_NAME" ]; then
+            echo "No release tag found for $HEAD_SHA"
+            exit 1
+          fi
+
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$(git rev-parse --short "$HEAD_SHA")" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -35,17 +64,17 @@ jobs:
         with:
           images: ghcr.io/0xcardinal/actsense
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=tag
-            type=sha,prefix=sha-
+            type=raw,value=${{ steps.release-tag.outputs.tag }}
+            type=raw,value=latest
+            type=raw,value=sha-${{ steps.release-tag.outputs.short_sha }}
 
-      - name: Build and (optionally) push
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
