@@ -169,6 +169,30 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
       'inconsistent_action_version': {
         description: 'This action is used with different versions across multiple workflow files in the repository. This inconsistency can lead to unpredictable behavior, security vulnerabilities, and maintenance challenges.',
         mitigation: 'Standardize on a single version of this action across all workflows. Review all workflow files and update them to use the same version (preferably the latest stable version). This ensures consistent behavior and makes it easier to apply security updates across the entire repository.'
+      },
+      'github_env_injection': {
+        description: 'This workflow writes user-controllable input (such as github.event.* or github.head_ref) to the $GITHUB_ENV or $GITHUB_PATH runner files. An attacker can inject variables like LD_PRELOAD or alter PATH to execute code in later, more privileged steps.',
+        mitigation: 'Never write ${{ github.event.* }} directly to $GITHUB_ENV or $GITHUB_PATH. Pass the value through an intermediate env variable, validate it against a strict allowlist, then write it with printf so attacker-supplied newlines cannot inject extra entries.'
+      },
+      'github_output_injection': {
+        description: 'This workflow writes user-controllable input to the $GITHUB_OUTPUT runner file. This can inject additional output keys or newline-delimited payloads that later steps and jobs consume and trust.',
+        mitigation: 'Do not write user-controllable context directly to $GITHUB_OUTPUT. Sanitize and validate the value through an intermediate env variable first, use a random delimiter for multi-line values, and validate again where the output is consumed.'
+      },
+      'excessive_secret_exposure': {
+        description: 'This workflow serializes the entire secrets context with toJson(secrets), exposing every secret to a step that should only need one. A single leak, crash, or compromised action would expose the whole secret store.',
+        mitigation: 'Pass only the individual secrets a step needs, by name (e.g. env: { API_TOKEN: ${{ secrets.API_TOKEN }} }). Never use toJson(secrets). Prefer short-lived OIDC tokens over long-lived stored secrets.'
+      },
+      'secrets_inherit': {
+        description: 'This job calls a reusable workflow with "secrets: inherit", forwarding all of the caller\'s secrets without restriction to a workflow that may be maintained independently or in another repository.',
+        mitigation: 'Pass only the secrets the reusable workflow requires, explicitly by name, instead of "secrets: inherit". Declare the required secrets in the reusable workflow\'s workflow_call block.'
+      },
+      'cache_poisoning': {
+        description: 'This workflow uses caching in a job triggered by a privileged event (pull_request_target or workflow_run). Attacker-controlled code from a fork can poison the cache, which later trusted runs will restore and trust.',
+        mitigation: 'Avoid restoring or saving caches in workflows triggered by pull_request_target or workflow_run. Build and test untrusted code in a separate pull_request workflow that runs without secrets, and segregate cache keys by trust boundary.'
+      },
+      'missing_permissions': {
+        description: 'This workflow does not set an explicit permissions block, so the GITHUB_TOKEN falls back to the repository default, which may grant more access than the workflow needs.',
+        mitigation: 'Add an explicit least-privilege permissions block at the workflow level (e.g. permissions: { contents: read }) and widen it per job only where required. Consider setting the repository default token permissions to read-only.'
       }
     }
 

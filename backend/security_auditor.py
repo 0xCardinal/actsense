@@ -109,6 +109,26 @@ class SecurityAuditor:
         """Check for risky GitHub context usage that can be exploited for injection attacks."""
         return security_rules.check_risky_context_usage(workflow)
     @staticmethod
+    def check_github_env_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for untrusted input written to $GITHUB_ENV/$GITHUB_PATH/$GITHUB_OUTPUT."""
+        return security_rules.check_github_env_injection(workflow)
+    @staticmethod
+    def check_excessive_secret_exposure(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for bulk exposure of the entire secrets context via toJson(secrets)."""
+        return security_rules.check_excessive_secret_exposure(workflow)
+    @staticmethod
+    def check_secrets_inherit(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for reusable workflow calls that inherit all secrets."""
+        return security_rules.check_secrets_inherit(workflow)
+    @staticmethod
+    def check_cache_poisoning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for cache usage in workflows triggered by untrusted events."""
+        return security_rules.check_cache_poisoning(workflow)
+    @staticmethod
+    def check_missing_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for workflows without an explicit permissions block."""
+        return security_rules.check_missing_permissions(workflow)
+    @staticmethod
     def check_malicious_curl_pipe_bash(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for curl/wget piped to bash/sh/zsh, which can execute malicious code."""
         return security_rules.check_malicious_curl_pipe_bash(workflow)
@@ -427,6 +447,24 @@ class SecurityAuditor:
         
         # Check risky context usage
         risky_context_issues = SecurityAuditor.check_risky_context_usage(workflow)
+
+        # Runner environment-file injection ($GITHUB_ENV/$GITHUB_PATH/$GITHUB_OUTPUT)
+        # is a more specific form of risky context usage inside a run command.
+        # Compute it now and drop the generic risky_context_usage finding for any
+        # step it already covers, so the same line is not reported twice. Only the
+        # run_command variant is de-duplicated; env:/with: usages are unrelated.
+        env_injection_issues = SecurityAuditor.check_github_env_injection(workflow)
+        _env_injection_steps = {
+            (i.get("job"), i.get("step")) for i in env_injection_issues
+        }
+        risky_context_issues = [
+            issue for issue in risky_context_issues
+            if not (
+                issue.get("evidence", {}).get("usage_location") == "run_command"
+                and (issue.get("job"), issue.get("step")) in _env_injection_steps
+            )
+        ]
+
         if content and risky_context_issues:
             for issue in risky_context_issues:
                 # Try to find line number using the specific context variable
@@ -471,6 +509,57 @@ class SecurityAuditor:
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(risky_context_issues)
+
+        # Runner environment-file injection findings were computed above (used for
+        # de-duplicating risky_context_usage); assign line numbers and record them.
+        if content and env_injection_issues:
+            for issue in env_injection_issues:
+                line_num = security_rules._find_line_number(content, "GITHUB_ENV", issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "GITHUB_PATH", issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "GITHUB_OUTPUT", issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(env_injection_issues)
+
+        # Check bulk secret exposure (toJson(secrets))
+        secret_exposure_issues = SecurityAuditor.check_excessive_secret_exposure(workflow)
+        if content and secret_exposure_issues:
+            for issue in secret_exposure_issues:
+                line_num = security_rules._find_line_number(content, "toJson", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(secret_exposure_issues)
+
+        # Check reusable workflow secrets inheritance
+        secrets_inherit_issues = SecurityAuditor.check_secrets_inherit(workflow)
+        if content and secrets_inherit_issues:
+            for issue in secrets_inherit_issues:
+                line_num = security_rules._find_line_number(content, "secrets:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(secrets_inherit_issues)
+
+        # Check cache poisoning under untrusted triggers
+        cache_poisoning_issues = SecurityAuditor.check_cache_poisoning(workflow)
+        if content and cache_poisoning_issues:
+            for issue in cache_poisoning_issues:
+                line_num = security_rules._find_line_number(content, "cache", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(cache_poisoning_issues)
+
+        # Check for missing explicit permissions block
+        missing_perms_issues = SecurityAuditor.check_missing_permissions(workflow)
+        if content and missing_perms_issues:
+            for issue in missing_perms_issues:
+                line_num = security_rules._find_line_number(content, "on:")
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(missing_perms_issues)
         
         _log("  Checking best practices & artifacts")
         artifact_issues = SecurityAuditor.check_artifact_retention(workflow)

@@ -1028,7 +1028,7 @@ async def audit_fix(request: AuditYAMLRequest):
                     "description": f"Remove base64-decode-and-execute pattern in job '{job_name}'. This is a common obfuscation technique."
                 })
 
-        elif issue_type in ("shell_injection", "script_injection", "code_injection_via_input", "risky_context_usage"):
+        elif issue_type in ("shell_injection", "script_injection", "code_injection_via_input", "risky_context_usage", "github_env_injection", "github_output_injection"):
             job_name = issue.get("job", "")
             fix_key = f"injection:{job_name}:{line_num}:{issue_type}"
             if fix_key in seen_fixes:

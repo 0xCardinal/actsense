@@ -24,6 +24,7 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [GitHub Token Write All](/vulnerabilities/github_token_write_all/)
 - [GitHub Token Write Permissions](/vulnerabilities/github_token_write_permissions/)
 - [Excessive Write Permissions](/vulnerabilities/excessive_write_permissions/)
+- [Missing Permissions Block](/vulnerabilities/missing_permissions/)
 - [Branch Protection Bypass](/vulnerabilities/branch_protection_bypass/)
 - [Token Permission Escalation](/vulnerabilities/token_permission_escalation/)
 
@@ -35,6 +36,8 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Secrets Access Untrusted](/vulnerabilities/secrets_access_untrusted/)
 - [Secrets in Matrix](/vulnerabilities/secrets_in_matrix/)
 - [Environment with Secrets](/vulnerabilities/environment_with_secrets/)
+- [Excessive Secret Exposure](/vulnerabilities/excessive_secret_exposure/)
+- [Reusable Workflow Secrets Inheritance](/vulnerabilities/secrets_inherit/)
 
 ### Workflow Security
 - [Dangerous Event](/vulnerabilities/dangerous_event/)
@@ -45,6 +48,8 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Script Injection](/vulnerabilities/script_injection/)
 - [Shell Injection](/vulnerabilities/shell_injection/)
 - [Risky Context Usage](/vulnerabilities/risky_context_usage/)
+- [GitHub Environment File Injection](/vulnerabilities/github_env_injection/)
+- [GitHub Output File Injection](/vulnerabilities/github_output_injection/)
 - [Code Injection via Input](/vulnerabilities/code_injection_via_input/)
 - [Unvalidated Workflow Input](/vulnerabilities/unvalidated_workflow_input/)
 - [Unsafe Shell](/vulnerabilities/unsafe_shell/)
@@ -89,4 +94,5 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Malicious Base64 Decode](/vulnerabilities/malicious_base64_decode/)
 - [Obfuscation Detection](/vulnerabilities/obfuscation_detection/)
 - [Artifact Exposure Risk](/vulnerabilities/artifact_exposure_risk/)
+- [Cache Poisoning](/vulnerabilities/cache_poisoning/)
 

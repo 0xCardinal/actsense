@@ -684,3 +684,110 @@ class TestUntrustedThirdPartyActions:
         if len(source_issues) > 0:
             assert "actsense.dev/vulnerabilities/untrusted_action_source" in source_issues[0]["evidence"]["vulnerability"]
 
+
+
+class TestRunnerFileAndSecretExposureRules:
+    """Tests for the runner-file injection, secret-exposure, secrets-inherit,
+    cache-poisoning, and missing-permissions detection rules."""
+
+    def test_github_env_injection_critical(self):
+        wf = {
+            "on": {"pull_request_target": {}},
+            "permissions": {"contents": "read"},
+            "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+                {"run": 'echo "FOO=${{ github.event.issue.title }}" >> $GITHUB_ENV'}
+            ]}},
+        }
+        issues = security_rules.check_github_env_injection(wf)
+        env_issues = [i for i in issues if i["type"] == "github_env_injection"]
+        assert len(env_issues) == 1
+        assert env_issues[0]["severity"] == "critical"
+        assert "actsense.dev/vulnerabilities/github_env_injection" in env_issues[0]["evidence"]["vulnerability"]
+
+    def test_github_output_injection_high(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+            {"run": 'echo "name=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT'}
+        ]}}}
+        issues = security_rules.check_github_env_injection(wf)
+        out_issues = [i for i in issues if i["type"] == "github_output_injection"]
+        assert len(out_issues) == 1
+        assert out_issues[0]["severity"] == "high"
+
+    def test_github_env_no_false_positive_on_safe_value(self):
+        # Writing a non-user-controllable value to GITHUB_ENV is fine.
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+            {"run": 'echo "FOO=bar" >> $GITHUB_ENV'},
+            {"run": 'echo "SHA=${{ github.sha }}" >> $GITHUB_ENV'},
+        ]}}}
+        assert security_rules.check_github_env_injection(wf) == []
+
+    def test_excessive_secret_exposure(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+            {"uses": "some/action@v1", "env": {"ALL": "${{ toJson(secrets) }}"}}
+        ]}}}
+        issues = security_rules.check_excessive_secret_exposure(wf)
+        assert len(issues) == 1
+        assert issues[0]["type"] == "excessive_secret_exposure"
+        assert issues[0]["severity"] == "high"
+
+    def test_excessive_secret_exposure_no_fp_single_secret(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+            {"uses": "some/action@v1", "env": {"TOKEN": "${{ secrets.MY_TOKEN }}"}}
+        ]}}}
+        assert security_rules.check_excessive_secret_exposure(wf) == []
+
+    def test_secrets_inherit(self):
+        wf = {"on": ["push"], "jobs": {"call": {
+            "uses": "./.github/workflows/reusable.yml", "secrets": "inherit"
+        }}}
+        issues = security_rules.check_secrets_inherit(wf)
+        assert len(issues) == 1
+        assert issues[0]["type"] == "secrets_inherit"
+
+    def test_secrets_inherit_no_fp_explicit(self):
+        wf = {"on": ["push"], "jobs": {"call": {
+            "uses": "./.github/workflows/reusable.yml",
+            "secrets": {"token": "${{ secrets.TOKEN }}"}
+        }}}
+        assert security_rules.check_secrets_inherit(wf) == []
+
+    def test_cache_poisoning_under_dangerous_trigger(self):
+        wf = {"on": {"pull_request_target": {}}, "jobs": {"j": {
+            "runs-on": "ubuntu-latest", "steps": [{"uses": "actions/cache@v4"}]
+        }}}
+        issues = security_rules.check_cache_poisoning(wf)
+        assert len(issues) == 1
+        assert issues[0]["type"] == "cache_poisoning"
+
+    def test_cache_poisoning_setup_action_cache_input(self):
+        wf = {"on": {"workflow_run": {}}, "jobs": {"j": {
+            "runs-on": "ubuntu-latest",
+            "steps": [{"uses": "actions/setup-node@v4", "with": {"cache": "npm"}}]
+        }}}
+        assert len(security_rules.check_cache_poisoning(wf)) == 1
+
+    def test_cache_poisoning_no_fp_on_safe_trigger(self):
+        wf = {"on": ["push"], "jobs": {"j": {
+            "runs-on": "ubuntu-latest", "steps": [{"uses": "actions/cache@v4"}]
+        }}}
+        assert security_rules.check_cache_poisoning(wf) == []
+
+    def test_missing_permissions(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+            {"run": "echo hi"}
+        ]}}}
+        issues = security_rules.check_missing_permissions(wf)
+        assert len(issues) == 1
+        assert issues[0]["type"] == "missing_permissions"
+
+    def test_missing_permissions_no_fp_when_explicit_top_level(self):
+        wf = {"on": ["push"], "permissions": {"contents": "read"},
+              "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [{"run": "echo hi"}]}}}
+        assert security_rules.check_missing_permissions(wf) == []
+
+    def test_missing_permissions_no_fp_when_all_jobs_explicit(self):
+        wf = {"on": ["push"], "jobs": {"j": {
+            "runs-on": "ubuntu-latest", "permissions": {"contents": "read"},
+            "steps": [{"run": "echo hi"}]
+        }}}
+        assert security_rules.check_missing_permissions(wf) == []

@@ -180,7 +180,10 @@ class TestSecurityAuditorFinalCoverage:
         # Mock to return issue but self-hosted not found, should fallback to runs-on
         with patch('security_auditor.security_rules.check_self_hosted_runners') as mock_check:
             with patch('security_auditor.security_rules._find_line_number') as mock_find:
-                mock_find.side_effect = [None, 3]  # First fails, second succeeds
+                # First call fails, second succeeds (drives the self-hosted ->
+                # runs-on fallback). Extra Nones tolerate line-number lookups from
+                # other rules that also run during audit_workflow.
+                mock_find.side_effect = [None, 3] + [None] * 30
                 mock_check.return_value = [{
                     "type": "self_hosted_runner",
                     "job": "test",

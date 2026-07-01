@@ -949,7 +949,277 @@ def check_risky_context_usage(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
                     },
                     "recommendation": "Validate risky context variables before passing to actions. Use allowlists and sanitize input. See: https://actsense.dev/vulnerabilities/risky_context_usage"
                 })
-    
+
+    return issues
+
+
+# User-controllable GitHub context expressions. Presence of any of these inside a
+# shell command means attacker-influenced data is being interpolated. Reused by
+# the runner-file injection checks below.
+_RISKY_CONTEXT_RE = re.compile(
+    r'\$\{\{\s*('
+    r'github\.event\.[A-Za-z0-9_.]*'              # any github.event.* field
+    r'|github\.head_ref'
+    r'|github\.ref_name'
+    r')\s*[^}]*\}\}',
+    re.IGNORECASE,
+)
+
+
+def _iter_run_steps(workflow: Dict[str, Any]):
+    """Yield (job_name, step, run_text) for every step with a string run command."""
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            run = step.get("run", "")
+            if isinstance(run, str) and run:
+                yield job_name, step, run
+
+
+def check_github_env_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for untrusted input written to the runner environment files.
+
+    Appending attacker-controllable context to ``$GITHUB_ENV`` or ``$GITHUB_PATH``
+    lets an attacker define variables such as ``LD_PRELOAD``/``NODE_OPTIONS`` or
+    prepend a directory to ``PATH``, achieving code execution in later (trusted)
+    steps. Writing it to ``$GITHUB_OUTPUT`` can similarly poison downstream steps
+    that consume the output.
+    """
+    issues = []
+
+    # Sinks: writes to the special runner files. Match $GITHUB_ENV, ${GITHUB_ENV},
+    # "$GITHUB_ENV", $GITHUB_PATH, $GITHUB_OUTPUT.
+    env_sink = re.compile(r'\$\{?\s*GITHUB_(ENV|PATH)\s*\}?', re.IGNORECASE)
+    output_sink = re.compile(r'\$\{?\s*GITHUB_OUTPUT\s*\}?', re.IGNORECASE)
+
+    for job_name, step, run in _iter_run_steps(workflow):
+        if not _RISKY_CONTEXT_RE.search(run):
+            continue
+
+        # Only flag when the untrusted value is on a line that also writes to the
+        # sink, to avoid coincidental co-occurrence elsewhere in the same script.
+        for line in run.splitlines():
+            has_context = bool(_RISKY_CONTEXT_RE.search(line))
+            if not has_context:
+                continue
+            if env_sink.search(line):
+                issues.append({
+                    "type": "github_env_injection",
+                    "severity": "critical",
+                    "message": f"Job '{job_name}' writes user-controllable input to $GITHUB_ENV/$GITHUB_PATH (step: '{step.get('name', 'unnamed')}'). An attacker can inject variables like LD_PRELOAD or alter PATH to execute code in later steps.",
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "sink": "GITHUB_ENV/GITHUB_PATH",
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/github_env_injection"
+                    },
+                    "recommendation": "Never write ${{ github.event.* }} (or other user-controllable context) to $GITHUB_ENV or $GITHUB_PATH. Pass the value via an intermediate env var and validate it first. See: https://actsense.dev/vulnerabilities/github_env_injection"
+                })
+                break
+            if output_sink.search(line):
+                issues.append({
+                    "type": "github_output_injection",
+                    "severity": "high",
+                    "message": f"Job '{job_name}' writes user-controllable input to $GITHUB_OUTPUT (step: '{step.get('name', 'unnamed')}'). This can poison step outputs consumed by later steps or jobs.",
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "sink": "GITHUB_OUTPUT",
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/github_output_injection"
+                    },
+                    "recommendation": "Do not write user-controllable context directly to $GITHUB_OUTPUT. Sanitize and validate the value via an intermediate env var first. See: https://actsense.dev/vulnerabilities/github_output_injection"
+                })
+                break
+
+    return issues
+
+
+def check_excessive_secret_exposure(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for bulk exposure of the entire secrets context.
+
+    ``${{ toJson(secrets) }}`` (and equivalents) serializes every secret into a
+    single value, exposing all credentials to a step that should only need one.
+    """
+    issues = []
+
+    # toJson(secrets) / toJSON( secrets ) anywhere in the expression.
+    pattern = re.compile(r'tojson\s*\(\s*secrets\s*\)', re.IGNORECASE)
+
+    def scan_value(value, job_name, step, location):
+        if isinstance(value, str) and pattern.search(value):
+            issues.append({
+                "type": "excessive_secret_exposure",
+                "severity": "high",
+                "message": f"Job '{job_name}' serializes the entire secrets context with toJson(secrets) (step: '{step.get('name', 'unnamed')}', {location}). This exposes every secret to the step instead of only the ones it needs.",
+                "job": job_name,
+                "step": step.get("name", "unnamed"),
+                "evidence": {
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "location": location,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/excessive_secret_exposure"
+                },
+                "recommendation": "Pass only the individual secrets a step needs, by name. Avoid toJson(secrets). See: https://actsense.dev/vulnerabilities/excessive_secret_exposure"
+            })
+
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return issues
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            run = step.get("run", "")
+            scan_value(run, job_name, step, "run_command")
+            env = step.get("env", {})
+            if isinstance(env, dict):
+                for v in env.values():
+                    scan_value(v, job_name, step, "environment_variable")
+            with_params = step.get("with", {})
+            if isinstance(with_params, dict):
+                for v in with_params.values():
+                    scan_value(v, job_name, step, "action_parameter")
+
+    return issues
+
+
+def check_secrets_inherit(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for reusable workflow calls that inherit all secrets.
+
+    ``secrets: inherit`` forwards every secret available to the caller to the
+    called workflow, with no per-secret control.
+    """
+    issues = []
+
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return issues
+
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        uses = job.get("uses", "")
+        secrets = job.get("secrets")
+        if isinstance(secrets, str) and secrets.strip().lower() == "inherit":
+            issues.append({
+                "type": "secrets_inherit",
+                "severity": "medium",
+                "message": f"Job '{job_name}' calls reusable workflow '{uses}' with 'secrets: inherit', forwarding all of the caller's secrets without restriction.",
+                "job": job_name,
+                "action": uses,
+                "evidence": {
+                    "job": job_name,
+                    "workflow": uses,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/secrets_inherit"
+                },
+                "recommendation": "Pass only the secrets the reusable workflow requires, explicitly by name, instead of 'secrets: inherit'. See: https://actsense.dev/vulnerabilities/secrets_inherit"
+            })
+
+    return issues
+
+
+def check_cache_poisoning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for cache usage in workflows triggered by untrusted events.
+
+    When a workflow that runs in a privileged context (``pull_request_target``,
+    ``workflow_run``) also restores/saves a cache, attacker-controlled code from a
+    fork can poison the cache, which later trusted runs will consume.
+    """
+    issues = []
+
+    on_events = workflow.get("on", {})
+    if isinstance(on_events, dict):
+        triggers = set(on_events.keys())
+    elif isinstance(on_events, list):
+        triggers = set(on_events)
+    elif isinstance(on_events, str):
+        triggers = {on_events}
+    else:
+        triggers = set()
+
+    dangerous = triggers & {"pull_request_target", "workflow_run"}
+    if not dangerous:
+        return issues
+
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return issues
+
+    # Caching can be explicit (actions/cache) or implicit (cache: input on common
+    # setup-* actions).
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            uses = str(step.get("uses", "")).lower()
+            with_params = step.get("with", {}) if isinstance(step.get("with"), dict) else {}
+            uses_cache = "actions/cache" in uses or (
+                uses.startswith("actions/setup-") and "cache" in with_params
+            )
+            if uses_cache:
+                issues.append({
+                    "type": "cache_poisoning",
+                    "severity": "high",
+                    "message": f"Job '{job_name}' uses caching in a workflow triggered by {', '.join(sorted(dangerous))} (step: '{step.get('name', 'unnamed')}'). Untrusted code from a fork can poison the cache for later trusted runs.",
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "trigger": sorted(dangerous),
+                        "action": step.get("uses", ""),
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/cache_poisoning"
+                    },
+                    "recommendation": "Avoid restoring or saving caches in workflows triggered by pull_request_target or workflow_run, or gate the caching steps so they never run on untrusted code. See: https://actsense.dev/vulnerabilities/cache_poisoning"
+                })
+
+    return issues
+
+
+def check_missing_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for workflows without an explicit permissions block.
+
+    With no ``permissions`` key at the workflow or job level, the GITHUB_TOKEN
+    falls back to the repository default, which is frequently broader than the
+    workflow needs.
+    """
+    issues = []
+
+    if "permissions" in workflow:
+        return issues  # Explicit top-level permissions present.
+
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict) or not jobs:
+        return issues
+
+    # If every job sets its own permissions, the workflow is already explicit.
+    if all(isinstance(job, dict) and "permissions" in job for job in jobs.values()):
+        return issues
+
+    issues.append({
+        "type": "missing_permissions",
+        "severity": "low",
+        "message": "Workflow does not set an explicit 'permissions' block, so the GITHUB_TOKEN uses the repository default, which may grant more access than needed.",
+        "evidence": {
+            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/missing_permissions"
+        },
+        "recommendation": "Add an explicit least-privilege 'permissions' block (e.g. 'permissions: {contents: read}') at the workflow level, then widen per job only where required. See: https://actsense.dev/vulnerabilities/missing_permissions"
+    })
+
     return issues
 
 

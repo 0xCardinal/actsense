@@ -497,3 +497,39 @@ class TestSecurityAuditorEdgeCases:
         issues = SecurityAuditor.audit_action("test/action@v1", action_yml=action_yml)
         assert any("optional_secret_input" in issue.get("type", "") for issue in issues)
 
+
+
+class TestEnvInjectionDeduplication:
+    """audit_workflow should not double-report an env/output-file injection as
+    both github_env_injection/github_output_injection and risky_context_usage."""
+
+    @pytest.mark.asyncio
+    async def test_env_file_write_dedupes_risky_context(self):
+        workflow = {
+            "on": ["push"],
+            "permissions": {"contents": "read"},
+            "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+                {"name": "s", "run": 'echo "X=${{ github.event.issue.title }}" >> $GITHUB_ENV'}
+            ]}},
+        }
+        issues = await SecurityAuditor.audit_workflow(workflow)
+        types = [i["type"] for i in issues]
+        assert "github_env_injection" in types
+        # The generic risky_context_usage finding for the same step is suppressed.
+        assert "risky_context_usage" not in types
+
+    @pytest.mark.asyncio
+    async def test_plain_risky_context_not_dedupes(self):
+        # A risky context in a run command that is NOT an env-file write must
+        # still be reported as risky_context_usage.
+        workflow = {
+            "on": ["push"],
+            "permissions": {"contents": "read"},
+            "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+                {"name": "s", "run": "echo ${{ github.event.issue.title }}"}
+            ]}},
+        }
+        issues = await SecurityAuditor.audit_workflow(workflow)
+        types = [i["type"] for i in issues]
+        assert "risky_context_usage" in types
+        assert "github_env_injection" not in types
