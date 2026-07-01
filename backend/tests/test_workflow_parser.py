@@ -319,3 +319,42 @@ runs:
         assert "actions/checkout@v4" in actions
         assert "actions/setup-node@v3" in actions
 
+
+
+class TestOnKeyParsing:
+    """Regression tests: the `on:` trigger key must not be parsed as boolean True
+    (YAML 1.1 'Norway problem'), which would silently disable every trigger-aware
+    security check."""
+
+    def test_on_key_is_string_not_boolean(self):
+        result = WorkflowParser.parse_workflow(
+            "name: t\non: [push, pull_request_target]\njobs: {}"
+        )
+        assert "on" in result
+        assert True not in result
+        assert result["on"] == ["push", "pull_request_target"]
+
+    def test_on_key_as_mapping(self):
+        result = WorkflowParser.parse_workflow(
+            "name: t\non:\n  pull_request_target:\njobs: {}"
+        )
+        assert "on" in result
+        assert "pull_request_target" in result["on"]
+
+    def test_true_false_still_parse_as_bool(self):
+        result = WorkflowParser.parse_workflow(
+            "name: t\non: [push]\njobs:\n  j:\n    steps:\n"
+            "      - with:\n          persist-credentials: true\n          debug: false"
+        )
+        w = result["jobs"]["j"]["steps"][0]["with"]
+        assert w["persist-credentials"] is True
+        assert w["debug"] is False
+
+    def test_bare_on_off_values_stay_strings(self):
+        result = WorkflowParser.parse_workflow(
+            "name: t\non: [push]\njobs:\n  j:\n    steps:\n"
+            "      - with:\n          mode: on\n          other: off"
+        )
+        w = result["jobs"]["j"]["steps"][0]["with"]
+        assert w["mode"] == "on"
+        assert w["other"] == "off"

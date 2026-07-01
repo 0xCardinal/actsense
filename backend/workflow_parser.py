@@ -1,4 +1,5 @@
 """Parse GitHub Actions workflows and action.yml files."""
+import re
 import yaml
 from typing import List, Dict, Any, Optional, Tuple
 import logging
@@ -6,12 +7,41 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class _WorkflowYamlLoader(yaml.SafeLoader):
+    """SafeLoader that does not interpret ``on``/``off``/``yes``/``no`` as booleans.
+
+    GitHub Actions uses ``on:`` as the trigger key. Under YAML 1.1 (which PyYAML
+    implements) the bare word ``on`` resolves to the boolean ``True``, so ``on:``
+    becomes the dict key ``True`` and ``workflow.get("on")`` returns nothing. Every
+    trigger-aware check (dangerous events, pull_request_target, cache poisoning,
+    self-hosted PR/issue exposure, branch-protection bypass, workflow-input
+    injection, ...) then silently fails to fire. This loader keeps only
+    ``true``/``false`` as booleans so ``on``, ``off``, ``yes`` and ``no`` are
+    preserved as strings, matching how GitHub Actions itself reads the file.
+    """
+
+
+# Rebuild the implicit-resolver table without the YAML 1.1 bool entries, then
+# re-register a bool resolver limited to true/false. Building a fresh dict with
+# fresh lists avoids mutating yaml.SafeLoader's shared class state.
+_WorkflowYamlLoader.yaml_implicit_resolvers = {
+    ch: [(tag, regexp) for tag, regexp in mappings
+         if tag != "tag:yaml.org,2002:bool"]
+    for ch, mappings in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_BOOL_TRUE_FALSE = re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$")
+for _ch in "tTfF":
+    _WorkflowYamlLoader.yaml_implicit_resolvers.setdefault(_ch, []).append(
+        ("tag:yaml.org,2002:bool", _BOOL_TRUE_FALSE)
+    )
+
+
 class WorkflowParser:
     @staticmethod
     def parse_workflow(content: str) -> Dict[str, Any]:
         """Parse a workflow YAML file."""
         try:
-            parsed = yaml.safe_load(content)
+            parsed = yaml.load(content, Loader=_WorkflowYamlLoader)
             # Ensure we return a dict, not a string or other type
             if isinstance(parsed, dict):
                 return parsed
@@ -105,7 +135,7 @@ class WorkflowParser:
     def parse_action_yml(content: str) -> Dict[str, Any]:
         """Parse an action.yml or action.yaml file."""
         try:
-            return yaml.safe_load(content) or {}
+            return yaml.load(content, Loader=_WorkflowYamlLoader) or {}
         except yaml.YAMLError:
             logger.exception("Failed to parse action YAML")
             return {"error": "Invalid YAML content"}
