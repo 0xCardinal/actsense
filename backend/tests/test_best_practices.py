@@ -564,6 +564,25 @@ class TestUnpinnedPackages:
         }
 
         assert security_rules.check_workflow_package_installs(workflow) == []
+
+    def test_composite_action_package_issues_include_packages(self):
+        """Test composite action package-install issues expose package names."""
+        action_yml = {
+            "runs": {
+                "using": "composite",
+                "steps": [
+                    {"run": "npm install lodash @actions/core"},
+                    {"run": "python -m pip install requests pyyaml"},
+                ],
+            }
+        }
+
+        issues = security_rules.check_unpinnable_composite_action(action_yml, "test/action@v1")
+
+        npm_issues = [i for i in issues if i.get("type") == "unpinned_npm_packages"]
+        python_issues = [i for i in issues if i.get("type") == "unpinned_python_packages"]
+        assert npm_issues[0]["evidence"]["packages"] == ["lodash", "@actions/core"]
+        assert python_issues[0]["evidence"]["packages"] == ["requests", "pyyaml"]
     
     def test_unpinned_npm_packages(self):
         """Test detection of unpinned npm packages."""

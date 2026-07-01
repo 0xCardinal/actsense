@@ -4034,20 +4034,8 @@ def check_unpinnable_composite_action(action_yml: Dict[str, Any], action_ref: st
                     if isinstance(run, str):
                         normalized_run = " ".join(run.lower().split())
                         # Check for NPM install without version locking
-                        npm_install_index = normalized_run.find("npm install ")
-                        if npm_install_index != -1:
-                            install_tail = normalized_run[npm_install_index + len("npm install "):]
-                            install_tokens = [t for t in install_tail.split() if t and not t.startswith("-")]
-                            has_latest = any("@latest" in token for token in install_tokens)
-                            has_pinned_version = any(
-                                (token.count("@") >= 2) if token.startswith("@") else ("@" in token)
-                                for token in install_tokens
-                            )
-                        else:
-                            has_latest = False
-                            has_pinned_version = True
-
-                        if npm_install_index != -1 and (has_latest or not has_pinned_version):
+                        npm_packages = _npm_unpinned_packages(run)
+                        if npm_packages:
                             issues.append({
                                 "type": "unpinned_npm_packages",
                                 "severity": "high",
@@ -4055,13 +4043,15 @@ def check_unpinnable_composite_action(action_yml: Dict[str, Any], action_ref: st
                                 "action": action_ref,
                                 "evidence": {
                                     "action": action_ref,
+                                    "packages": npm_packages,
                                     "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinned_npm_packages"
                                 },
                                 "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinned_npm_packages"
                             })
 
                         # Check for pip install without version pinning
-                        if re.search(r'pip\s+install\s+(?!.*==)', run, re.IGNORECASE):
+                        pip_packages = _pip_unpinned_packages(run)
+                        if pip_packages:
                             issues.append({
                                 "type": "unpinned_python_packages",
                                 "severity": "high",
@@ -4069,6 +4059,7 @@ def check_unpinnable_composite_action(action_yml: Dict[str, Any], action_ref: st
                                 "action": action_ref,
                                 "evidence": {
                                     "action": action_ref,
+                                    "packages": pip_packages,
                                     "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinned_python_packages"
                                 },
                                 "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinned_python_packages"

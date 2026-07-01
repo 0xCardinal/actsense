@@ -236,6 +236,8 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
         return 'Container image'
       case 'docker_image':
         return 'Docker image'
+      case 'package':
+        return 'Package'
       default:
         return 'Node'
     }

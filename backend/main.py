@@ -220,6 +220,7 @@ async def resolve_action_dependencies(
     # action_content parameter expects JavaScript code for JS actions, not action.yml content
     issues = auditor.audit_action(action_ref, action_yml, js_action_code, dockerfile_content)
     graph.add_issues_to_node(action_ref, issues)
+    _add_package_dependency_nodes(graph, action_ref, issues)
     
     # Resolve dependencies if action_yml is available
     if action_yml:
@@ -258,6 +259,45 @@ def _add_workflow_container_image_nodes(
         ]
         if related:
             graph.add_issues_to_node(img_node_id, related)
+
+
+def _add_package_dependency_nodes(
+    graph: GraphBuilder,
+    parent_node_id: str,
+    issues: List[Dict[str, Any]],
+) -> None:
+    """Add package nodes from package-install findings so the graph shows runtime deps."""
+    package_issue_ecosystems = {
+        "unpinned_npm_packages": "npm",
+        "unpinned_python_packages": "pypi",
+    }
+
+    for issue in issues:
+        issue_type = issue.get("type")
+        ecosystem = package_issue_ecosystems.get(issue_type)
+        if not ecosystem:
+            continue
+
+        packages = (issue.get("evidence") or {}).get("packages") or []
+        if not isinstance(packages, list):
+            continue
+
+        for package in packages:
+            if not isinstance(package, str) or not package:
+                continue
+            package_node_id = f"package://{ecosystem}/{package}"
+            graph.add_node(
+                package_node_id,
+                package,
+                "package",
+                {
+                    "ecosystem": ecosystem,
+                    "package": package,
+                    "source_issue_type": issue_type,
+                },
+            )
+            graph.add_edge(parent_node_id, package_node_id)
+            graph.add_issues_to_node(package_node_id, [issue])
 
 
 async def audit_repository(
@@ -335,6 +375,7 @@ async def audit_repository(
                     )
                     graph.add_edge(repo_node_id, workflow_node_id)
                     graph.add_issues_to_node(workflow_node_id, workflow_issues)
+                    _add_package_dependency_nodes(graph, workflow_node_id, workflow_issues)
                     
                     # Extract actions
                     actions = parser.extract_actions(workflow)
@@ -391,6 +432,7 @@ async def audit_repository(
                     )
                     graph.add_edge(repo_node_id, workflow_node_id)
                     graph.add_issues_to_node(workflow_node_id, workflow_issues)
+                    _add_package_dependency_nodes(graph, workflow_node_id, workflow_issues)
                     
                     # Extract actions
                     actions = parser.extract_actions(workflow)
@@ -1139,6 +1181,7 @@ async def _audit_yaml_body(request: AuditYAMLRequest) -> Dict[str, Any]:
     )
 
     graph.add_issues_to_node(workflow_node_id, workflow_issues)
+    _add_package_dependency_nodes(graph, workflow_node_id, workflow_issues)
 
     actions = parser.extract_actions(workflow)
     visited = set()

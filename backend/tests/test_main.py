@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock, MagicMock
-from main import app, resolve_action_dependencies, audit_repository
+from main import app, resolve_action_dependencies, audit_repository, _add_package_dependency_nodes
 from github_client import GitHubClient
 from graph_builder import GraphBuilder
 
@@ -308,6 +308,36 @@ class TestResolveActionDependencies:
         node = graph.nodes.get("owner/repo@v1")
         if node:
             assert len(node["issues"]) > 0
+
+
+class TestPackageDependencyNodes:
+    """Test package dependency graph node creation."""
+
+    def test_adds_package_nodes_from_workflow_package_issues(self):
+        """Test package-install issues become graph dependency nodes."""
+        graph = GraphBuilder()
+        graph.add_node("workflow:test.yml", "test.yml", "workflow")
+        issue = {
+            "type": "unpinned_npm_packages",
+            "severity": "high",
+            "message": "Unpinned NPM packages",
+            "evidence": {
+                "packages": ["lodash", "@actions/core"],
+            },
+        }
+
+        _add_package_dependency_nodes(graph, "workflow:test.yml", [issue])
+
+        assert "package://npm/lodash" in graph.nodes
+        assert "package://npm/@actions/core" in graph.nodes
+        assert graph.nodes["package://npm/lodash"]["type"] == "package"
+        assert graph.nodes["package://npm/lodash"]["metadata"]["ecosystem"] == "npm"
+        assert {
+            "source": "workflow:test.yml",
+            "target": "package://npm/lodash",
+            "type": "uses",
+        } in graph.edges
+        assert graph.nodes["package://npm/lodash"]["issues"] == [issue]
 
 
 class TestAuditRepository:
