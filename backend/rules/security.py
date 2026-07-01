@@ -1,6 +1,7 @@
 """Security vulnerability and best practice checks for GitHub Actions workflows."""
 from typing import List, Dict, Any, Optional
 import re
+import shlex
 import subprocess
 import tempfile
 import json
@@ -956,14 +957,106 @@ def check_risky_context_usage(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
 # User-controllable GitHub context expressions. Presence of any of these inside a
 # shell command means attacker-influenced data is being interpolated. Reused by
 # the runner-file injection checks below.
-_RISKY_CONTEXT_RE = re.compile(
-    r'\$\{\{\s*('
-    r'github\.event\.[A-Za-z0-9_.]*'              # any github.event.* field
-    r'|github\.head_ref'
-    r'|github\.ref_name'
-    r')\s*[^}]*\}\}',
-    re.IGNORECASE,
-)
+_RISKY_CONTEXT_MARKERS = ("github.event.", "github.head_ref", "github.ref_name")
+_SHELL_SEPARATORS = {"&&", "||", ";", "|"}
+
+
+def _has_risky_context(value: str) -> bool:
+    """Return True when a GitHub expression references attacker-controlled context."""
+    if not isinstance(value, str) or "${{" not in value:
+        return False
+    lowered = value.lower()
+    return any(marker in lowered for marker in _RISKY_CONTEXT_MARKERS)
+
+
+def _split_shell_tokens(line: str) -> List[str]:
+    """Split a shell-like line into bounded tokens for lightweight command checks."""
+    spaced = line.replace("&&", " && ").replace("||", " || ")
+    spaced = spaced.replace(";", " ; ").replace("|", " | ")
+    try:
+        return shlex.split(spaced, comments=False, posix=True)
+    except ValueError:
+        return spaced.split()
+
+
+def _command_tail(tokens: List[str], command_index: int, subcommands: set[str]) -> List[str]:
+    """Return package arguments after a command/subcommand pair until a shell separator."""
+    if command_index + 1 >= len(tokens):
+        return []
+    if tokens[command_index + 1].lower() not in subcommands:
+        return []
+    tail = []
+    for token in tokens[command_index + 2:]:
+        if token in _SHELL_SEPARATORS:
+            break
+        tail.append(token)
+    return tail
+
+
+def _is_shell_variable_name(value: str) -> bool:
+    if not value:
+        return False
+    return (value[0].isalpha() or value[0] == "_") and all(
+        ch.isalnum() or ch == "_" for ch in value
+    )
+
+
+def _assigned_shell_variable(line: str) -> Optional[str]:
+    stripped = line.lstrip()
+    if stripped.startswith("export "):
+        stripped = stripped[len("export "):].lstrip()
+    if "=" not in stripped:
+        return None
+    name = stripped.split("=", 1)[0].strip()
+    return name if _is_shell_variable_name(name) else None
+
+
+def _references_shell_variable(line: str, variable: str) -> bool:
+    braced = f"${{{variable}}}"
+    if braced in line:
+        return True
+    needle = f"${variable}"
+    start = 0
+    while True:
+        idx = line.find(needle, start)
+        if idx == -1:
+            return False
+        end = idx + len(needle)
+        if end == len(line) or not (line[end].isalnum() or line[end] == "_"):
+            return True
+        start = end
+
+
+def _iter_shell_command_tokens(run: str):
+    """Yield token groups for shell commands separated by common operators."""
+    for line in run.splitlines():
+        current = []
+        for token in _split_shell_tokens(line):
+            if token in _SHELL_SEPARATORS:
+                if current:
+                    yield current
+                    current = []
+                continue
+            current.append(token)
+        if current:
+            yield current
+
+
+def _has_file_tamper_command(run: str) -> bool:
+    """Detect in-place or destructive file mutation commands without regex backtracking."""
+    for tokens in _iter_shell_command_tokens(run):
+        if tokens and tokens[0] == "sudo":
+            tokens = tokens[1:]
+        if not tokens:
+            continue
+        command = tokens[0]
+        if command in ("sed", "perl") and any(t == "-i" or t.startswith("-i") for t in tokens[1:]):
+            return True
+        if command == "rm" and any(t.startswith("-") and ("r" in t or "f" in t) for t in tokens[1:]):
+            return True
+        if command in ("mv", "cp", "install", "truncate", "dd", "tee"):
+            return True
+    return False
 
 
 def _iter_run_steps(workflow: Dict[str, Any]):
@@ -986,52 +1079,78 @@ def _npm_unpinned_packages(run: str) -> List[str]:
     """Return npm package specs installed without immutable version pins."""
     unpinned = []
     for line in run.splitlines():
-        # Match npm install/i/add, then inspect package-like arguments on the line.
-        match = re.search(r'\bnpm\s+(?:install|i|add)\s+(.+)', line, re.IGNORECASE)
-        if not match:
-            continue
-        tail = re.split(r'\s*(?:&&|\|\||;|\|)\s*', match.group(1), maxsplit=1)[0]
-        tokens = [t.strip("'\"") for t in tail.split()]
-        for token in tokens:
-            if not token or token.startswith("-"):
+        tokens = _split_shell_tokens(line)
+        for idx, token in enumerate(tokens):
+            if token.lower() != "npm":
                 continue
-            if token in (".", "./") or token.startswith(("./", "../", "$", "${{")):
-                continue
-            if token.endswith((".tgz", ".tar.gz")) or "://" in token:
-                continue
-            if token == "@latest" or token.endswith("@latest"):
-                unpinned.append(token)
-                continue
-            # Scoped package pins look like @scope/name@1.2.3; unscoped pins
-            # look like name@1.2.3. Bare @scope/name is unpinned.
-            if token.startswith("@"):
-                if token.count("@") < 2:
+            install_tokens = _command_tail(tokens, idx, {"install", "i", "add"})
+            for token in install_tokens:
+                token = token.strip("'\"")
+                if not token or token.startswith("-"):
+                    continue
+                if token in (".", "./") or token.startswith(("./", "../", "$", "${{")):
+                    continue
+                if token.endswith((".tgz", ".tar.gz")) or "://" in token:
+                    continue
+                if token == "@latest" or token.endswith("@latest"):
                     unpinned.append(token)
-            elif "@" not in token:
-                unpinned.append(token)
+                    continue
+                # Scoped package pins look like @scope/name@1.2.3; unscoped pins
+                # look like name@1.2.3. Bare @scope/name is unpinned.
+                if token.startswith("@"):
+                    if token.count("@") < 2:
+                        unpinned.append(token)
+                elif "@" not in token:
+                    unpinned.append(token)
+            break
     return unpinned
+
+
+def _pip_install_tokens(tokens: List[str], idx: int) -> List[str]:
+    token = tokens[idx].lower()
+    if token in ("pip", "pip3"):
+        if idx + 1 < len(tokens) and tokens[idx + 1].lower() == "install":
+            tail = []
+            for item in tokens[idx + 2:]:
+                if item in _SHELL_SEPARATORS:
+                    break
+                tail.append(item)
+            return tail
+        return []
+    if token in ("python", "python3") and idx + 3 < len(tokens):
+        if tokens[idx + 1] == "-m" and tokens[idx + 2].lower() in ("pip", "pip3") and tokens[idx + 3].lower() == "install":
+            tail = []
+            for item in tokens[idx + 4:]:
+                if item in _SHELL_SEPARATORS:
+                    break
+                tail.append(item)
+            return tail
+    return []
 
 
 def _pip_unpinned_packages(run: str) -> List[str]:
     """Return pip package specs installed without exact version pins."""
     unpinned = []
     for line in run.splitlines():
-        match = re.search(r'\b(?:python(?:3)?\s+-m\s+)?pip(?:3)?\s+install\s+(.+)', line, re.IGNORECASE)
-        if not match:
+        tokens = _split_shell_tokens(line)
+        install_tokens = []
+        for idx in range(len(tokens)):
+            install_tokens = _pip_install_tokens(tokens, idx)
+            if install_tokens:
+                break
+        if not install_tokens:
             continue
-        tail = re.split(r'\s*(?:&&|\|\||;|\|)\s*', match.group(1), maxsplit=1)[0]
-        tokens = [t.strip("'\"") for t in tail.split()]
         skip_next = False
-        for token in tokens:
+        for token in install_tokens:
+            token = token.strip("'\"")
+            if not token or token.startswith("-"):
+                if token in ("-r", "--requirement", "-c", "--constraint"):
+                    skip_next = True
+                continue
             if skip_next:
                 skip_next = False
                 continue
-            if not token:
-                continue
-            if token in ("-r", "--requirement", "-c", "--constraint"):
-                skip_next = True
-                continue
-            if token.startswith("-") or token.startswith(("./", "../", "$", "${{")):
+            if token.startswith(("./", "../", "$", "${{")):
                 continue
             if token.endswith((".whl", ".tar.gz", ".zip")) or "://" in token or token.startswith("git+"):
                 continue
@@ -1094,13 +1213,8 @@ def check_github_env_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]
     """
     issues = []
 
-    # Sinks: writes to the special runner files. Match $GITHUB_ENV, ${GITHUB_ENV},
-    # "$GITHUB_ENV", $GITHUB_PATH, $GITHUB_OUTPUT.
-    env_sink = re.compile(r'\$\{?\s*GITHUB_(ENV|PATH)\s*\}?', re.IGNORECASE)
-    output_sink = re.compile(r'\$\{?\s*GITHUB_OUTPUT\s*\}?', re.IGNORECASE)
-
     for job_name, step, run in _iter_run_steps(workflow):
-        if not _RISKY_CONTEXT_RE.search(run):
+        if not _has_risky_context(run):
             continue
 
         # Track shell variables assigned from a risky context, so a value that is
@@ -1108,21 +1222,21 @@ def check_github_env_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]
         # (e.g. TITLE="${{ ... }}"; echo "T=$TITLE" >> $GITHUB_ENV) is still caught.
         tainted = set()
         for line in run.splitlines():
-            m = re.match(r'\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=', line)
-            if m and _RISKY_CONTEXT_RE.search(line):
-                tainted.add(m.group(1))
+            assigned = _assigned_shell_variable(line)
+            if assigned and _has_risky_context(line):
+                tainted.add(assigned)
 
         def _line_tainted(line):
-            if _RISKY_CONTEXT_RE.search(line):
+            if _has_risky_context(line):
                 return True
-            return any(re.search(r'\$\{?' + re.escape(v) + r'(?:\}|\b)', line) for v in tainted)
+            return any(_references_shell_variable(line, v) for v in tainted)
 
         # Flag when the untrusted value (directly, or via a tainted variable) is on
         # a line that also writes to the sink, to avoid coincidental co-occurrence.
         for line in run.splitlines():
             if not _line_tainted(line):
                 continue
-            if env_sink.search(line):
+            if "GITHUB_ENV" in line or "GITHUB_PATH" in line:
                 issues.append({
                     "type": "github_env_injection",
                     "severity": "critical",
@@ -1138,7 +1252,7 @@ def check_github_env_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]
                     "recommendation": "Never write ${{ github.event.* }} (or other user-controllable context) to $GITHUB_ENV or $GITHUB_PATH. Pass the value via an intermediate env var and validate it first. See: https://actsense.dev/vulnerabilities/github_env_injection"
                 })
                 break
-            if output_sink.search(line):
+            if "GITHUB_OUTPUT" in line:
                 issues.append({
                     "type": "github_output_injection",
                     "severity": "high",
@@ -2345,16 +2459,6 @@ def check_file_tampering_protection(workflow: Dict[str, Any]) -> List[Dict[str, 
     # too eagerly).
     build_keywords = ("build", "deploy", "release", "publish", "package")
 
-    # In-place / destructive file operations that genuinely mutate source or
-    # build inputs. A bare `>` / `>>` redirect is intentionally excluded: it
-    # appears in almost every shell command (`echo x > file`, heredocs, `2>&1`)
-    # and produced a false positive for nearly every build job.
-    tamper_pattern = re.compile(
-        r'(?:^|[;&|]|\bsudo\s+)\s*'
-        r'(sed\s+-i|perl\s+-i|mv\b|cp\b|rm\s+-[rf]|install\b|truncate\b|dd\b|tee\b)',
-        re.IGNORECASE,
-    )
-
     for job_name, job in jobs.items():
         is_build_job = any(keyword in job_name.lower() for keyword in build_keywords)
 
@@ -2365,7 +2469,7 @@ def check_file_tampering_protection(workflow: Dict[str, Any]) -> List[Dict[str, 
                 run = step.get("run", "")
                 if isinstance(run, str):
                     # Check for in-place / destructive file operations
-                    if tamper_pattern.search(run):
+                    if _has_file_tamper_command(run):
                         issues.append({
                             "type": "no_file_tampering_protection",
                             "severity": "low",
