@@ -508,6 +508,62 @@ RUN wget https://example.com/file.tar.gz
 
 class TestUnpinnedPackages:
     """Tests for unpinned package dependencies."""
+
+    def test_workflow_unpinned_npm_packages(self):
+        """Test detection of unpinned npm packages in workflow run steps."""
+        workflow = {
+            "jobs": {
+                "build": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {"name": "Install JS deps", "run": "npm install lodash express axios"}
+                    ],
+                }
+            }
+        }
+
+        issues = security_rules.check_workflow_package_installs(workflow)
+
+        npm_issues = [i for i in issues if i.get("type") == "unpinned_npm_packages"]
+        assert len(npm_issues) == 1
+        assert npm_issues[0]["evidence"]["packages"] == ["lodash", "express", "axios"]
+        assert "actsense.dev/vulnerabilities/unpinned_npm_packages" in npm_issues[0]["evidence"]["vulnerability"]
+
+    def test_workflow_unpinned_python_packages(self):
+        """Test detection of unpinned Python packages in workflow run steps."""
+        workflow = {
+            "jobs": {
+                "build": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {"name": "Install Python deps", "run": "pip install requests pyyaml boto3"}
+                    ],
+                }
+            }
+        }
+
+        issues = security_rules.check_workflow_package_installs(workflow)
+
+        python_issues = [i for i in issues if i.get("type") == "unpinned_python_packages"]
+        assert len(python_issues) == 1
+        assert python_issues[0]["evidence"]["packages"] == ["requests", "pyyaml", "boto3"]
+        assert "actsense.dev/vulnerabilities/unpinned_python_packages" in python_issues[0]["evidence"]["vulnerability"]
+
+    def test_workflow_pinned_packages_no_issue(self):
+        """Test that exactly pinned workflow package installs are not flagged."""
+        workflow = {
+            "jobs": {
+                "build": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {"run": "npm install lodash@4.17.21 @actions/core@1.10.1"},
+                        {"run": "python -m pip install requests==2.32.3 pyyaml==6.0.2"},
+                    ],
+                }
+            }
+        }
+
+        assert security_rules.check_workflow_package_installs(workflow) == []
     
     def test_unpinned_npm_packages(self):
         """Test detection of unpinned npm packages."""
@@ -589,4 +645,3 @@ https.get('https://example.com/script.js', (res) => {
         external_issues = [i for i in issues if i.get("type") == "unpinned_external_resources"]
         if len(external_issues) > 0:
             assert "actsense.dev/vulnerabilities/unpinned_external_resources" in external_issues[0]["evidence"]["vulnerability"]
-

@@ -129,6 +129,30 @@ class SecurityAuditor:
         """Check for workflows without an explicit permissions block."""
         return security_rules.check_missing_permissions(workflow)
     @staticmethod
+    def check_insecure_commands(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for re-enabling of deprecated set-env/add-path workflow commands."""
+        return security_rules.check_insecure_commands(workflow)
+    @staticmethod
+    def check_bot_conditions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for security gates that rely on the spoofable actor context."""
+        return security_rules.check_bot_conditions(workflow)
+    @staticmethod
+    def check_hardcoded_container_credentials(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for hardcoded registry credentials on job containers/services."""
+        return security_rules.check_hardcoded_container_credentials(workflow)
+    @staticmethod
+    def check_secrets_outside_env(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for secrets interpolated directly into run commands."""
+        return security_rules.check_secrets_outside_env(workflow)
+    @staticmethod
+    def check_artifact_poisoning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for consuming artifacts from untrusted runs."""
+        return security_rules.check_artifact_poisoning(workflow)
+    @staticmethod
+    async def check_ref_version_mismatch(content: Optional[str] = None, client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
+        """Check for SHA-pinned actions whose version comment does not match the SHA."""
+        return await security_rules.check_ref_version_mismatch(content, client)
+    @staticmethod
     def check_malicious_curl_pipe_bash(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check for curl/wget piped to bash/sh/zsh, which can execute malicious code."""
         return security_rules.check_malicious_curl_pipe_bash(workflow)
@@ -236,6 +260,11 @@ class SecurityAuditor:
         return security_rules.check_unpinned_container_images(workflow)
 
     @staticmethod
+    def check_workflow_package_installs(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check workflow run steps for unpinned package installs."""
+        return security_rules.check_workflow_package_installs(workflow)
+
+    @staticmethod
     def check_unpinnable_docker_action(action_yml: Dict[str, Any], action_ref: str, dockerfile_content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Check for unpinnable Docker actions (using mutable tags instead of digests)."""
         return security_rules.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content)
@@ -285,11 +314,46 @@ class SecurityAuditor:
         """Helper to find line number in content."""
         return security_rules._find_line_number(content, search_text, context)
     @staticmethod
+    def _normalize_workflow(workflow: Any) -> Dict[str, Any]:
+        """Coerce a parsed workflow into a well-shaped dict so malformed but
+        valid YAML (e.g. ``jobs: null``, ``jobs: [..]``, non-dict jobs/steps,
+        or a non-standard ``on:``) cannot crash the individual checks. Valid
+        workflows pass through unchanged."""
+        if not isinstance(workflow, dict):
+            return {}
+        out = dict(workflow)
+
+        on = out.get("on")
+        if "on" in out and not isinstance(on, (dict, list, str)):
+            out.pop("on", None)
+
+        jobs = out.get("jobs")
+        if isinstance(jobs, dict):
+            norm_jobs = {}
+            for name, job in jobs.items():
+                if not isinstance(job, dict):
+                    continue
+                job = dict(job)
+                if "steps" in job:
+                    steps = job.get("steps")
+                    job["steps"] = [st for st in steps if isinstance(st, dict)] if isinstance(steps, list) else []
+                norm_jobs[name] = job
+            out["jobs"] = norm_jobs
+        elif "jobs" in out:
+            # jobs present but null / list / string -> coerce to empty mapping
+            out["jobs"] = {}
+        return out
+
+    @staticmethod
     async def audit_workflow(workflow: Dict[str, Any], content: Optional[str] = None, client: Optional[GitHubClient] = None, current_repo: Optional[str] = None, is_public_repo: bool = False, log_fn: Optional[Callable[[str], None]] = None) -> List[Dict[str, Any]]:
         """Audit a workflow file for security issues."""
         issues = []
         _log = log_fn or (lambda _: None)
-        
+
+        # Normalize malformed shapes up front so no individual check can crash on
+        # adversarial or hand-broken workflow files.
+        workflow = SecurityAuditor._normalize_workflow(workflow)
+
         # Check permissions
         _log("  Checking permissions & tokens")
         perm_issues = SecurityAuditor.check_permissions(workflow)
@@ -560,7 +624,73 @@ class SecurityAuditor:
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(missing_perms_issues)
-        
+
+        # Check for re-enabled deprecated workflow commands (set-env / add-path)
+        insecure_cmd_issues = SecurityAuditor.check_insecure_commands(workflow)
+        if content and insecure_cmd_issues:
+            for issue in insecure_cmd_issues:
+                line_num = security_rules._find_line_number(content, "ACTIONS_ALLOW_UNSECURE_COMMANDS", issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "::set-env", issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "::add-path", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(insecure_cmd_issues)
+
+        # Check for spoofable actor-based conditions
+        bot_condition_issues = SecurityAuditor.check_bot_conditions(workflow)
+        if content and bot_condition_issues:
+            for issue in bot_condition_issues:
+                line_num = security_rules._find_line_number(content, "github.actor", issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "if:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(bot_condition_issues)
+
+        # Check for hardcoded container/service registry credentials
+        container_cred_issues = SecurityAuditor.check_hardcoded_container_credentials(workflow)
+        if content and container_cred_issues:
+            for issue in container_cred_issues:
+                line_num = security_rules._find_line_number(content, "credentials", issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "password", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(container_cred_issues)
+
+        # Check for secrets referenced directly in run commands
+        secrets_run_issues = SecurityAuditor.check_secrets_outside_env(workflow)
+        if content and secrets_run_issues:
+            for issue in secrets_run_issues:
+                line_num = security_rules._find_line_number(content, "secrets.", issue.get("job", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, "run:", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(secrets_run_issues)
+
+        # Check for artifact poisoning (downloading artifacts under untrusted triggers)
+        artifact_poison_issues = SecurityAuditor.check_artifact_poisoning(workflow)
+        if content and artifact_poison_issues:
+            for issue in artifact_poison_issues:
+                line_num = security_rules._find_line_number(content, "download-artifact", issue.get("job", ""))
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(artifact_poison_issues)
+
+        # Check for SHA/version-comment mismatch on pinned actions (needs raw content + API)
+        ref_mismatch_issues = await SecurityAuditor.check_ref_version_mismatch(content, client)
+        if content and ref_mismatch_issues:
+            for issue in ref_mismatch_issues:
+                action_name = issue.get("evidence", {}).get("action", "")
+                if action_name:
+                    line_num = security_rules._find_line_number(content, action_name)
+                    if line_num:
+                        issue["line_number"] = line_num
+        issues.extend(ref_mismatch_issues)
+
         _log("  Checking best practices & artifacts")
         artifact_issues = SecurityAuditor.check_artifact_retention(workflow)
         if content and artifact_issues:
@@ -740,11 +870,36 @@ class SecurityAuditor:
         if content and container_issues:
             for issue in container_issues:
                 line_num = security_rules._find_line_number(content, issue.get("evidence", {}).get("image", ""), issue.get("job", ""))
+                if not line_num and issue.get("step"):
+                    line_num = security_rules._find_line_number(content, issue.get("evidence", {}).get("image", ""), issue.get("step", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, issue.get("evidence", {}).get("image", ""))
                 if not line_num:
                     line_num = security_rules._find_line_number(content, "image:", issue.get("job", ""))
                 if line_num:
                     issue["line_number"] = line_num
         issues.extend(container_issues)
+
+        package_install_issues = SecurityAuditor.check_workflow_package_installs(workflow)
+        if content and package_install_issues:
+            for issue in package_install_issues:
+                search = "npm install" if issue.get("type") == "unpinned_npm_packages" else "pip install"
+                line_num = security_rules._find_line_number(content, search, issue.get("job", ""))
+                if not line_num and issue.get("step"):
+                    line_num = security_rules._find_line_number(content, search, issue.get("step", ""))
+                if not line_num and issue.get("type") == "unpinned_npm_packages":
+                    line_num = security_rules._find_line_number(content, "npm i", issue.get("job", ""))
+                    if not line_num and issue.get("step"):
+                        line_num = security_rules._find_line_number(content, "npm i", issue.get("step", ""))
+                if not line_num and issue.get("type") == "unpinned_python_packages":
+                    line_num = security_rules._find_line_number(content, "python -m pip", issue.get("job", ""))
+                    if not line_num and issue.get("step"):
+                        line_num = security_rules._find_line_number(content, "python -m pip", issue.get("step", ""))
+                if not line_num:
+                    line_num = security_rules._find_line_number(content, search)
+                if line_num:
+                    issue["line_number"] = line_num
+        issues.extend(package_install_issues)
         
         # Check for hash pinning (commit SHA) instead of tags
         hash_issues = SecurityAuditor.check_hash_pinning(workflow)
@@ -822,4 +977,3 @@ class SecurityAuditor:
         issues.extend(excessive_write_issues)
         
         return issues
-

@@ -38,6 +38,8 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Environment with Secrets](/vulnerabilities/environment_with_secrets/)
 - [Excessive Secret Exposure](/vulnerabilities/excessive_secret_exposure/)
 - [Reusable Workflow Secrets Inheritance](/vulnerabilities/secrets_inherit/)
+- [Secrets Used Outside Environment Variables](/vulnerabilities/secrets_outside_env/)
+- [Hardcoded Container Credentials](/vulnerabilities/hardcoded_container_credentials/)
 
 ### Workflow Security
 - [Dangerous Event](/vulnerabilities/dangerous_event/)
@@ -50,6 +52,8 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Risky Context Usage](/vulnerabilities/risky_context_usage/)
 - [GitHub Environment File Injection](/vulnerabilities/github_env_injection/)
 - [GitHub Output File Injection](/vulnerabilities/github_output_injection/)
+- [Insecure Workflow Commands](/vulnerabilities/insecure_commands/)
+- [Spoofable Actor Condition](/vulnerabilities/spoofable_actor_condition/)
 - [Code Injection via Input](/vulnerabilities/code_injection_via_input/)
 - [Unvalidated Workflow Input](/vulnerabilities/unvalidated_workflow_input/)
 - [Unsafe Shell](/vulnerabilities/unsafe_shell/)
@@ -60,6 +64,7 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Typosquatting Action](/vulnerabilities/typosquatting_action/)
 - [Deprecated Action](/vulnerabilities/deprecated_action/)
 - [Missing Action Repository](/vulnerabilities/missing_action_repository/)
+- [Action Ref / Version Comment Mismatch](/vulnerabilities/ref_version_mismatch/)
 - [Unpinned Dockerfile Dependencies](/vulnerabilities/unpinned_dockerfile_dependencies/)
 - [Unpinned Dockerfile Resources](/vulnerabilities/unpinned_dockerfile_resources/)
 - [Unpinned External Resources](/vulnerabilities/unpinned_external_resources/)
@@ -94,5 +99,6 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Malicious Base64 Decode](/vulnerabilities/malicious_base64_decode/)
 - [Obfuscation Detection](/vulnerabilities/obfuscation_detection/)
 - [Artifact Exposure Risk](/vulnerabilities/artifact_exposure_risk/)
+- [Artifact Poisoning](/vulnerabilities/artifact_poisoning/)
 - [Cache Poisoning](/vulnerabilities/cache_poisoning/)
 

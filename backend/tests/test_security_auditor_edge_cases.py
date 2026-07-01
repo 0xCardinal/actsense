@@ -533,3 +533,24 @@ class TestEnvInjectionDeduplication:
         types = [i["type"] for i in issues]
         assert "risky_context_usage" in types
         assert "github_env_injection" not in types
+
+
+class TestAuditWorkflowCrashSafety:
+    """audit_workflow must not crash on malformed-but-valid YAML shapes."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("wf", [
+        {"jobs": None},
+        {"jobs": "notadict"},
+        {"jobs": ["a", "b"]},
+        {"jobs": {"j": None}},
+        {"jobs": {"j": "notadict"}},
+        {"jobs": {"j": {"steps": None}}},
+        {"jobs": {"j": {"steps": "x"}}},
+        {"jobs": {"j": {"steps": [None, "x", 5]}}},
+        {"on": True, "jobs": {"j": {"steps": []}}},
+        {"on": 5, "jobs": {}},
+    ])
+    async def test_audit_workflow_survives_malformed(self, wf):
+        issues = await SecurityAuditor.audit_workflow(wf, content="x")
+        assert isinstance(issues, list)

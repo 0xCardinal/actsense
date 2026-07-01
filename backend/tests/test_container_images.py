@@ -133,6 +133,39 @@ class TestCheckUnpinnedContainerImages:
         assert len(matching) == 1
         assert "postgres:latest" in matching[0]["message"]
 
+    def test_unpinned_docker_action_detected(self):
+        workflow = {
+            "jobs": {
+                "test": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {"name": "Docker step", "uses": "docker://alpine:latest"},
+                    ],
+                }
+            }
+        }
+        issues = security_rules.check_unpinned_container_images(workflow)
+        matching = [i for i in issues if i["type"] == "unpinned_container_image"]
+        assert len(matching) == 1
+        assert matching[0]["evidence"]["source"] == "docker_action"
+        assert matching[0]["evidence"]["image"] == "docker://alpine:latest"
+
+    def test_pinned_docker_action_no_issue(self):
+        workflow = {
+            "jobs": {
+                "test": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {
+                            "uses": "docker://alpine@sha256:a5e0ed056baaa3b684d4c5ef4b0cda0d138398c6a3f2a4b0a1d2e3f4a5b6c7d8"
+                        },
+                    ],
+                }
+            }
+        }
+        issues = security_rules.check_unpinned_container_images(workflow)
+        assert len([i for i in issues if i["type"] == "unpinned_container_image"]) == 0
+
     def test_pinned_container_no_issue(self):
         workflow = {
             "jobs": {

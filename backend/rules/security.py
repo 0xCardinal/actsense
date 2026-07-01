@@ -982,6 +982,107 @@ def _iter_run_steps(workflow: Dict[str, Any]):
                 yield job_name, step, run
 
 
+def _npm_unpinned_packages(run: str) -> List[str]:
+    """Return npm package specs installed without immutable version pins."""
+    unpinned = []
+    for line in run.splitlines():
+        # Match npm install/i/add, then inspect package-like arguments on the line.
+        match = re.search(r'\bnpm\s+(?:install|i|add)\s+(.+)', line, re.IGNORECASE)
+        if not match:
+            continue
+        tail = re.split(r'\s*(?:&&|\|\||;|\|)\s*', match.group(1), maxsplit=1)[0]
+        tokens = [t.strip("'\"") for t in tail.split()]
+        for token in tokens:
+            if not token or token.startswith("-"):
+                continue
+            if token in (".", "./") or token.startswith(("./", "../", "$", "${{")):
+                continue
+            if token.endswith((".tgz", ".tar.gz")) or "://" in token:
+                continue
+            if token == "@latest" or token.endswith("@latest"):
+                unpinned.append(token)
+                continue
+            # Scoped package pins look like @scope/name@1.2.3; unscoped pins
+            # look like name@1.2.3. Bare @scope/name is unpinned.
+            if token.startswith("@"):
+                if token.count("@") < 2:
+                    unpinned.append(token)
+            elif "@" not in token:
+                unpinned.append(token)
+    return unpinned
+
+
+def _pip_unpinned_packages(run: str) -> List[str]:
+    """Return pip package specs installed without exact version pins."""
+    unpinned = []
+    for line in run.splitlines():
+        match = re.search(r'\b(?:python(?:3)?\s+-m\s+)?pip(?:3)?\s+install\s+(.+)', line, re.IGNORECASE)
+        if not match:
+            continue
+        tail = re.split(r'\s*(?:&&|\|\||;|\|)\s*', match.group(1), maxsplit=1)[0]
+        tokens = [t.strip("'\"") for t in tail.split()]
+        skip_next = False
+        for token in tokens:
+            if skip_next:
+                skip_next = False
+                continue
+            if not token:
+                continue
+            if token in ("-r", "--requirement", "-c", "--constraint"):
+                skip_next = True
+                continue
+            if token.startswith("-") or token.startswith(("./", "../", "$", "${{")):
+                continue
+            if token.endswith((".whl", ".tar.gz", ".zip")) or "://" in token or token.startswith("git+"):
+                continue
+            if "==" not in token and "===" not in token:
+                unpinned.append(token)
+    return unpinned
+
+
+def check_workflow_package_installs(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check workflow run steps for unpinned npm and Python package installs."""
+    issues = []
+
+    for job_name, step, run in _iter_run_steps(workflow):
+        step_name = step.get("name", "unnamed")
+        npm_packages = _npm_unpinned_packages(run)
+        if npm_packages:
+            issues.append({
+                "type": "unpinned_npm_packages",
+                "severity": "high",
+                "message": f"Job '{job_name}' installs NPM packages without version locking in step '{step_name}'. Unpinned packages can introduce supply-chain vulnerabilities.",
+                "job": job_name,
+                "step": step_name,
+                "evidence": {
+                    "job": job_name,
+                    "step": step_name,
+                    "packages": npm_packages,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinned_npm_packages"
+                },
+                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinned_npm_packages"
+            })
+
+        pip_packages = _pip_unpinned_packages(run)
+        if pip_packages:
+            issues.append({
+                "type": "unpinned_python_packages",
+                "severity": "high",
+                "message": f"Job '{job_name}' installs Python packages without exact version pinning in step '{step_name}'. Unpinned packages can introduce supply-chain vulnerabilities.",
+                "job": job_name,
+                "step": step_name,
+                "evidence": {
+                    "job": job_name,
+                    "step": step_name,
+                    "packages": pip_packages,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinned_python_packages"
+                },
+                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinned_python_packages"
+            })
+
+    return issues
+
+
 def check_github_env_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Check for untrusted input written to the runner environment files.
 
@@ -1002,11 +1103,24 @@ def check_github_env_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]
         if not _RISKY_CONTEXT_RE.search(run):
             continue
 
-        # Only flag when the untrusted value is on a line that also writes to the
-        # sink, to avoid coincidental co-occurrence elsewhere in the same script.
+        # Track shell variables assigned from a risky context, so a value that is
+        # first stored in a variable and later written to the sink on another line
+        # (e.g. TITLE="${{ ... }}"; echo "T=$TITLE" >> $GITHUB_ENV) is still caught.
+        tainted = set()
         for line in run.splitlines():
-            has_context = bool(_RISKY_CONTEXT_RE.search(line))
-            if not has_context:
+            m = re.match(r'\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=', line)
+            if m and _RISKY_CONTEXT_RE.search(line):
+                tainted.add(m.group(1))
+
+        def _line_tainted(line):
+            if _RISKY_CONTEXT_RE.search(line):
+                return True
+            return any(re.search(r'\$\{?' + re.escape(v) + r'(?:\}|\b)', line) for v in tainted)
+
+        # Flag when the untrusted value (directly, or via a tainted variable) is on
+        # a line that also writes to the sink, to avoid coincidental co-occurrence.
+        for line in run.splitlines():
+            if not _line_tainted(line):
                 continue
             if env_sink.search(line):
                 issues.append({
@@ -1057,20 +1171,31 @@ def check_excessive_secret_exposure(workflow: Dict[str, Any]) -> List[Dict[str, 
 
     def scan_value(value, job_name, step, location):
         if isinstance(value, str) and pattern.search(value):
+            step_name = step.get("name", "unnamed") if isinstance(step, dict) else None
+            where = f"step: '{step_name}', " if step_name else ""
+            scope = f"Job '{job_name}'" if job_name else "The workflow"
             issues.append({
                 "type": "excessive_secret_exposure",
                 "severity": "high",
-                "message": f"Job '{job_name}' serializes the entire secrets context with toJson(secrets) (step: '{step.get('name', 'unnamed')}', {location}). This exposes every secret to the step instead of only the ones it needs.",
+                "message": f"{scope} serializes the entire secrets context with toJson(secrets) ({where}{location}). This exposes every secret instead of only the ones it needs.",
                 "job": job_name,
-                "step": step.get("name", "unnamed"),
+                "step": step_name,
                 "evidence": {
                     "job": job_name,
-                    "step": step.get("name", "unnamed"),
+                    "step": step_name,
                     "location": location,
                     "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/excessive_secret_exposure"
                 },
                 "recommendation": "Pass only the individual secrets a step needs, by name. Avoid toJson(secrets). See: https://actsense.dev/vulnerabilities/excessive_secret_exposure"
             })
+
+    def scan_env(env, job_name, step, location):
+        if isinstance(env, dict):
+            for v in env.values():
+                scan_value(v, job_name, step, location)
+
+    # Workflow-level env
+    scan_env(workflow.get("env"), None, None, "workflow_env")
 
     jobs = workflow.get("jobs", {})
     if not isinstance(jobs, dict):
@@ -1078,15 +1203,14 @@ def check_excessive_secret_exposure(workflow: Dict[str, Any]) -> List[Dict[str, 
     for job_name, job in jobs.items():
         if not isinstance(job, dict):
             continue
+        # Job-level env
+        scan_env(job.get("env"), job_name, None, "job_env")
         for step in job.get("steps", []) or []:
             if not isinstance(step, dict):
                 continue
             run = step.get("run", "")
             scan_value(run, job_name, step, "run_command")
-            env = step.get("env", {})
-            if isinstance(env, dict):
-                for v in env.values():
-                    scan_value(v, job_name, step, "environment_variable")
+            scan_env(step.get("env"), job_name, step, "environment_variable")
             with_params = step.get("with", {})
             if isinstance(with_params, dict):
                 for v in with_params.values():
@@ -1219,6 +1343,268 @@ def check_missing_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         },
         "recommendation": "Add an explicit least-privilege 'permissions' block (e.g. 'permissions: {contents: read}') at the workflow level, then widen per job only where required. See: https://actsense.dev/vulnerabilities/missing_permissions"
     })
+
+    return issues
+
+
+def _iter_env_scopes(workflow: Dict[str, Any]):
+    """Yield (scope_label, job_name, step, env_dict) for every env: block."""
+    top_env = workflow.get("env", {})
+    if isinstance(top_env, dict):
+        yield ("workflow", None, None, top_env)
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        job_env = job.get("env", {})
+        if isinstance(job_env, dict):
+            yield ("job", job_name, None, job_env)
+        for step in job.get("steps", []) or []:
+            if isinstance(step, dict):
+                step_env = step.get("env", {})
+                if isinstance(step_env, dict):
+                    yield ("step", job_name, step, step_env)
+
+
+def check_insecure_commands(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for re-enabling of deprecated, injectable workflow commands.
+
+    Setting ``ACTIONS_ALLOW_UNSECURE_COMMANDS: true`` re-enables the deprecated
+    ``set-env`` and ``add-path`` stdout commands, which let any printed line define
+    environment variables or modify PATH — a direct injection sink equivalent to
+    writing to ``$GITHUB_ENV``/``$GITHUB_PATH``.
+    """
+    issues = []
+
+    def is_truthy(val) -> bool:
+        return val is True or (isinstance(val, str) and val.strip().lower() in ("true", "1", "yes", "on"))
+
+    for scope, job_name, step, env in _iter_env_scopes(workflow):
+        if "ACTIONS_ALLOW_UNSECURE_COMMANDS" in env and is_truthy(env["ACTIONS_ALLOW_UNSECURE_COMMANDS"]):
+            step_name = step.get("name", "unnamed") if isinstance(step, dict) else None
+            issues.append({
+                "type": "insecure_commands",
+                "severity": "high",
+                "message": f"ACTIONS_ALLOW_UNSECURE_COMMANDS is enabled at the {scope} level" + (f" (job '{job_name}')" if job_name else "") + ". This re-enables the deprecated set-env/add-path stdout commands, allowing any printed output to inject environment variables or modify PATH.",
+                "job": job_name,
+                "step": step_name,
+                "evidence": {
+                    "scope": scope,
+                    "job": job_name,
+                    "step": step_name,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/insecure_commands"
+                },
+                "recommendation": "Remove ACTIONS_ALLOW_UNSECURE_COMMANDS and migrate to the $GITHUB_ENV / $GITHUB_PATH environment files with validated input. See: https://actsense.dev/vulnerabilities/insecure_commands"
+            })
+
+    # Also flag direct use of the deprecated stdout commands themselves.
+    deprecated_cmd = re.compile(r'::(set-env|add-path)\s', re.IGNORECASE)
+    for job_name, step, run in _iter_run_steps(workflow):
+        if deprecated_cmd.search(run):
+            issues.append({
+                "type": "insecure_commands",
+                "severity": "high",
+                "message": f"Job '{job_name}' uses a deprecated set-env/add-path stdout command (step: '{step.get('name', 'unnamed')}'). These commands are an injection sink and are disabled unless ACTIONS_ALLOW_UNSECURE_COMMANDS is set.",
+                "job": job_name,
+                "step": step.get("name", "unnamed"),
+                "evidence": {
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/insecure_commands"
+                },
+                "recommendation": "Replace set-env/add-path with the $GITHUB_ENV / $GITHUB_PATH environment files and validate any user-controllable values. See: https://actsense.dev/vulnerabilities/insecure_commands"
+            })
+
+    return issues
+
+
+def check_bot_conditions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for security gates that rely on the spoofable actor context.
+
+    Conditions such as ``if: github.actor == 'dependabot[bot]'`` are not a reliable
+    trust boundary: the actor/triggering-actor is attacker-influenceable in several
+    trigger contexts, so gating privileged behaviour on it can be bypassed.
+    """
+    issues = []
+
+    # Any use of the actor context inside a condition — direct comparison
+    # (== / !=) or via helpers such as contains(...) — is a spoofable gate.
+    actor_cond = re.compile(r'github\.(?:actor|triggering_actor)\b', re.IGNORECASE)
+
+    def scan(condition, job_name, step):
+        if isinstance(condition, str) and actor_cond.search(condition):
+            step_name = step.get("name", "unnamed") if isinstance(step, dict) else None
+            issues.append({
+                "type": "spoofable_actor_condition",
+                "severity": "medium",
+                "message": f"Job '{job_name}' gates behaviour on github.actor/github.triggering_actor" + (f" (step: '{step_name}')" if step_name else "") + ". The actor context is spoofable in several trigger contexts and is not a reliable trust boundary.",
+                "job": job_name,
+                "step": step_name,
+                "evidence": {
+                    "job": job_name,
+                    "step": step_name,
+                    "condition": condition.strip()[:200],
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/spoofable_actor_condition"
+                },
+                "recommendation": "Do not use github.actor as a security gate. Rely on event payload verification, permissions, environment protection rules, or GitHub App identity instead. See: https://actsense.dev/vulnerabilities/spoofable_actor_condition"
+            })
+
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return issues
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        scan(job.get("if"), job_name, None)
+        for step in job.get("steps", []) or []:
+            if isinstance(step, dict):
+                scan(step.get("if"), job_name, step)
+
+    return issues
+
+
+def check_hardcoded_container_credentials(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for hardcoded registry credentials on job containers/services."""
+    issues = []
+
+    def is_hardcoded(val) -> bool:
+        # A secret/expression reference is fine; a literal string is not.
+        return isinstance(val, str) and val != "" and "${{" not in val
+
+    def check_credentials(creds, job_name, source, service_name=""):
+        if not isinstance(creds, dict):
+            return
+        # Only the password is a secret; a hardcoded username is not a finding.
+        if is_hardcoded(creds.get("password")):
+            where = f"service '{service_name}'" if source == "service" else "container"
+            issues.append({
+                "type": "hardcoded_container_credentials",
+                "severity": "high",
+                "message": f"Job '{job_name}' hardcodes the {where} registry password. Credentials committed to a workflow are exposed to anyone with read access and to git history.",
+                "job": job_name,
+                "evidence": {
+                    "job": job_name,
+                    "source": source,
+                    "service_name": service_name,
+                    "field": "password",
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/hardcoded_container_credentials"
+                },
+                "recommendation": "Store registry credentials in GitHub Secrets and reference them as ${{ secrets.NAME }} instead of hardcoding them. See: https://actsense.dev/vulnerabilities/hardcoded_container_credentials"
+            })
+
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return issues
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        container = job.get("container")
+        if isinstance(container, dict):
+            check_credentials(container.get("credentials"), job_name, "container")
+        services = job.get("services", {})
+        if isinstance(services, dict):
+            for svc_name, svc in services.items():
+                if isinstance(svc, dict):
+                    check_credentials(svc.get("credentials"), job_name, "service", svc_name)
+
+    return issues
+
+
+def check_secrets_outside_env(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for secrets interpolated directly into run commands.
+
+    Referencing ``${{ secrets.* }}`` directly inside a ``run:`` command risks
+    leaking the value into process listings, shell traces, or logs. Passing the
+    secret through a step ``env:`` variable is the recommended pattern. Self-hosted
+    runners are covered separately by check_self_hosted_runner_secrets.
+    """
+    issues = []
+
+    secret_ref = re.compile(r'\$\{\{\s*secrets\.[A-Za-z0-9_]+\s*\}\}')
+
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return issues
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        # Self-hosted runners have a dedicated, higher-severity check.
+        if "self-hosted" in str(job.get("runs-on", "")).lower():
+            continue
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            run = step.get("run", "")
+            if isinstance(run, str) and secret_ref.search(run):
+                issues.append({
+                    "type": "secrets_outside_env",
+                    "severity": "medium",
+                    "message": f"Job '{job_name}' references a secret directly in a run command (step: '{step.get('name', 'unnamed')}'). Secrets interpolated into shell commands can leak via process listings, traces, or logs.",
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/secrets_outside_env"
+                    },
+                    "recommendation": "Pass the secret through a step env: variable and reference the env var in the command, e.g. env: { TOKEN: ${{ secrets.TOKEN }} } then use \"$TOKEN\". See: https://actsense.dev/vulnerabilities/secrets_outside_env"
+                })
+
+    return issues
+
+
+def check_artifact_poisoning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Check for consuming artifacts from untrusted runs.
+
+    Downloading artifacts in a workflow triggered by ``workflow_run`` or
+    ``pull_request_target`` can pull attacker-controlled content produced by an
+    untrusted (for example, fork) run, which the privileged workflow then trusts.
+    """
+    issues = []
+
+    on_events = workflow.get("on", {})
+    if isinstance(on_events, dict):
+        triggers = set(on_events.keys())
+    elif isinstance(on_events, list):
+        triggers = set(on_events)
+    elif isinstance(on_events, str):
+        triggers = {on_events}
+    else:
+        triggers = set()
+
+    dangerous = triggers & {"pull_request_target", "workflow_run"}
+    if not dangerous:
+        return issues
+
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return issues
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            uses = str(step.get("uses", "")).lower()
+            # actions/download-artifact or common third-party download actions.
+            if "download-artifact" in uses:
+                issues.append({
+                    "type": "artifact_poisoning",
+                    "severity": "medium",
+                    "message": f"Job '{job_name}' downloads an artifact in a workflow triggered by {', '.join(sorted(dangerous))} (step: '{step.get('name', 'unnamed')}'). The artifact may have been produced by an untrusted run and should not be trusted without validation.",
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "trigger": sorted(dangerous),
+                        "action": step.get("uses", ""),
+                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/artifact_poisoning"
+                    },
+                    "recommendation": "Treat artifacts from untrusted runs as untrusted input: validate names and contents, avoid executing downloaded files, and prefer not consuming fork artifacts in privileged workflows. See: https://actsense.dev/vulnerabilities/artifact_poisoning"
+                })
 
     return issues
 
@@ -2560,6 +2946,64 @@ def check_hash_pinning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     return issues
 
 
+async def check_ref_version_mismatch(content: Optional[str] = None, client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
+    """Check for SHA-pinned actions whose version comment does not match the SHA.
+
+    A common convention is ``uses: owner/repo@<sha>  # v1.2.3``. If the comment's
+    tag resolves to a different commit than the pinned SHA, the comment is
+    misleading — the workflow is not actually running the version it claims to,
+    which can hide a downgrade or a swapped commit.
+    """
+    issues = []
+    if not content or not client:
+        return issues
+
+    # uses: owner/repo(/subpath)@<40-hex-sha>   # v1.2.3  (or  # 1.2.3)
+    line_re = re.compile(
+        r'uses:\s*["\']?([A-Za-z0-9._-]+/[A-Za-z0-9._/-]+)@([0-9a-fA-F]{40})["\']?\s*#\s*(v?\d[\w.\-]*)',
+    )
+
+    seen = set()
+    for raw_line in content.splitlines():
+        m = line_re.search(raw_line)
+        if not m:
+            continue
+        action_path, pinned_sha, comment_tag = m.group(1), m.group(2).lower(), m.group(3)
+        owner = action_path.split("/")[0]
+        repo = action_path.split("/")[1] if "/" in action_path else None
+        if not repo:
+            continue
+        key = (owner, repo, pinned_sha, comment_tag)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        try:
+            resolved = await client.resolve_tag_to_sha(owner, repo, comment_tag)
+        except HTTPException:
+            continue
+        except Exception:
+            continue
+
+        if resolved and resolved.lower() != pinned_sha:
+            issues.append({
+                "type": "ref_version_mismatch",
+                "severity": "medium",
+                "message": f"Action '{owner}/{repo}' is pinned to SHA {pinned_sha[:7]} but its comment claims '{comment_tag}', which resolves to a different commit ({resolved[:7]}). The version comment is misleading.",
+                "action": f"{owner}/{repo}@{pinned_sha}",
+                "evidence": {
+                    "action": f"{owner}/{repo}",
+                    "pinned_sha": pinned_sha,
+                    "comment_tag": comment_tag,
+                    "tag_resolves_to": resolved,
+                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/ref_version_mismatch"
+                },
+                "recommendation": f"Update the pinned SHA to match '{comment_tag}' ({resolved[:7]}), or correct the comment to reflect the commit actually in use. See: https://actsense.dev/vulnerabilities/ref_version_mismatch"
+            })
+
+    return issues
+
+
 async def check_older_action_versions(workflow: Dict[str, Any], client: Optional[GitHubClient] = None) -> List[Dict[str, Any]]:
     """Check if actions in workflow use older versions (tags or commit hashes) that may have security vulnerabilities."""
     issues = []
@@ -3695,7 +4139,7 @@ def _find_line_number(content: str, search_text: str, context: Optional[str] = N
 
 
 def check_unpinned_container_images(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Check for unpinned container and service images in workflow jobs.
+    """Check for unpinned container, service, and docker:// action images.
 
     Flags images that use mutable tags (e.g. 'node:20', 'postgres:latest')
     instead of immutable digests (e.g. 'node@sha256:abc...').
@@ -3709,7 +4153,7 @@ def check_unpinned_container_images(workflow: Dict[str, Any]) -> List[Dict[str, 
         """An image is pinned if it references a digest via @sha256:."""
         return "@sha256:" in image
 
-    def _check_image(image: str, job_name: str, source: str, service_name: str = ""):
+    def _check_image(image: str, job_name: str, source: str, service_name: str = "", step_name: str = ""):
         if not image or not isinstance(image, str):
             return
         # Skip expression-based images that are resolved at runtime
@@ -3718,17 +4162,24 @@ def check_unpinned_container_images(workflow: Dict[str, Any]) -> List[Dict[str, 
         if _is_pinned(image):
             return
 
-        context = f"service '{service_name}' in job" if source == "service" else f"job"
+        if source == "service":
+            context = f"service '{service_name}' in job"
+        elif source == "docker_action":
+            context = f"Docker action step '{step_name}' in job"
+        else:
+            context = "job"
         issues.append({
             "type": "unpinned_container_image",
             "severity": "medium",
             "message": f"Container image '{image}' used by {context} '{job_name}' is not pinned to a digest. Mutable tags can be overwritten, leading to supply chain attacks.",
             "job": job_name,
+            "step": step_name or None,
             "evidence": {
                 "image": image,
                 "job": job_name,
                 "source": source,
                 "service_name": service_name,
+                "step": step_name,
                 "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinned_container_image"
             },
             "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinned_container_image"
@@ -3752,5 +4203,11 @@ def check_unpinned_container_images(workflow: Dict[str, Any]) -> List[Dict[str, 
                 elif isinstance(svc, dict):
                     _check_image(svc.get("image", ""), job_name, "service", svc_name)
 
-    return issues
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            uses = step.get("uses", "")
+            if isinstance(uses, str) and uses.startswith("docker://"):
+                _check_image(uses, job_name, "docker_action", step_name=step.get("name", "unnamed"))
 
+    return issues

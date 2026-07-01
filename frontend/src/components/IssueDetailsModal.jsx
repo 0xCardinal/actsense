@@ -193,6 +193,30 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
       'missing_permissions': {
         description: 'This workflow does not set an explicit permissions block, so the GITHUB_TOKEN falls back to the repository default, which may grant more access than the workflow needs.',
         mitigation: 'Add an explicit least-privilege permissions block at the workflow level (e.g. permissions: { contents: read }) and widen it per job only where required. Consider setting the repository default token permissions to read-only.'
+      },
+      'insecure_commands': {
+        description: 'This workflow re-enables or uses the deprecated set-env / add-path stdout commands (via ACTIONS_ALLOW_UNSECURE_COMMANDS or ::set-env/::add-path). These commands let any printed output define environment variables or modify PATH, an injection sink that can lead to code execution in later steps.',
+        mitigation: 'Remove ACTIONS_ALLOW_UNSECURE_COMMANDS and migrate to the $GITHUB_ENV / $GITHUB_PATH environment files, validating any user-controllable value first. Update or replace older actions that still require the flag.'
+      },
+      'spoofable_actor_condition': {
+        description: 'This workflow gates behaviour on github.actor or github.triggering_actor (e.g. if: github.actor == \'dependabot[bot]\'). The actor context is spoofable in several trigger contexts and is not a reliable trust boundary, so the gate can be bypassed.',
+        mitigation: 'Do not use github.actor as a security control. Verify the event payload (e.g. github.event.pull_request.user.login), and enforce trust with least-privilege permissions, environment protection rules with required reviewers, or a GitHub App identity.'
+      },
+      'hardcoded_container_credentials': {
+        description: 'This job hardcodes a container or service registry password as a literal string instead of referencing a secret. The credential is exposed to anyone with read access and is preserved permanently in git history.',
+        mitigation: 'Store the registry credential in GitHub Secrets and reference it as ${{ secrets.NAME }}. Rotate any password that was committed, since it remains recoverable from history.'
+      },
+      'secrets_outside_env': {
+        description: 'This workflow interpolates a secret directly into a run command. Secrets on the command line can leak via process listings, shell traces, error output, or imperfectly masked logs.',
+        mitigation: 'Pass the secret through a step env: variable and reference the environment variable in the command, e.g. env: { TOKEN: ${{ secrets.TOKEN }} } then use "$TOKEN". Quote the variable and avoid echoing it.'
+      },
+      'artifact_poisoning': {
+        description: 'This workflow downloads an artifact while running under a privileged trigger (pull_request_target or workflow_run). The artifact may have been produced by an untrusted run (such as a fork), so trusting its contents can pivot an attacker into the privileged workflow.',
+        mitigation: 'Do not consume untrusted artifacts in privileged workflows. Validate artifact names and contents, never execute downloaded files, and prefer operating only on trusted, verified inputs.'
+      },
+      'ref_version_mismatch': {
+        description: 'This action is pinned to a commit SHA whose trailing version comment (e.g. # v4) resolves to a different commit. The comment is misleading, so the workflow is not running the version it appears to, which can hide a downgrade or a swapped commit.',
+        mitigation: 'Re-pin to the SHA the intended tag points to, or correct the comment to match the commit actually in use. Use a pinning tool that keeps the SHA and version comment in sync.'
       }
     }
 

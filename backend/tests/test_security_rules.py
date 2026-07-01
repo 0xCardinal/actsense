@@ -791,3 +791,160 @@ class TestRunnerFileAndSecretExposureRules:
             "steps": [{"run": "echo hi"}]
         }}}
         assert security_rules.check_missing_permissions(wf) == []
+
+
+class TestToolDerivedRules:
+    """Tests for insecure_commands, spoofable_actor_condition,
+    hardcoded_container_credentials, secrets_outside_env, artifact_poisoning,
+    and ref_version_mismatch."""
+
+    def test_insecure_commands_env_flag(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "env": {"ACTIONS_ALLOW_UNSECURE_COMMANDS": "true"}, "steps": []}}}
+        issues = security_rules.check_insecure_commands(wf)
+        assert len(issues) == 1 and issues[0]["type"] == "insecure_commands"
+        assert issues[0]["severity"] == "high"
+
+    def test_insecure_commands_deprecated_stdout(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "steps": [{"run": 'echo "::set-env name=FOO::bar"'}]}}}
+        assert any(i["type"] == "insecure_commands" for i in security_rules.check_insecure_commands(wf))
+
+    def test_insecure_commands_clean(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "steps": [{"run": "echo hi"}]}}}
+        assert security_rules.check_insecure_commands(wf) == []
+
+    def test_spoofable_actor_condition(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "if": "github.actor == 'dependabot[bot]'", "steps": []}}}
+        issues = security_rules.check_bot_conditions(wf)
+        assert len(issues) == 1 and issues[0]["type"] == "spoofable_actor_condition"
+
+    def test_spoofable_actor_condition_step_level(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "steps": [{"if": "github.triggering_actor != 'evil'", "run": "x"}]}}}
+        assert len(security_rules.check_bot_conditions(wf)) == 1
+
+    def test_spoofable_actor_condition_clean(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "if": "github.event_name == 'push'", "steps": []}}}
+        assert security_rules.check_bot_conditions(wf) == []
+
+    def test_hardcoded_container_credentials(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "container": {"image": "reg/img", "credentials": {"username": "u", "password": "hunter2"}}}}}
+        issues = security_rules.check_hardcoded_container_credentials(wf)
+        assert len(issues) == 1 and issues[0]["type"] == "hardcoded_container_credentials"
+
+    def test_hardcoded_container_credentials_service(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "services": {"db": {"image": "postgres", "credentials": {"password": "p"}}}}}}
+        assert len(security_rules.check_hardcoded_container_credentials(wf)) == 1
+
+    def test_hardcoded_container_credentials_secret_ref_ok(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "container": {"image": "reg/img", "credentials": {"password": "${{ secrets.REG }}"}}}}}
+        assert security_rules.check_hardcoded_container_credentials(wf) == []
+
+    def test_secrets_outside_env(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "steps": [{"run": "deploy --token ${{ secrets.TOKEN }}"}]}}}
+        issues = security_rules.check_secrets_outside_env(wf)
+        assert len(issues) == 1 and issues[0]["type"] == "secrets_outside_env"
+
+    def test_secrets_outside_env_via_env_ok(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "steps": [{"run": 'deploy --token "$TOKEN"', "env": {"TOKEN": "${{ secrets.TOKEN }}"}}]}}}
+        assert security_rules.check_secrets_outside_env(wf) == []
+
+    def test_secrets_outside_env_skips_self_hosted(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "self-hosted",
+              "steps": [{"run": "x ${{ secrets.TOKEN }}"}]}}}
+        assert security_rules.check_secrets_outside_env(wf) == []
+
+    def test_artifact_poisoning(self):
+        wf = {"on": {"workflow_run": {}}, "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "steps": [{"uses": "actions/download-artifact@v4"}]}}}
+        issues = security_rules.check_artifact_poisoning(wf)
+        assert len(issues) == 1 and issues[0]["type"] == "artifact_poisoning"
+
+    def test_artifact_poisoning_safe_trigger(self):
+        wf = {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest",
+              "steps": [{"uses": "actions/download-artifact@v4"}]}}}
+        assert security_rules.check_artifact_poisoning(wf) == []
+
+    @pytest.mark.asyncio
+    async def test_ref_version_mismatch(self):
+        class FakeClient:
+            async def resolve_tag_to_sha(self, owner, repo, tag):
+                return {"v1": "a" * 40, "v2": "b" * 40}.get(tag)
+        content = "jobs:\n  j:\n    steps:\n      - uses: actions/checkout@" + "b" * 40 + "  # v1"
+        issues = await security_rules.check_ref_version_mismatch(content, FakeClient())
+        assert len(issues) == 1 and issues[0]["type"] == "ref_version_mismatch"
+
+    @pytest.mark.asyncio
+    async def test_ref_version_mismatch_match_ok(self):
+        class FakeClient:
+            async def resolve_tag_to_sha(self, owner, repo, tag):
+                return "a" * 40
+        content = "jobs:\n  j:\n    steps:\n      - uses: actions/checkout@" + "a" * 40 + "  # v1"
+        assert await security_rules.check_ref_version_mismatch(content, FakeClient()) == []
+
+    @pytest.mark.asyncio
+    async def test_ref_version_mismatch_no_client(self):
+        content = "uses: actions/checkout@" + "b" * 40 + "  # v1"
+        assert await security_rules.check_ref_version_mismatch(content, None) == []
+
+
+class TestNewRuleEdgeCases:
+    """Edge cases for the newly added rules: evasions (false negatives),
+    safe patterns (false positives), and malformed input."""
+
+    def test_github_env_injection_multiline_var(self):
+        # untrusted value stored in a shell var, then written to the sink later
+        wf = {"jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+            {"run": 'TITLE="${{ github.event.issue.title }}"\necho "T=$TITLE" >> $GITHUB_ENV'}
+        ]}}}
+        assert any(i["type"] == "github_env_injection"
+                   for i in security_rules.check_github_env_injection(wf))
+
+    def test_github_env_injection_no_fp_safe_context(self):
+        wf = {"jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [
+            {"run": 'echo "SHA=${{ github.sha }}" >> $GITHUB_ENV'},
+            {"run": 'echo "V=${{ matrix.node }}" >> $GITHUB_ENV'},
+        ]}}}
+        assert security_rules.check_github_env_injection(wf) == []
+
+    def test_excessive_secret_exposure_job_and_workflow_env(self):
+        wf_job = {"jobs": {"j": {"env": {"ALL": "${{ toJson(secrets) }}"}, "steps": []}}}
+        wf_wf = {"env": {"ALL": "${{ toJson(secrets) }}"}, "jobs": {}}
+        assert len(security_rules.check_excessive_secret_exposure(wf_job)) == 1
+        assert len(security_rules.check_excessive_secret_exposure(wf_wf)) == 1
+
+    def test_excessive_secret_exposure_no_fp_single_secret_tojson(self):
+        wf = {"jobs": {"j": {"steps": [{"run": "echo ${{ toJson(secrets.FOO) }}"}]}}}
+        assert security_rules.check_excessive_secret_exposure(wf) == []
+
+    def test_spoofable_actor_condition_contains(self):
+        wf = {"jobs": {"j": {"if": "contains(fromJson('[\"a\"]'), github.actor)", "steps": []}}}
+        assert len(security_rules.check_bot_conditions(wf)) == 1
+
+    def test_new_rules_do_not_crash_on_malformed(self):
+        malformed = [
+            {}, {"jobs": None}, {"jobs": "x"}, {"jobs": {"j": None}},
+            {"jobs": {"j": {"steps": None}}}, {"jobs": {"j": {"steps": [None, 5]}}},
+            {"jobs": {"j": {"env": "x", "steps": [{"env": "y", "with": "z", "run": 5}]}}},
+            {"jobs": {"j": {"container": "img", "services": "x"}}},
+            {"on": True, "jobs": {"j": {"steps": []}}},
+        ]
+        fns = [security_rules.check_github_env_injection,
+               security_rules.check_excessive_secret_exposure,
+               security_rules.check_secrets_inherit, security_rules.check_cache_poisoning,
+               security_rules.check_missing_permissions, security_rules.check_insecure_commands,
+               security_rules.check_bot_conditions,
+               security_rules.check_hardcoded_container_credentials,
+               security_rules.check_secrets_outside_env, security_rules.check_artifact_poisoning]
+        for wf in malformed:
+            for fn in fns:
+                assert isinstance(fn(wf), list)
