@@ -2277,3 +2277,53 @@ html.dark .ck-rail .ck-filters {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Filters header: title with a quiet Clear action beside it. */
+.ck-filters-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  margin-bottom: -0.5rem;
+}
+
+.ck-filters-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--as-ink);
+}
+
+.ck-clear-link {
+  padding: 2px 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--as-accent);
+  background: none;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.ck-clear-link:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.ck-clear-link[hidden] {
+  display: none;
+}
+
+/* In the check-page rail the header row only appears while a filter is on. */
+.ck-rail .ck-filters-head {
+  display: none;
+  margin: 0;
+}
+
+.ck-rail .ck-filters-head:has(.ck-clear-link:not([hidden])) {
+  display: flex;
+}
+
+.ck-rail .ck-filters-title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--as-ink-3);
+}

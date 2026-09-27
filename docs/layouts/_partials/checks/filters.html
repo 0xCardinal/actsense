@@ -2,6 +2,10 @@
        Context: dict "data" (site.Data.checks) "categories" (bool) */ -}}
 {{- $data := .data -}}
 <div class="ck-filters" data-check-filters>
+  <div class="ck-filters-head">
+    <span class="ck-filters-title">Filters</span>
+    <button type="button" class="ck-clear-link" data-filter-clear hidden>Clear</button>
+  </div>
   <label class="ck-search">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input type="search" placeholder="Search checks" aria-label="Search checks" data-filter-search autocomplete="off" spellcheck="false" />
@@ -36,5 +40,4 @@
   </fieldset>
   {{- end }}
 
-  <button type="button" class="ck-clear" data-filter-clear hidden>Clear filters</button>
 </div>

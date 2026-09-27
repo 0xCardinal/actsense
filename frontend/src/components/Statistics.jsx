@@ -32,6 +32,11 @@ function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode, c
     <section className="statistics" aria-label="Audit summary">
       <div className="statistics-head">
         <h2 className="sidebar-section-title">Results</h2>
+        {currentFilter && (
+          <button type="button" className="clear-filter" onClick={() => applyFilter(null, 'graph')}>
+            Clear filter
+          </button>
+        )}
         {typeof data.max_depth === 'number' && (
           <span className="depth-chip" title="Number of layers from the root to the deepest dependency">
             {data.max_depth + 1} levels
@@ -107,12 +112,6 @@ function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode, c
         </div>
       )}
 
-      {currentFilter && (
-        <button type="button" className="clear-filter" onClick={() => applyFilter(null, 'graph')}>
-          Clear filter
-          <span aria-hidden="true">×</span>
-        </button>
-      )}
     </section>
   )
 }

@@ -7,6 +7,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 22px;
   margin-bottom: 12px;
 }
 
@@ -179,24 +180,20 @@
   text-align: right;
 }
 
+/* A quiet text action in the header row, next to what it clears. */
 .clear-filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-  height: 26px;
-  padding: 0 10px;
+  margin-left: auto;
+  margin-right: 8px;
+  padding: 2px 6px;
   font-size: 0.75rem;
   font-weight: 500;
-  color: var(--ink-2);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-xs), var(--bevel);
+  color: var(--accent);
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs);
   cursor: pointer;
-  transition: background 0.15s ease;
 }
 
 .clear-filter:hover {
-  background: var(--surface-hover);
+  background: var(--accent-soft);
 }
