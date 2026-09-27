@@ -38,13 +38,13 @@ _WorkflowYamlLoader.yaml_implicit_resolvers = _WORKFLOW_SAFE_RESOLVERS
 
 
 def _safe_load_workflow_yaml(content: str) -> Any:
-    """Use yaml.safe_load with GitHub Actions compatible bool resolution."""
-    original_resolvers = yaml.SafeLoader.yaml_implicit_resolvers
-    yaml.SafeLoader.yaml_implicit_resolvers = _WORKFLOW_SAFE_RESOLVERS
-    try:
-        return yaml.safe_load(content)
-    finally:
-        yaml.SafeLoader.yaml_implicit_resolvers = original_resolvers
+    """yaml.safe_load with GitHub Actions compatible bool resolution.
+
+    Uses the dedicated loader subclass instead of temporarily swapping the
+    resolver table on yaml.SafeLoader, which would leak into any other
+    yaml.safe_load call made while this one is in progress.
+    """
+    return yaml.load(content, Loader=_WorkflowYamlLoader)  # noqa: S506 - SafeLoader subclass
 
 
 class WorkflowParser:
@@ -146,34 +146,66 @@ class WorkflowParser:
     def parse_action_yml(content: str) -> Dict[str, Any]:
         """Parse an action.yml or action.yaml file."""
         try:
-            return _safe_load_workflow_yaml(content) or {}
+            parsed = _safe_load_workflow_yaml(content)
         except yaml.YAMLError:
             logger.exception("Failed to parse action YAML")
             return {"error": "Invalid YAML content"}
+        return parsed if isinstance(parsed, dict) else {}
+
+    @staticmethod
+    def extract_local_references(workflow: Dict[str, Any]) -> List[str]:
+        """Extract local ``./path`` references (local actions and reusable workflows)."""
+        refs: List[str] = []
+
+        def walk(value):
+            if isinstance(value, dict):
+                uses_value = value.get("uses")
+                if isinstance(uses_value, str) and uses_value.startswith("./"):
+                    refs.append(uses_value.strip())
+                for v in value.values():
+                    walk(v)
+            elif isinstance(value, list):
+                for item in value:
+                    walk(item)
+
+        walk(workflow)
+        return list(dict.fromkeys(refs))
 
     @staticmethod
     def extract_action_dependencies(action_yml: Dict[str, Any]) -> List[str]:
-        """Extract dependencies (runs.using and other actions) from action.yml."""
+        """Extract the ``uses`` references of a composite action's steps."""
         dependencies = []
-        
-        if "runs" in action_yml:
-            runs = action_yml["runs"]
-            if "using" in runs:
-                using = runs["using"]
-                if isinstance(using, str) and using == "composite":
-                    # Composite actions can have steps with uses
-                    if "steps" in runs:
-                        for step in runs["steps"]:
-                            if isinstance(step, dict) and "uses" in step:
-                                uses_value = step["uses"]
-                                if isinstance(uses_value, str):
-                                    dependencies.append(uses_value)
-            # Docker actions might reference other actions
-            if "image" in runs:
-                image = runs["image"]
-                if isinstance(image, str) and not image.startswith("docker://"):
-                    # Could be a Dockerfile reference
-                    pass
-        
+        runs = action_yml.get("runs") if isinstance(action_yml, dict) else None
+        if not isinstance(runs, dict) or runs.get("using") != "composite":
+            return dependencies
+        steps = runs.get("steps")
+        if not isinstance(steps, list):
+            return dependencies
+        for step in steps:
+            if isinstance(step, dict) and isinstance(step.get("uses"), str):
+                dependencies.append(step["uses"].strip())
         return dependencies
 
+    @staticmethod
+    def extract_dockerfile_base_images(dockerfile: str) -> List[str]:
+        """Return external base images from Dockerfile FROM lines.
+
+        Skips ``scratch`` and references to earlier build stages
+        (``FROM builder``), which are not images pulled from a registry.
+        """
+        images: List[str] = []
+        stages = set()
+        for raw in (dockerfile or "").splitlines():
+            line = raw.strip()
+            if not line.upper().startswith("FROM "):
+                continue
+            tokens = [t for t in line.split()[1:] if not t.startswith("--")]
+            if not tokens:
+                continue
+            image = tokens[0]
+            if len(tokens) >= 3 and tokens[1].upper() == "AS":
+                stages.add(tokens[2].lower())
+            if image.lower() == "scratch" or image.lower() in stages or "$" in image:
+                continue
+            images.append(image)
+        return list(dict.fromkeys(images))

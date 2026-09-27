@@ -4,8 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any, Set, Callable
+from typing import Optional, List, Dict, Any, Set, Callable, Tuple
 import asyncio
+import inspect
 import json
 import os
 import re
@@ -54,6 +55,14 @@ FRONTEND_BUILD_PATH = os.path.join(os.path.dirname(__file__), "..", "frontend", 
 if os.path.exists(FRONTEND_BUILD_PATH):
     app.mount("/static", StaticFiles(directory=os.path.join(FRONTEND_BUILD_PATH, "assets")), name="static")
 
+# How many levels of nested actions / reusable workflows to follow below a
+# workflow. GitHub itself caps reusable-workflow nesting at 10 levels.
+DEFAULT_MAX_DEPTH = 10
+
+# JavaScript action runtimes GitHub has shipped (node12/16 are deprecated but
+# still found in the wild).
+JS_RUNTIMES = ("node12", "node16", "node20", "node24")
+
 
 class AuditRequest(BaseModel):
     repository: Optional[str] = None
@@ -67,23 +76,84 @@ class AuditYAMLRequest(BaseModel):
     github_token: Optional[str] = None
 
 
+async def _close_client(client: Any) -> None:
+    """Close a GitHubClient's pooled connection (tolerates test doubles)."""
+    close = getattr(client, "aclose", None)
+    if close is None:
+        return
+    try:
+        result = close()
+        if inspect.isawaitable(result):
+            await result
+    except Exception:
+        pass
+
+
+def _is_reusable_workflow_path(subdir: Optional[str]) -> bool:
+    return bool(subdir) and (".github/workflows" in subdir or subdir.endswith((".yml", ".yaml")))
+
+
+def _localize_reference(local_ref: str, owner: str, repo: str, ref: str) -> str:
+    """Turn ``./path`` into the equivalent remote reference ``owner/repo/path@ref``.
+
+    A canonical remote-style id lets local actions and local reusable workflows
+    be resolved (fetched at the right ref, audited, recursed into) by exactly the
+    same code path as remote ones, and de-duplicated with them in the graph.
+    """
+    path = local_ref[2:].strip("/")
+    return f"{owner}/{repo}/{path}@{ref}" if path else f"{owner}/{repo}@{ref}"
+
+
+async def _resolve_children(
+    client: GitHubClient,
+    parent_id: str,
+    child_refs: List[str],
+    graph: GraphBuilder,
+    visited: Set[str],
+    depth: int,
+    max_depth: int,
+    log_fn: Optional[Callable[[str], None]],
+    labels: Optional[Dict[str, str]] = None,
+) -> None:
+    """Add parent -> child edges and resolve all children concurrently."""
+    labels = labels or {}
+    for child in child_refs:
+        graph.add_edge(parent_id, child)
+    await asyncio.gather(*(
+        resolve_action_dependencies(
+            client, child, graph, visited, depth + 1, max_depth, log_fn,
+            label=labels.get(child),
+        )
+        for child in child_refs
+    ))
+
+
 async def resolve_action_dependencies(
     client: GitHubClient,
     action_ref: str,
     graph: GraphBuilder,
     visited: Set[str],
     depth: int = 0,
-    max_depth: int = 5,
-    log_fn: Optional[Callable[[str], None]] = None
+    max_depth: int = DEFAULT_MAX_DEPTH,
+    log_fn: Optional[Callable[[str], None]] = None,
+    label: Optional[str] = None,
 ):
-    """Recursively resolve action dependencies."""
+    """Recursively resolve an action / reusable workflow and everything it pulls in.
+
+    Follows, at the ref actually pinned:
+      * composite action steps (``runs.steps[*].uses``)
+      * reusable workflows (every ``uses`` in the called workflow, including its
+        own local ``./.github/workflows/*`` calls, resolved in the called repo)
+      * Docker actions' registry image (``runs.image: docker://...``) and the
+        base images of their Dockerfile
+    """
     if depth > max_depth or action_ref in visited:
         return
-    
+
     _log = log_fn or (lambda _: None)
     visited.add(action_ref)
     _log(f"Resolving {action_ref}")
-    
+
     # Handle docker images: add as a node but don't try to resolve further
     if action_ref.startswith("docker://"):
         graph.add_node(action_ref, action_ref, "docker_image", {"image": action_ref})
@@ -91,150 +161,166 @@ async def resolve_action_dependencies(
         if issues:
             graph.add_issues_to_node(action_ref, issues)
         return
-    
-    # Parse action reference
+
     owner, repo, ref, subdir = client.parse_action_reference(action_ref)
     if not owner or not repo:
         return
-    
-    # Handle reusable workflows
-    if subdir and (".github/workflows" in subdir or subdir.endswith((".yml", ".yaml"))):
-        display_name = f"{owner}/{repo}/{subdir}@{ref}"
-        graph.add_node(action_ref, display_name, "reusable_workflow", {"owner": owner, "repo": repo, "ref": ref, "subdir": subdir})
+
+    is_local = label is not None and label.startswith("./")
+
+    # Reusable workflows
+    if _is_reusable_workflow_path(subdir):
+        display_name = label or f"{owner}/{repo}/{subdir}@{ref}"
+        graph.add_node(action_ref, display_name, "reusable_workflow",
+                       {"owner": owner, "repo": repo, "ref": ref, "subdir": subdir, "local": is_local})
         try:
-            workflow_content = await client.get_file_content(owner, repo, subdir)
-            workflow = parser.parse_workflow(workflow_content)
-            if isinstance(workflow, dict) and "error" not in workflow:
-                workflow_issues = await auditor.audit_workflow(workflow, content=workflow_content, client=client)
-                if workflow_issues:
-                    graph.add_issues_to_node(action_ref, workflow_issues)
-                dependencies = parser.extract_actions(workflow)
-                for dep in dependencies:
-                    graph.add_edge(action_ref, dep)
-                    await resolve_action_dependencies(client, dep, graph, visited, depth + 1, max_depth, log_fn)
-        except Exception:
-            pass
+            workflow_content = await client.get_file_content(owner, repo, subdir, ref=ref)
+        except Exception as exc:
+            _log(f"  Could not fetch reusable workflow {action_ref}: {exc}")
+            return
+        workflow = parser.parse_workflow(workflow_content)
+        if not isinstance(workflow, dict) or "error" in workflow:
+            return
+        workflow_issues = await auditor.audit_workflow(workflow, content=workflow_content, client=client)
+        graph.add_issues_to_node(action_ref, workflow_issues)
+        _add_package_dependency_nodes(graph, action_ref, workflow_issues)
+        _add_workflow_container_image_nodes(graph, workflow, action_ref, workflow_issues)
+
+        children = parser.extract_actions(workflow)
+        labels: Dict[str, str] = {}
+        # Nested local reusable-workflow calls resolve against the called
+        # workflow's own repository and commit. Local *actions* inside it refer
+        # to whatever the job checked out, which cannot be known statically.
+        for local_ref in parser.extract_local_references(workflow):
+            if _is_reusable_workflow_path(local_ref[2:]):
+                canonical = _localize_reference(local_ref, owner, repo, ref)
+                labels[canonical] = local_ref
+                children.append(canonical)
+        await _resolve_children(client, action_ref, children, graph, visited, depth, max_depth, log_fn, labels)
         return
-    
-    # Add node to graph
+
     display_name = f"{owner}/{repo}"
     if subdir:
         display_name = f"{display_name}/{subdir}"
-    display_name = f"{display_name}@{ref}"
-    
+    display_name = label or f"{display_name}@{ref}"
     graph.add_node(
         action_ref,
         display_name,
         "action",
-        {"owner": owner, "repo": repo, "ref": ref, "subdir": subdir}
+        {"owner": owner, "repo": repo, "ref": ref, "subdir": subdir, "local": is_local}
     )
-    
-    # Check if repository exists
-    repo_key = f"{owner}/{repo}"
-    repo_exists = None
-    try:
-        repo_info = await client.get_repository_info(owner, repo)
-        repo_exists = repo_info is not None
-    except HTTPException:
-        # For API errors (rate limits, network issues), don't assume repo is missing
-        # Skip this check rather than marking as missing
-        return
-    except Exception:
-        # For other unexpected errors, don't assume repo is missing
-        return
-    
-    # If repository doesn't exist, add a critical issue
-    if repo_exists is False:
-        missing_repo_issue = {
-            "type": "missing_action_repository",
-            "severity": "critical",
-            "message": f"Action '{action_ref}' references repository '{repo_key}' that does not exist or is not accessible. This will cause workflow failures at runtime.",
-            "action": action_ref,
-            "evidence": {
+
+    # Local actions live in the audited repository, which we know exists.
+    if not is_local:
+        repo_key = f"{owner}/{repo}"
+        try:
+            repo_exists = (await client.get_repository_info(owner, repo)) is not None
+        except Exception:
+            # Rate limit / network error: existence is unknown, not "missing".
+            # Keep going; the metadata fetch below may still succeed.
+            repo_exists = None
+
+        if repo_exists is False:
+            graph.add_issues_to_node(action_ref, [{
+                "type": "missing_action_repository",
+                "severity": "critical",
+                "message": f"Action '{action_ref}' references repository '{repo_key}' that does not exist or is not accessible. This will cause workflow failures at runtime.",
                 "action": action_ref,
-                "repository": repo_key,
-                "exists": False,
-                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/missing_action_repository"
-            },
-            "recommendation": f"Verify the action reference '{action_ref}' is correct. The repository '{repo_key}' may have been deleted, moved, made private, or the reference may contain a typo. Update the workflow to use a valid action reference."
-        }
-        graph.add_issues_to_node(action_ref, [missing_repo_issue])
-        # Don't try to fetch metadata if repository doesn't exist
-        return
-    
-    # Get action metadata first (needed for comprehensive auditing)
+                "evidence": {
+                    "action": action_ref,
+                    "repository": repo_key,
+                    "exists": False,
+                    "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/missing_action_repository"
+                },
+                "recommendation": f"Verify the action reference '{action_ref}' is correct. The repository '{repo_key}' may have been deleted, moved, made private, or the reference may contain a typo. Update the workflow to use a valid action reference."
+            }])
+            return
+
     action_yml = None
     js_action_code = None
     dockerfile_content = None
+    base_dir = subdir.rstrip("/") if subdir else ""
+
+    def _join(path: str) -> str:
+        if path.startswith("./"):
+            path = path[2:]
+        return f"{base_dir}/{path}" if base_dir else path
+
     try:
         action_metadata = await client.get_action_metadata(owner, repo, ref, subdir)
-        if action_metadata:
-            action_yml = parser.parse_action_yml(action_metadata["content"])
-            
-            runs = action_yml.get("runs", {})
-            
-            # For JavaScript actions, try to get the main entry point code
-            if runs.get("using") in ["node12", "node16", "node20"]:
-                main_file = runs.get("main", "index.js")
-                if subdir:
-                    main_path = f"{subdir.rstrip('/')}/{main_file}"
-                else:
-                    main_path = main_file
-                
+    except Exception as exc:
+        _log(f"  Could not fetch action metadata for {action_ref}: {exc}")
+        action_metadata = None
+
+    if action_metadata:
+        action_yml = parser.parse_action_yml(action_metadata["content"])
+        runs = action_yml.get("runs") if isinstance(action_yml.get("runs"), dict) else {}
+        using = str(runs.get("using", "")).lower()
+
+        if using in JS_RUNTIMES:
+            main_file = runs.get("main") or "index.js"
+            for candidate in dict.fromkeys([_join(main_file), _join("dist/index.js")]):
                 try:
-                    js_action_code = await client.get_file_content(owner, repo, main_path)
+                    js_action_code = await client.get_file_content(owner, repo, candidate, ref=ref)
+                    break
                 except Exception:
-                    # If main file doesn't exist, try dist/index.js or index.js in root
-                    for alt_path in [f"{subdir.rstrip('/')}/dist/index.js" if subdir else "dist/index.js", "index.js"]:
-                        try:
-                            js_action_code = await client.get_file_content(owner, repo, alt_path)
-                            break
-                        except Exception:
-                            continue
-            
-            # For Docker actions, try to get Dockerfile content if Dockerfile path is specified
-            elif runs.get("using") == "docker":
-                dockerfile_path = runs.get("image", "")
-                if dockerfile_path and not dockerfile_path.startswith("docker://") and ":" not in dockerfile_path:
-                    # This is likely a Dockerfile path
-                    if subdir:
-                        dockerfile_full_path = f"{subdir.rstrip('/')}/{dockerfile_path}"
-                    else:
-                        dockerfile_full_path = dockerfile_path
-                    
+                    continue
+
+        elif using == "docker":
+            image = runs.get("image", "")
+            if isinstance(image, str) and image and not image.startswith("docker://"):
+                for candidate in dict.fromkeys([_join(image), _join("Dockerfile")]):
                     try:
-                        dockerfile_content = await client.get_file_content(owner, repo, dockerfile_full_path)
+                        dockerfile_content = await client.get_file_content(owner, repo, candidate, ref=ref)
+                        break
                     except Exception:
-                        # Try common Dockerfile names
-                        for alt_name in ["Dockerfile", "dockerfile", f"{subdir.rstrip('/')}/Dockerfile" if subdir else "Dockerfile"]:
-                            try:
-                                dockerfile_content = await client.get_file_content(owner, repo, alt_name)
-                                break
-                            except Exception:
-                                continue
-    except Exception as e:
-        # Silently skip if action.yml doesn't exist (e.g., for Docker-only actions)
-        pass
-    
-    # Audit the action (with metadata if available)
-    # action_content parameter expects JavaScript code for JS actions, not action.yml content
+                        continue
+
     issues = auditor.audit_action(action_ref, action_yml, js_action_code, dockerfile_content)
     graph.add_issues_to_node(action_ref, issues)
     _add_package_dependency_nodes(graph, action_ref, issues)
-    
-    # Resolve dependencies if action_yml is available
-    if action_yml:
-        try:
-            dependencies = parser.extract_action_dependencies(action_yml)
-            
-            for dep in dependencies:
-                graph.add_edge(action_ref, dep)
-                await resolve_action_dependencies(
-                    client, dep, graph, visited, depth + 1, max_depth, log_fn
-                )
-        except Exception as e:
-            # Silently skip if there's an error resolving dependencies
-            pass
+
+    if not action_yml:
+        return
+
+    runs = action_yml.get("runs") if isinstance(action_yml.get("runs"), dict) else {}
+    using = str(runs.get("using", "")).lower()
+
+    if using == "docker":
+        image = runs.get("image", "")
+        if isinstance(image, str) and image.startswith("docker://"):
+            await _resolve_children(client, action_ref, [image], graph, visited, depth, max_depth, log_fn)
+        elif dockerfile_content:
+            for base_image in parser.extract_dockerfile_base_images(dockerfile_content):
+                image_id = f"container://{base_image}"
+                graph.add_node(image_id, base_image, "container_image",
+                               {"image": base_image, "source": "dockerfile", "action": action_ref})
+                graph.add_edge(action_ref, image_id)
+                pinned = "@sha256:" in base_image
+                if not pinned:
+                    graph.add_issues_to_node(image_id, [{
+                        "type": "unpinned_container_image",
+                        "severity": "medium",
+                        "message": f"Docker action '{action_ref}' builds from base image '{base_image}', which is not pinned to a digest. The image behind a mutable tag can change without the action's ref changing.",
+                        "action": action_ref,
+                        "evidence": {
+                            "image": base_image,
+                            "source": "dockerfile",
+                            "action": action_ref,
+                            "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinned_container_image"
+                        },
+                        "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinned_container_image"
+                    }])
+        return
+
+    # Composite actions: follow sub-action references. A ``./path`` inside a
+    # composite action resolves against the caller's workspace, not the action's
+    # repository, so it cannot be followed statically.
+    dependencies = [
+        dep for dep in parser.extract_action_dependencies(action_yml)
+        if not dep.startswith("./")
+    ]
+    await _resolve_children(client, action_ref, dependencies, graph, visited, depth, max_depth, log_fn)
 
 
 def _add_workflow_container_image_nodes(
@@ -245,17 +331,18 @@ def _add_workflow_container_image_nodes(
 ) -> None:
     """Add container_image nodes and copy unpinned-container issues onto them for UI clarity."""
     for img_info in parser.extract_container_images(workflow):
-        img_node_id = f"container://{img_info['image']}"
-        graph.add_node(img_node_id, img_info["image"], "container_image", img_info)
-        graph.add_edge(workflow_node_id, img_node_id)
         img = img_info.get("image")
-        if not img:
+        if not img or img.startswith("${{"):
             continue
+        img_node_id = f"container://{img}"
+        graph.add_node(img_node_id, img, "container_image", img_info)
+        graph.add_edge(workflow_node_id, img_node_id)
         related = [
             i
             for i in workflow_issues
             if i.get("type") == "unpinned_container_image"
             and (i.get("evidence") or {}).get("image") == img
+            and i.get("job") == img_info.get("job")
         ]
         if related:
             graph.add_issues_to_node(img_node_id, related)
@@ -300,6 +387,58 @@ def _add_package_dependency_nodes(
             graph.add_issues_to_node(package_node_id, [issue])
 
 
+async def _audit_single_workflow(
+    client: GitHubClient,
+    graph: GraphBuilder,
+    repo_node_id: str,
+    owner: str,
+    repo: str,
+    default_branch: str,
+    workflow_file: Dict[str, Any],
+    content: str,
+    visited: Set[str],
+    is_public_repo: bool,
+    log_fn: Optional[Callable[[str], None]],
+) -> Optional[Dict[str, Any]]:
+    """Audit one workflow file of the repository and resolve everything it uses."""
+    _log = log_fn or (lambda _: None)
+    _log(f"Parsing {workflow_file['name']}")
+    workflow = parser.parse_workflow(content)
+    if not isinstance(workflow, dict) or "error" in workflow:
+        return None
+
+    _log(f"Auditing {workflow_file['name']}")
+    workflow_issues = await auditor.audit_workflow(
+        workflow, content=content, client=client, current_repo=f"{owner}/{repo}",
+        is_public_repo=is_public_repo, log_fn=log_fn,
+    )
+    workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
+    graph.add_node(workflow_node_id, workflow_file["name"], "workflow", {"path": workflow_file["path"]})
+    graph.add_edge(repo_node_id, workflow_node_id, "contains")
+    graph.add_issues_to_node(workflow_node_id, workflow_issues)
+    _add_package_dependency_nodes(graph, workflow_node_id, workflow_issues)
+    _add_workflow_container_image_nodes(graph, workflow, workflow_node_id, workflow_issues)
+
+    actions = parser.extract_actions(workflow)
+    children = list(actions)
+    labels: Dict[str, str] = {}
+    # Local actions (./.github/actions/x) and local reusable workflows
+    # (./.github/workflows/x.yml) live in this repository. Resolve them at the
+    # default branch -- the ref the audited workflow files were read from.
+    for local_ref in parser.extract_local_references(workflow):
+        canonical = _localize_reference(local_ref, owner, repo, default_branch)
+        labels[canonical] = local_ref
+        children.append(canonical)
+
+    await _resolve_children(client, workflow_node_id, children, graph, visited, -1, DEFAULT_MAX_DEPTH, log_fn, labels)
+
+    return {
+        "workflow_name": workflow_file["name"],
+        "workflow_path": workflow_file["path"],
+        "actions": actions,
+    }
+
+
 async def audit_repository(
     client: GitHubClient,
     owner: str,
@@ -311,11 +450,11 @@ async def audit_repository(
 ):
     """Audit a repository's workflows."""
     _log = log_fn or (lambda _: None)
-    
+
     repo_node_id = f"{owner}/{repo}"
-    # default_branch is used for GitHub web URLs (e.g. /blob/<branch>/<path>#L<line>).
-    # `HEAD` is *not* a valid branch name for /blob/ paths in the GitHub UI, so we must
-    # use the repository's real default branch when available.
+    # default_branch is used for GitHub web URLs (e.g. /blob/<branch>/<path>#L<line>)
+    # and as the ref for local actions. `HEAD` is *not* a valid branch name for
+    # /blob/ paths in the GitHub UI, so use the real default branch when known.
     default_branch = "main"
     is_public_repo = False
     _log(f"Checking repository metadata for {owner}/{repo}")
@@ -340,187 +479,97 @@ async def audit_repository(
         "repository",
         {"owner": owner, "repo": repo, "default_branch": default_branch},
     )
-    
-    current_repo = f"{owner}/{repo}"
-    
+
     clone_path = None
-    workflow_actions_data = []  # Collect actions from all workflows for inconsistency checking
-    
+    visited: Set[str] = set()
+
     try:
         if use_clone:
             _log(f"Cloning {owner}/{repo}...")
-            clone_path, _ = cloner.clone_repository(owner, repo, token)
+            clone_path, _ = await asyncio.to_thread(cloner.clone_repository, owner, repo, token)
             workflows = cloner.get_workflow_files(clone_path)
-            _log(f"Found {len(workflows)} workflow(s)")
-            
-            visited = set()
-            
-            for workflow_file in workflows:
-                try:
-                    _log(f"Parsing {workflow_file['name']}")
-                    content = cloner.get_file_content(clone_path, workflow_file["path"])
-                    workflow = parser.parse_workflow(content)
-                    
-                    if not isinstance(workflow, dict) or "error" in workflow:
-                        continue
-                    
-                    _log(f"Auditing {workflow_file['name']}")
-                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client, current_repo=current_repo, is_public_repo=is_public_repo, log_fn=log_fn)
-                    workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
-                    graph.add_node(
-                        workflow_node_id,
-                        workflow_file["name"],
-                        "workflow",
-                        {"path": workflow_file["path"]}
-                    )
-                    graph.add_edge(repo_node_id, workflow_node_id)
-                    graph.add_issues_to_node(workflow_node_id, workflow_issues)
-                    _add_package_dependency_nodes(graph, workflow_node_id, workflow_issues)
-                    
-                    # Extract actions
-                    actions = parser.extract_actions(workflow)
-                    
-                    # Collect actions for inconsistency checking
-                    workflow_actions_data.append({
-                        'workflow_name': workflow_file['name'],
-                        'workflow_path': workflow_file['path'],
-                        'actions': actions
-                    })
-                    
-                    for action_ref in actions:
-                        graph.add_edge(workflow_node_id, action_ref)
-                        await resolve_action_dependencies(
-                            client, action_ref, graph, visited, log_fn=log_fn
-                        )
-                    
-                    _add_workflow_container_image_nodes(
-                        graph, workflow, workflow_node_id, workflow_issues
-                    )
-                except Exception as e:
-                    _log(f"Error processing {workflow_file['name']}: {e}")
-                    graph.add_issues_to_node(repo_node_id, [{
-                        "type": "workflow_processing_error",
-                        "severity": "low",
-                        "message": f"Failed to process workflow '{workflow_file['name']}': {e}",
-                        "evidence": {"workflow": workflow_file["name"], "error": str(e)},
-                        "recommendation": "Check if the workflow file is valid YAML and accessible."
-                    }])
+
+            async def load(workflow_file):
+                return cloner.get_file_content(clone_path, workflow_file["path"])
         else:
-            _log(f"Fetching workflows via API...")
+            _log("Fetching workflows via API...")
             workflows = await client.get_workflows(owner, repo)
-            _log(f"Found {len(workflows)} workflow(s)")
-            
-            visited = set()
-            
-            for workflow_file in workflows:
-                try:
-                    _log(f"Parsing {workflow_file['name']}")
-                    content = await client.get_file_content(owner, repo, workflow_file["path"])
-                    workflow = parser.parse_workflow(content)
-                    
-                    if not isinstance(workflow, dict) or "error" in workflow:
-                        continue
-                    
-                    _log(f"Auditing {workflow_file['name']}")
-                    workflow_issues = await auditor.audit_workflow(workflow, content=content, client=client, current_repo=current_repo, is_public_repo=is_public_repo, log_fn=log_fn)
-                    workflow_node_id = f"{repo_node_id}:{workflow_file['name']}"
-                    graph.add_node(
-                        workflow_node_id,
-                        workflow_file["name"],
-                        "workflow",
-                        {"path": workflow_file["path"]}
-                    )
-                    graph.add_edge(repo_node_id, workflow_node_id)
-                    graph.add_issues_to_node(workflow_node_id, workflow_issues)
-                    _add_package_dependency_nodes(graph, workflow_node_id, workflow_issues)
-                    
-                    # Extract actions
-                    actions = parser.extract_actions(workflow)
-                    
-                    # Collect actions for inconsistency checking
-                    workflow_actions_data.append({
-                        'workflow_name': workflow_file['name'],
-                        'workflow_path': workflow_file['path'],
-                        'actions': actions
-                    })
-                    
-                    for action_ref in actions:
-                        graph.add_edge(workflow_node_id, action_ref)
-                        await resolve_action_dependencies(
-                            client, action_ref, graph, visited, log_fn=log_fn
-                        )
-                    
-                    _add_workflow_container_image_nodes(
-                        graph, workflow, workflow_node_id, workflow_issues
-                    )
-                except Exception as e:
-                    _log(f"Error processing {workflow_file['name']}: {e}")
-                    graph.add_issues_to_node(repo_node_id, [{
-                        "type": "workflow_processing_error",
-                        "severity": "low",
-                        "message": f"Failed to process workflow '{workflow_file['name']}': {e}",
-                        "evidence": {"workflow": workflow_file["name"], "error": str(e)},
-                        "recommendation": "Check if the workflow file is valid YAML and accessible."
-                    }])
-        
+
+            async def load(workflow_file):
+                return await client.get_file_content(owner, repo, workflow_file["path"])
+        _log(f"Found {len(workflows)} workflow(s)")
+
+        async def process(workflow_file):
+            try:
+                content = await load(workflow_file)
+                return await _audit_single_workflow(
+                    client, graph, repo_node_id, owner, repo, default_branch,
+                    workflow_file, content, visited, is_public_repo, log_fn,
+                )
+            except Exception as e:
+                _log(f"Error processing {workflow_file['name']}: {e}")
+                graph.add_issues_to_node(repo_node_id, [{
+                    "type": "workflow_processing_error",
+                    "severity": "low",
+                    "message": f"Failed to process workflow '{workflow_file['name']}': {e}",
+                    "evidence": {"workflow": workflow_file["name"], "error": str(e)},
+                    "recommendation": "Check if the workflow file is valid YAML and accessible."
+                }])
+                return None
+
+        results = await asyncio.gather(*(process(wf) for wf in workflows))
+        workflow_actions_data = [r for r in results if r]
+
         _log("Checking version consistency across workflows")
-        # Check for inconsistent action versions across workflows
-        if len(workflow_actions_data) > 1:  # Only check if there are multiple workflows
+        if len(workflow_actions_data) > 1:
             inconsistency_issues = auditor.check_inconsistent_action_versions(workflow_actions_data)
             if inconsistency_issues:
                 graph.add_issues_to_node(repo_node_id, inconsistency_issues)
     finally:
-        # Cleanup cloned repository
         if clone_path:
             cloner.cleanup(clone_path)
 
 
-@app.post("/api/audit")
-async def audit(request: AuditRequest):
-    """Audit a repository or action."""
+def _parse_repository_input(repo_str: str) -> Tuple[str, str]:
+    """Accept 'owner/repo' or a github.com URL; return (owner, repo)."""
+    repo_str = repo_str.strip()
+    parsed_url = urlparse(repo_str)
+    if parsed_url.scheme and parsed_url.netloc:
+        if parsed_url.netloc not in ("github.com", "www.github.com"):
+            raise HTTPException(status_code=400, detail="Only github.com repository URLs are supported")
+        path_parts = parsed_url.path.strip("/").split("/")
+        if len(path_parts) < 2 or not path_parts[0] or not path_parts[1]:
+            raise HTTPException(status_code=400, detail="Invalid repository URL")
+        repo_name = path_parts[1][:-4] if path_parts[1].endswith(".git") else path_parts[1]
+        return path_parts[0], repo_name
+    parts = repo_str.split("/")
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise HTTPException(status_code=400, detail="Invalid repository format. Use 'owner/repo'")
+    return parts[0], parts[1]
+
+
+async def _run_audit(request: AuditRequest, log_fn: Optional[Callable[[str], None]] = None) -> Dict[str, Any]:
+    """Run a repository or action audit, persist it, and return the result payload."""
     client = GitHubClient(token=request.github_token)
     graph = GraphBuilder()
-    
     try:
         repository = None
         action = None
-        
         if request.repository:
-            # Parse repository: owner/repo or full URL
-            repo_str = request.repository
-            # Check if repo_str is a full GitHub URL
-            parsed_url = urlparse(repo_str)
-            if parsed_url.scheme and parsed_url.netloc:
-                # Allow both github.com and www.github.com
-                if parsed_url.netloc not in ("github.com", "www.github.com"):
-                    raise HTTPException(status_code=400, detail="Only github.com repository URLs are supported")
-                path_parts = parsed_url.path.strip("/").split("/")
-                if len(path_parts) < 2:
-                    raise HTTPException(status_code=400, detail="Invalid repository URL")
-                owner, repo = path_parts[0], path_parts[1].replace(".git", "")
-            else:
-                # Not a full URL, treat as owner/repo format
-                parts = repo_str.split("/")
-                if len(parts) != 2:
-                    raise HTTPException(status_code=400, detail="Invalid repository format. Use 'owner/repo'")
-                owner, repo = parts
-            
+            owner, repo = _parse_repository_input(request.repository)
             repository = f"{owner}/{repo}"
-            await audit_repository(client, owner, repo, graph, request.use_clone, request.github_token)
-        
+            await audit_repository(client, owner, repo, graph, request.use_clone, request.github_token, log_fn=log_fn)
         elif request.action:
-            # Audit a single action
-            action = request.action
-            visited = set()
-            await resolve_action_dependencies(client, request.action, graph, visited)
-        
+            action = request.action.strip()
+            await resolve_action_dependencies(client, action, graph, set(), log_fn=log_fn)
         else:
             raise HTTPException(status_code=400, detail="Either repository or action must be provided")
-        
+
+        if log_fn:
+            log_fn("Building final graph...")
         graph_data = graph.get_graph_data()
         statistics = graph.get_statistics()
-        
-        # Save analysis
+
         analysis_id = storage.save_analysis(
             repository=repository,
             action=action,
@@ -528,13 +577,16 @@ async def audit(request: AuditRequest):
             statistics=statistics,
             method="clone" if request.use_clone else "api"
         )
-        
-        return {
-            "id": analysis_id,
-            "graph": graph_data,
-            "statistics": statistics
-        }
-    
+        return {"id": analysis_id, "graph": graph_data, "statistics": statistics}
+    finally:
+        await _close_client(client)
+
+
+@app.post("/api/audit")
+async def audit(request: AuditRequest):
+    """Audit a repository or action."""
+    try:
+        return await _run_audit(request)
     except HTTPException:
         raise
     except CloneError as e:
@@ -547,58 +599,15 @@ async def audit(request: AuditRequest):
 @app.post("/api/audit/stream")
 async def audit_stream(request: AuditRequest):
     """Audit with Server-Sent Events for real-time progress."""
-    log_queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
+    log_queue: asyncio.Queue = asyncio.Queue()
 
     def log_callback(msg: str):
         log_queue.put_nowait(msg)
 
     async def run_audit():
         """Execute the audit and push the result (or error) onto the queue."""
-        client = GitHubClient(token=request.github_token)
-        graph = GraphBuilder()
         try:
-            repository = None
-            action = None
-
-            if request.repository:
-                repo_str = request.repository
-                parsed_url = urlparse(repo_str)
-                if parsed_url.scheme and parsed_url.netloc:
-                    if parsed_url.netloc not in ("github.com", "www.github.com"):
-                        raise HTTPException(status_code=400, detail="Only github.com repository URLs are supported")
-                    path_parts = parsed_url.path.strip("/").split("/")
-                    if len(path_parts) < 2:
-                        raise HTTPException(status_code=400, detail="Invalid repository URL")
-                    owner, repo = path_parts[0], path_parts[1].replace(".git", "")
-                else:
-                    parts = repo_str.split("/")
-                    if len(parts) != 2:
-                        raise HTTPException(status_code=400, detail="Invalid repository format. Use 'owner/repo'")
-                    owner, repo = parts
-
-                repository = f"{owner}/{repo}"
-                await audit_repository(client, owner, repo, graph, request.use_clone, request.github_token, log_fn=log_callback)
-
-            elif request.action:
-                action = request.action
-                visited: Set[str] = set()
-                await resolve_action_dependencies(client, request.action, graph, visited, log_fn=log_callback)
-            else:
-                raise HTTPException(status_code=400, detail="Either repository or action must be provided")
-
-            log_callback("Building final graph...")
-            graph_data = graph.get_graph_data()
-            statistics = graph.get_statistics()
-
-            analysis_id = storage.save_analysis(
-                repository=repository,
-                action=action,
-                graph_data=graph_data,
-                statistics=statistics,
-                method="clone" if request.use_clone else "api"
-            )
-
-            result = {"id": analysis_id, "graph": graph_data, "statistics": statistics}
+            result = await _run_audit(request, log_fn=log_callback)
             log_queue.put_nowait(("__RESULT__", result))
         except HTTPException as exc:
             log_queue.put_nowait(("__ERROR__", exc.detail))
@@ -649,7 +658,15 @@ async def audit_fix(request: AuditYAMLRequest):
         raise HTTPException(status_code=400, detail="Invalid workflow YAML")
 
     client = GitHubClient(token=request.github_token)
-    issues = await auditor.audit_workflow(workflow, content=request.yaml_content, client=client)
+    try:
+        issues = await auditor.audit_workflow(workflow, content=request.yaml_content, client=client)
+        return await _build_fixes(request, client, issues)
+    finally:
+        await _close_client(client)
+
+
+async def _build_fixes(request: AuditYAMLRequest, client: GitHubClient, issues: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Turn audit findings into concrete line-level fix suggestions."""
 
     lines = request.yaml_content.split('\n')
     fixes = []
@@ -790,7 +807,7 @@ async def audit_fix(request: AuditYAMLRequest):
                         })
                         break
 
-        elif issue_type == "artifact_retention":
+        elif issue_type == "artifact_exposure_risk" and "retention-days" in issue.get("message", ""):
             job_name = issue.get("job", "")
             fix_key = f"retention:{job_name}"
             if fix_key in seen_fixes:
@@ -838,39 +855,57 @@ async def audit_fix(request: AuditYAMLRequest):
                 continue
             seen_fixes.add(fix_key)
             for i, l in enumerate(lines):
-                if "actions/checkout" in l and "persist-credentials" not in request.yaml_content[sum(len(lines[k])+1 for k in range(max(0,i-1), min(i+8, len(lines)))):]:
-                    # Find with: block or add one
-                    indent = len(l) - len(l.lstrip())
-                    for j in range(i + 1, min(i + 8, len(lines))):
-                        if lines[j].strip().startswith("with:"):
-                            with_line = lines[j]
-                            child_indent = " " * (indent + 6)
-                            fixes.append({
-                                "line": j + 1,
-                                "original": with_line,
-                                "replacement": with_line + f"\n{child_indent}persist-credentials: false",
-                                "issue_type": issue_type,
-                                "severity": issue.get("severity", "high"),
-                                "description": f"Disable persist-credentials on checkout in job '{job_name}'"
-                            })
-                            break
-                        if lines[j].strip() and not lines[j].startswith(" " * (indent + 1)):
-                            child_indent = " " * (indent + 4)
-                            fixes.append({
-                                "line": i + 1,
-                                "original": l,
-                                "replacement": l + f"\n{child_indent}with:\n{child_indent}  persist-credentials: false",
-                                "issue_type": issue_type,
-                                "severity": issue.get("severity", "high"),
-                                "description": f"Add persist-credentials: false to checkout in job '{job_name}'"
-                            })
-                            break
+                if "actions/checkout" not in l:
+                    continue
+                indent = len(l) - len(l.lstrip(" -"))
+                block_end = i + 1
+                while block_end < len(lines) and (not lines[block_end].strip() or len(lines[block_end]) - len(lines[block_end].lstrip()) >= indent):
+                    if lines[block_end].lstrip().startswith("- "):
+                        break
+                    block_end += 1
+                block = lines[i + 1:block_end]
+                persist_idx = next((j for j, bl in enumerate(block) if "persist-credentials" in bl), None)
+                if persist_idx is not None:
+                    target = block[persist_idx]
+                    if "false" in target.lower():
+                        continue  # this checkout is already safe; look at the next one
+                    fixes.append({
+                        "line": i + 2 + persist_idx,
+                        "original": target,
+                        "replacement": re.sub(r'(persist-credentials:\s*)\S+', r'\1false', target),
+                        "issue_type": issue_type,
+                        "severity": issue.get("severity", "high"),
+                        "description": f"Disable persist-credentials on checkout in job '{job_name}'"
+                    })
                     break
+                with_idx = next((j for j, bl in enumerate(block) if bl.strip().startswith("with:")), None)
+                if with_idx is not None:
+                    with_line = block[with_idx]
+                    child_indent = " " * (len(with_line) - len(with_line.lstrip()) + 2)
+                    fixes.append({
+                        "line": i + 2 + with_idx,
+                        "original": with_line,
+                        "replacement": with_line + f"\n{child_indent}persist-credentials: false",
+                        "issue_type": issue_type,
+                        "severity": issue.get("severity", "high"),
+                        "description": f"Disable persist-credentials on checkout in job '{job_name}'"
+                    })
+                else:
+                    child_indent = " " * indent
+                    fixes.append({
+                        "line": i + 1,
+                        "original": l,
+                        "replacement": l + f"\n{child_indent}with:\n{child_indent}  persist-credentials: false",
+                        "issue_type": issue_type,
+                        "severity": issue.get("severity", "high"),
+                        "description": f"Add persist-credentials: false to checkout in job '{job_name}'"
+                    })
+                break
 
         elif issue_type == "unsafe_shell":
             job_name = issue.get("job", "")
             for i, l in enumerate(lines):
-                if "shell:" in l and "bash" in l and "-e" not in l:
+                if "shell:" in l and re.search(r'\bbash\b', l) and "{0}" in l and not re.search(r'\s-[a-z]*e', l):
                     fix_key = f"shell:{i}"
                     if fix_key in seen_fixes:
                         continue
@@ -878,7 +913,7 @@ async def audit_fix(request: AuditYAMLRequest):
                     fixes.append({
                         "line": i + 1,
                         "original": l,
-                        "replacement": l.replace("bash", "bash -e"),
+                        "replacement": re.sub(r'\bbash\b', 'bash -e', l, count=1),
                         "issue_type": issue_type,
                         "severity": issue.get("severity", "medium"),
                         "description": f"Add -e flag to bash shell in job '{job_name}' to fail on errors"
@@ -915,11 +950,11 @@ async def audit_fix(request: AuditYAMLRequest):
                 continue
             seen_fixes.add(fix_key)
             for i, l in enumerate(lines):
-                if "fetch-depth" in l and "0" in l:
+                if re.search(r'fetch-depth:\s*["\']?0["\']?\s*(#.*)?$', l):
                     fixes.append({
                         "line": i + 1,
                         "original": l,
-                        "replacement": l.replace("0", "1"),
+                        "replacement": re.sub(r'(fetch-depth:\s*["\']?)0', r'\g<1>1', l, count=1),
                         "issue_type": issue_type,
                         "severity": issue.get("severity", "low"),
                         "description": f"Change fetch-depth from 0 (full history) to 1 (shallow) in job '{job_name}'"
@@ -1165,7 +1200,13 @@ async def _audit_yaml_body(request: AuditYAMLRequest) -> Dict[str, Any]:
 
     graph = GraphBuilder()
     client = GitHubClient(token=request.github_token)
+    try:
+        return await _audit_inline_workflow(request, workflow, graph, client)
+    finally:
+        await _close_client(client)
 
+
+async def _audit_inline_workflow(request: AuditYAMLRequest, workflow: Dict[str, Any], graph: GraphBuilder, client: GitHubClient) -> Dict[str, Any]:
     workflow_node_id = "workflow:inline"
     graph.add_node(
         workflow_node_id,
@@ -1188,9 +1229,7 @@ async def _audit_yaml_body(request: AuditYAMLRequest) -> Dict[str, Any]:
 
     for action_ref in actions:
         graph.add_edge(workflow_node_id, action_ref)
-        await resolve_action_dependencies(
-            client, action_ref, graph, visited, depth=0, max_depth=5
-        )
+        await resolve_action_dependencies(client, action_ref, graph, visited)
 
     _add_workflow_container_image_nodes(graph, workflow, workflow_node_id, workflow_issues)
 
