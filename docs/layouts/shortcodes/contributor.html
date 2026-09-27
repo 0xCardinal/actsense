@@ -1,44 +1,31 @@
 {{- $name := .Get "name" -}}
 {{- $image := .Get "image" -}}
-{{- $role := .Get "role" | default "Contributor" -}}
 {{- $linkedin := .Get "linkedin" | default "" -}}
 {{- $twitter := .Get "twitter" | default "" -}}
 {{- $github := .Get "github" | default "" -}}
 {{- $website := .Get "website" | default "" -}}
 {{- $contributions := .Get "contributions" | default "" -}}
-{{- $focus := .Get "focus" | default "" -}}
-{{- $featured := eq (.Get "featured" | default "false") "true" -}}
 
-<article class="contributor-card{{ if $featured }} contributor-card--featured{{ end }}">
-  <div class="contributor-card__portrait">
-    <img src="{{ $image }}" alt="Portrait of {{ $name }}" class="contributor-card__image" width="512" height="512" loading="lazy">
-  </div>
-  <div class="contributor-card__body">
-    <p class="contributor-card__role">{{ $role }}</p>
-    <h3>{{ $name }}</h3>
-    {{- if $contributions }}
-    <p class="contributor-card__contribution">{{ $contributions }}</p>
-    {{- end }}
-    {{- if $focus }}
-    <ul class="contributor-card__focus" aria-label="Contribution areas">
-      {{- range (split $focus ",") }}
-      <li>{{ strings.TrimSpace . }}</li>
-      {{- end }}
-    </ul>
-    {{- end }}
+<article class="contributor-card" tabindex="0">
+  <div class="contributor-card__photo">
+    <img src="{{ $image }}" alt="Portrait of {{ $name }}" class="contributor-card__image" width="400" height="400" loading="lazy">
     <div class="contributor-card__links" aria-label="{{ $name }} links">
       {{- if $website }}
-      <a href="{{ $website }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $name }} website"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Website</span></a>
+      <a href="{{ $website }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $name }} website"><i class="fa-solid fa-globe" aria-hidden="true"></i></a>
       {{- end }}
       {{- if $github }}
-      <a href="{{ $github }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $name }} on GitHub"><i class="fa-brands fa-github" aria-hidden="true"></i><span>GitHub</span></a>
+      <a href="{{ $github }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $name }} on GitHub"><i class="fa-brands fa-github" aria-hidden="true"></i></a>
       {{- end }}
       {{- if $linkedin }}
-      <a href="{{ $linkedin }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $name }} on LinkedIn"><i class="fa-brands fa-linkedin-in" aria-hidden="true"></i><span>LinkedIn</span></a>
+      <a href="{{ $linkedin }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $name }} on LinkedIn"><i class="fa-brands fa-linkedin-in" aria-hidden="true"></i></a>
       {{- end }}
       {{- if $twitter }}
-      <a href="{{ $twitter }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $name }} on X"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i><span>X</span></a>
+      <a href="{{ $twitter }}" target="_blank" rel="noopener noreferrer" aria-label="{{ $name }} on X"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
       {{- end }}
     </div>
   </div>
+  <h3>{{ $name }}</h3>
+  {{- if $contributions }}
+  <p class="contributor-card__contribution" role="tooltip">{{ $contributions }}</p>
+  {{- end }}
 </article>
