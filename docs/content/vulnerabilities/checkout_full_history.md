@@ -23,6 +23,10 @@ jobs:
       - run: npm test
 ```
 
+## How actsense detects this
+
+Reported as **low** whenever `actions/checkout` sets `fetch-depth: 0`. Full history is often legitimately needed (changelogs, `git describe`, release tooling); the finding is a prompt to confirm it is.
+
 ## Mitigation Strategies
 
 1. **Use shallow clones by default**  
@@ -56,9 +60,9 @@ jobs:
 
 | Dimension | Severity | Notes |
 | --- | --- | --- |
-| Likelihood | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Many workflows accept the default depth and never revisit it, especially in legacy repos. |
-| Risk | ![Medium](https://img.shields.io/badge/-High-orange?style=flat-square) | Historical secrets or sensitive files become accessible to any job output or attacker with runner access. |
-| Blast radius | ![Wide](https://img.shields.io/badge/-Wide-yellow?style=flat-square) | Leakage spans every historical commit—including past environments, credentials, and intellectual property. |
+| Likelihood | ![Low](https://img.shields.io/badge/-Low-green?style=flat-square) | Only matters if sensitive data was ever committed, or if a compromised step can read the workspace. |
+| Risk | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | History of a public repository is already public; for private repositories it widens what a compromised step or leaked artifact exposes. |
+| Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Limited to what exists in the repository's history. |
 
 ## References
 

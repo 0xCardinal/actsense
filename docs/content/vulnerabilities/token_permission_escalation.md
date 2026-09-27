@@ -23,6 +23,10 @@ jobs:
           # Token could be extracted from token.txt
 ```
 
+## How actsense detects this
+
+actsense reports `run:` steps that **encode** a token (`GITHUB_TOKEN`, `github.token`, `secrets.*TOKEN`) with `base64`, `xxd`, `od` or `rev`, which defeats GitHub's log masking, and steps that wire a token into a git credential helper. Ordinary use of the token, such as an `Authorization: Bearer $GITHUB_TOKEN` header or the `gh` CLI, is not reported. Reported as **high**.
+
 ## Mitigation Strategies
 
 1. **Use built-in GitHub Actions permissions**  

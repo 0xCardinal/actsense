@@ -1,10 +1,26 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import './AnalysisHistory.css'
 
-function AnalysisHistory({ onLoadAnalysis }) {
+function AnalysisHistory({ onLoadAnalysis, popover = false }) {
   const [analyses, setAnalyses] = useState([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(false)
+  const rootRef = useRef(null)
+
+  // As a popover, close on an outside click or Escape.
+  useEffect(() => {
+    if (!popover || !expanded) return undefined
+    const onPointer = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setExpanded(false)
+    }
+    const onKey = (e) => { if (e.key === 'Escape') setExpanded(false) }
+    document.addEventListener('mousedown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [popover, expanded])
 
   useEffect(() => {
     fetchAnalyses()
@@ -51,11 +67,19 @@ function AnalysisHistory({ onLoadAnalysis }) {
   }
 
   return (
-    <div className="analysis-history">
-      <div className="history-header" onClick={() => setExpanded(!expanded)}>
-        <h3>Previous Analyses</h3>
-        <span className="toggle-icon">{expanded ? '▼' : '▶'}</span>
-      </div>
+    <div className="analysis-history" ref={rootRef}>
+      <button
+        type="button"
+        className="history-header"
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+      >
+        <h3>Previous analyses</h3>
+        <span className="history-count">{analyses.length}</span>
+        <svg className={`toggle-icon ${expanded ? 'open' : ''}`} width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
       
       {expanded && (
         <div className="history-content">

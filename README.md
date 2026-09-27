@@ -9,7 +9,7 @@
 
 <img width="1484" height="917" alt="actsense platform" src="docs/static/images/platform.png" />
 
-A security auditor for GitHub Actions that analyzes workflows and their dependencies to identify security vulnerabilities.
+**Workflow Security Auditor.** Maps every dependency your CI workflows run, at the version they run, and audits each one. GitHub Actions is supported today; the architecture is built so other workflow platforms can follow.
 
 **🙌 Refer to [https://actsense.dev](https://actsense.dev) for the guide 📖**
 

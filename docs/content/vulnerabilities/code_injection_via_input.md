@@ -28,7 +28,12 @@ jobs:
         run: ./scripts/deploy.sh ${{ inputs.target_env }}
 ```
 
-An attacker can trigger this workflow with `target_env: "prod && cat $GITHUB_TOKEN"` and arbitrary commands will run.
+Anyone who can dispatch this workflow can run it with `target_env: "prod && cat $GITHUB_TOKEN"` and arbitrary commands will run.
+
+## How actsense detects this
+
+- A `workflow_dispatch` string input interpolated into `run:` (as `${{ inputs.x }}` or `${{ github.event.inputs.x }}`) → **high**. Only users with write access can dispatch a workflow, but a lower-trust maintainer or a leaked token with `actions: write` can then run arbitrary code with the workflow's secrets.
+- A composite action interpolating its own `${{ inputs.x }}` into a `run:` step → **medium**. Callers routinely feed PR titles and branch names into action inputs.
 
 ## Mitigation Strategies
 

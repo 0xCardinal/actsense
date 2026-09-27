@@ -31,7 +31,7 @@ Thumbs.db
 .env.local
 
 # Analysis storage
-data/
+/data/
 
 # Hugo
 .hugo.pid

@@ -7,7 +7,7 @@ description: "Auto-generated API documentation from FastAPI OpenAPI schema"
 
 ## OpenAPI Endpoints
 
-- **Title:** actsense - GitHub Actions Security Auditor
+- **Title:** actsense - Workflow Security Auditor
 - **Version:** `1.0.0`
 - **OpenAPI JSON:** `GET /openapi.json`
 - **Swagger UI:** `GET /docs`

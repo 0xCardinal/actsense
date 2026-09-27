@@ -1,0 +1,783 @@
+{
+  "total": 79,
+  "totals": {
+    "critical": 17,
+    "high": 36,
+    "medium": 15,
+    "low": 11
+  },
+  "categories": [
+    {
+      "name": "Action Pinning & Immutability",
+      "id": "action-pinning-immutability",
+      "checks": [
+        {
+          "slug": "unpinned_version",
+          "title": "Unpinned Version",
+          "summary": "Workflows that use actions with references that don't match standard pinning formats (version tags, commit SHAs, or branches) create security risks: unpinned or\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "no_hash_pinning",
+          "title": "No Hash Pinning",
+          "summary": "Workflows that pin actions to version tags (e.g., @v1, @v2.0.0) instead of commit SHAs are vulnerable to supply-chain attacks: tags are mutable\u2014maintainers can move\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "short_hash_pinning",
+          "title": "Short Hash Pinning",
+          "summary": "Workflows that pin actions to short commit SHAs (less than 40 characters) instead of full 40-character SHAs create ambiguity risks: short SHAs can collide with other\u2026",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        },
+        {
+          "slug": "older_action_version",
+          "title": "Older Action Version",
+          "summary": "Workflows using older major versions of actions (v1, v2) when newer versions (v3+, v4+) are available expose themselves to known security vulnerabilities that have\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "inconsistent_action_version",
+          "title": "Inconsistent Action Version",
+          "summary": "Using the same action with different versions across workflows means some jobs miss security patches while others get them.",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        },
+        {
+          "slug": "unpinnable_docker_image",
+          "title": "Unpinnable Docker Image",
+          "summary": "Docker actions that use mutable tags (e.g., latest, v1, v1.2) instead of immutable digests create supply-chain risks: tags can be moved to point to different images,\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "unpinnable_composite_subaction",
+          "title": "Unpinnable Composite Subaction",
+          "summary": "Composite actions that use sub-actions with tags or branches instead of commit SHAs create transitive dependency risks: tags and branches can be moved or updated,\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "unpinned_javascript_resources",
+          "title": "Unpinned Javascript Resources",
+          "summary": "JavaScript actions that download external resources (scripts, binaries, archives) without checksum verification create supply-chain security risks: downloaded\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Permissions & Access Control",
+      "id": "permissions-access-control",
+      "checks": [
+        {
+          "slug": "overly_permissive",
+          "title": "Overly Permissive",
+          "summary": "Workflows with write permissions to GitHub Actions can create, modify, or delete actions in the repository.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "github_token_write_all",
+          "title": "GitHub Token Write-All",
+          "summary": "Setting permissions: write-all grants the workflow token write access to every API scope (contents, issues, packages, etc.).",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "github_token_write_permissions",
+          "title": "GitHub Token Write Permissions",
+          "summary": "Even when you avoid write-all, a workflow can still enumerate multiple write scopes (contents, issues, pull-requests, packages) that the jobs never use.",
+          "severity": "high",
+          "severities": [
+            "high",
+            "medium"
+          ]
+        },
+        {
+          "slug": "excessive_write_permissions",
+          "title": "Excessive Write Permissions",
+          "summary": "GitHub Actions defaults the GITHUBTOKEN to contents: read / packages: write, but many workflows override permissions: write-all even when they only run tests or lint.",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "missing_permissions",
+          "title": "Missing Permissions Block",
+          "summary": "When a workflow does not declare a permissions block \u2014 and not every job sets its own \u2014 the GITHUBTOKEN falls back to the repository or organization default permissions.",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        },
+        {
+          "slug": "branch_protection_bypass",
+          "title": "Branch Protection Bypass",
+          "summary": "Workflows that auto-approve or auto-merge pull requests undermine GitHub branch protection: they short-circuit required reviewers, status checks, and manual merges.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "token_permission_escalation",
+          "title": "Token Permission Escalation",
+          "summary": "Workflows that manipulate GITHUBTOKEN directly (base64 encoding, echoing to logs, passing in command-line arguments) create security risks: tokens can be extracted\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Secrets & Credentials",
+      "id": "secrets-credentials",
+      "checks": [
+        {
+          "slug": "potential_hardcoded_secret",
+          "title": "Potential Hardcoded Secret",
+          "summary": "Workflows containing hardcoded secrets (passwords, API keys, tokens, database credentials) expose those credentials to anyone with read access to the repository.",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "potential_hardcoded_cloud_credentials",
+          "title": "Potential Hardcoded Cloud Credentials",
+          "summary": "Workflows that contain hardcoded cloud credentials (AWS keys, Azure secrets, GCP service account keys) in run commands expose those credentials to anyone with read\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "long_term_cloud_credentials",
+          "title": "Long Term Cloud Credentials",
+          "summary": "Storing static cloud provider credentials (AWS, Azure, or GCP) in GitHub secrets means the keys never expire.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "secret_in_environment",
+          "title": "Secret In Environment",
+          "summary": "Workflows that expose secrets directly in environment variables create security risks: environment variables may be logged by actions or tools, visible in workflow\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "secrets_access_untrusted",
+          "title": "Secrets Access Untrusted",
+          "summary": "Workflows that pass secrets to untrusted third-party actions create extreme supply-chain risks: untrusted actions may be malicious, compromised, or contain\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "secrets_in_matrix",
+          "title": "Secrets In Matrix",
+          "summary": "Workflows that include secrets in matrix strategy definitions expose those secrets to ALL matrix job combinations: each matrix job can access and potentially log the\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "environment_with_secrets",
+          "title": "Environment With Secrets",
+          "summary": "GitHub environments act as secret vaults plus deployment gates, but if you attach an environment to a job without configuring protection rules, any workflow with\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "excessive_secret_exposure",
+          "title": "Excessive Secret Exposure",
+          "summary": "The secrets context can be serialized in bulk with the toJson(secrets) expression.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "secrets_inherit",
+          "title": "Reusable Workflow Secrets Inheritance",
+          "summary": "When one workflow calls a reusable workflow, it can forward credentials with secrets: inherit.",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "secrets_outside_env",
+          "title": "Secrets Used Outside Environment Variables",
+          "summary": "Interpolating a secret directly into a run: command \u2014 deploy --token ${{ secrets.TOKEN }} \u2014 places the plaintext value on the command line, where it can leak through\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "hardcoded_container_credentials",
+          "title": "Hardcoded Container Credentials",
+          "summary": "Jobs can run inside a container or spin up service containers that pull from a private registry, authenticating with container.credentials / services..credentials.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "trufflehog_secret_detected",
+          "title": "Secret Detected by TruffleHog",
+          "summary": "TruffleHog matched a known credential format (a cloud key, API token, private key, etc.) in the workflow file.",
+          "severity": "critical",
+          "severities": [
+            "critical",
+            "high"
+          ]
+        },
+        {
+          "slug": "optional_secret_input",
+          "title": "Optional Secret Input",
+          "summary": "An action declares an input whose description says it carries a secret, password, or token, but marks it required: false with no default.",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Workflow Security",
+      "id": "workflow-security",
+      "checks": [
+        {
+          "slug": "dangerous_event",
+          "title": "Dangerous Event",
+          "summary": "GitHub Actions runs workflow code from trusted workflow definitions on the default branch for most events.",
+          "severity": "high",
+          "severities": [
+            "high",
+            "medium"
+          ]
+        },
+        {
+          "slug": "insecure_pull_request_target",
+          "title": "Insecure Pull Request Target",
+          "summary": "pullrequesttarget runs with the base repository\u2019s token (Usually write).",
+          "severity": "critical",
+          "severities": [
+            "critical",
+            "high"
+          ]
+        },
+        {
+          "slug": "unsafe_checkout",
+          "title": "Unsafe Checkout",
+          "summary": "Workflows that use actions/checkout with persist-credentials: true create security risks: credentials are stored in the runner's Git configuration, subsequent steps\u2026",
+          "severity": "high",
+          "severities": [
+            "high",
+            "medium"
+          ]
+        },
+        {
+          "slug": "unsafe_checkout_ref",
+          "title": "Unsafe Checkout Ref",
+          "summary": "Workflows that use actions/checkout with refs containing variables that may not be properly validated create security risks: if the ref comes from user input\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "checkout_full_history",
+          "title": "Checkout Full History",
+          "summary": "Setting actions/checkout to fetch-depth: 0 clones the entire repository history into the runner.",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        },
+        {
+          "slug": "script_injection",
+          "title": "Script Injection",
+          "summary": "Workflows that use user-controlled input in dangerous PowerShell operations (Invoke-Expression, Invoke-Command, call operators) are vulnerable to script injection:\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "shell_injection",
+          "title": "Shell Injection",
+          "summary": "Workflows that pipe user-controlled input directly to shell interpreters (bash, sh, zsh) without validation create code injection vulnerabilities: attackers can\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical",
+            "high"
+          ]
+        },
+        {
+          "slug": "risky_context_usage",
+          "title": "Risky Context Usage",
+          "summary": "Workflows that use user-controllable GitHub context variables (such as github.event.issue.body, github.event.pullrequest.title, github.refname, etc.) create injection\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical",
+            "low"
+          ]
+        },
+        {
+          "slug": "github_env_injection",
+          "title": "GitHub Environment File Injection",
+          "summary": "GitHub Actions exposes the special files $GITHUBENV and $GITHUBPATH so that a step can set environment variables and prepend directories to PATH for subsequent steps\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "github_output_injection",
+          "title": "GitHub Output File Injection",
+          "summary": "A step can publish outputs to later steps and jobs by appending key=value lines to the special $GITHUBOUTPUT file.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "insecure_commands",
+          "title": "Insecure Workflow Commands",
+          "summary": "GitHub Actions once let steps set environment variables and modify PATH by printing ::set-env and ::add-path stdout commands.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "spoofable_actor_condition",
+          "title": "Spoofable Actor Condition",
+          "summary": "Workflows sometimes gate privileged behaviour on the actor context \u2014 for example if: github.actor == 'dependabot[bot]' \u2014 to \"only run for a trusted user or bot.\" The\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "code_injection_via_input",
+          "title": "Code Injection via Input",
+          "summary": "Workflows that accept workflowdispatch inputs and interpolate them directly into shell commands give untrusted users a remote code execution primitive: an attacker\u2026",
+          "severity": "high",
+          "severities": [
+            "high",
+            "medium"
+          ]
+        },
+        {
+          "slug": "unvalidated_workflow_input",
+          "title": "Unvalidated Workflow Input",
+          "summary": "Workflows with workflowdispatch inputs that are optional or used in shell commands without validation create security risks: optional inputs may be used without\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "unsafe_shell",
+          "title": "Unsafe Shell",
+          "summary": "A step that runs Bash without exit-on-error keeps going after a command fails.",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Supply Chain Security",
+      "id": "supply-chain-security",
+      "checks": [
+        {
+          "slug": "untrusted_action_source",
+          "title": "Untrusted Action Source",
+          "summary": "Workflows that use actions from untrusted third-party publishers create supply-chain security risks: actions can contain malicious code, run with your workflow's\u2026",
+          "severity": "high",
+          "severities": [
+            "high",
+            "medium"
+          ]
+        },
+        {
+          "slug": "untrusted_action_unpinned",
+          "title": "Untrusted Action Unpinned",
+          "summary": "Untrusted third-party actions that are not pinned to a specific version create critical security risks: the action can be updated by the maintainer at any time,\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "typosquatting_action",
+          "title": "Typosquatting Action",
+          "summary": "Workflows using actions with suspicious naming patterns (similar to popular actions but with slight variations) may be victims of typosquatting attacks: attackers\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "deprecated_action",
+          "title": "Deprecated Action",
+          "summary": "Running outdated versions of community actions leaves workflows exposed to known vulnerabilities\u2014GitHub often revs v1 actions multiple times to address security flaws.",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "missing_action_repository",
+          "title": "Missing Action Repository",
+          "summary": "Workflows that reference actions from repositories that don't exist or are inaccessible will fail at runtime, disrupting CI/CD pipelines and potentially causing\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "ref_version_mismatch",
+          "title": "Action Ref / Version Comment Mismatch",
+          "summary": "Pinning an action to a full commit SHA is the most secure way to reference it, and the common convention is to annotate the SHA with the human-readable version it\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "unpinned_dockerfile_dependencies",
+          "title": "Unpinned Dockerfile Dependencies",
+          "summary": "Docker actions with Dockerfiles that install Python packages (or other dependencies) without version pinning create security and reproducibility risks: package\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "unpinned_dockerfile_resources",
+          "title": "Unpinned Dockerfile Resources",
+          "summary": "Docker actions with Dockerfiles that download external resources (scripts, binaries, archives) without checksum verification create security risks: downloaded\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "unpinned_external_resources",
+          "title": "Unpinned External Resources",
+          "summary": "Composite actions that download external resources (scripts, binaries, archives) without checksum verification create security risks: downloaded resources can be\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "unpinned_javascript_resources",
+          "title": "Unpinned Javascript Resources",
+          "summary": "JavaScript actions that download external resources (scripts, binaries, archives) without checksum verification create supply-chain security risks: downloaded\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "unpinned_npm_packages",
+          "title": "Unpinned Npm Packages",
+          "summary": "Workflows and composite actions that install NPM packages without version locking create security and reproducibility risks: package versions can change between runs,\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "unpinned_python_packages",
+          "title": "Unpinned Python Packages",
+          "summary": "Workflows and composite actions that install Python packages without version pinning create security and reproducibility risks: package versions can change between\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "unfiltered_network_traffic",
+          "title": "Unfiltered Network Traffic",
+          "summary": "Workflows that perform network operations (curl, wget, ssh, etc.) without filtering or monitoring create security risks: network traffic can be used to exfiltrate\u2026",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        },
+        {
+          "slug": "no_file_tampering_protection",
+          "title": "No File Tampering Protection",
+          "summary": "Build jobs that modify files during execution without integrity checks are vulnerable to supply-chain tampering: malicious actions or compromised dependencies can\u2026",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Self-Hosted Runners",
+      "id": "self-hosted-runners",
+      "checks": [
+        {
+          "slug": "self_hosted_runner",
+          "title": "Self Hosted Runner",
+          "summary": "Workflows using self-hosted runners pose significant security risks compared to GitHub-hosted runners: self-hosted runners have persistent access to your\u2026",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        },
+        {
+          "slug": "self_hosted_runner_pr_exposure",
+          "title": "Self Hosted Runner Pr Exposure",
+          "summary": "Self-hosted runners exposed to pull requests in public repositories create extreme security risks: attackers from forks can create PRs that trigger workflows on your\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "self_hosted_runner_issue_exposure",
+          "title": "Self Hosted Runner Issue Exposure",
+          "summary": "Self-hosted runners that can be triggered by issue events in public repositories create significant security risks: anyone can create issues in public repositories,\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "self_hosted_runner_write_all",
+          "title": "Self Hosted Runner Write All",
+          "summary": "Self-hosted runners with write-all permissions create extreme security risks: write-all grants excessive access to repository resources, and if the runner is\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "self_hosted_runner_secrets_in_run",
+          "title": "Self Hosted Runner Secrets In Run",
+          "summary": "Workflows that use secrets directly in run commands on self-hosted runners expose those secrets to process lists, shell history, and logs: secrets may be visible in\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "self_hosted_runner_network_risk",
+          "title": "Self Hosted Runner Network Risk",
+          "summary": "Self-hosted runners that download and execute code from the internet without verification create significant security risks: downloaded scripts may be malicious,\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "runner_label_confusion",
+          "title": "Runner Label Confusion",
+          "summary": "Workflows using runner labels that are confusing or similar to GitHub-hosted runner labels (e.g., ubuntu-latest, windows-latest, self-hosted-ubuntu) create security\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "public_repo_self_hosted_secrets",
+          "title": "Public Repo Self Hosted Secrets",
+          "summary": "Self-hosted runners in public repositories that have access to secrets create extreme security risks: public repos are accessible to anyone, so attackers can analyze\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "public_repo_self_hosted_environment",
+          "title": "Public Repo Self Hosted Environment",
+          "summary": "Self-hosted runners in public repositories that access protected environments create significant security risks: public repos are accessible to anyone, so attackers\u2026",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Best Practices",
+      "id": "best-practices",
+      "checks": [
+        {
+          "slug": "continue_on_error_critical_job",
+          "title": "Continue-on-Error Critical Job",
+          "summary": "Marking a critical deployment or verification step with continue-on-error: true hides failures\u2014CI passes even when that step fails, so broken releases or incomplete\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "long_artifact_retention",
+          "title": "Long Artifact Retention",
+          "summary": "GitHub Actions artifacts default to a 90-day retention period, but workflows can override it up to 400 days.",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        },
+        {
+          "slug": "large_matrix",
+          "title": "Large Matrix",
+          "summary": "Matrix jobs that explode into dozens or hundreds of combinations slow feedback loops, burn runner minutes, and make it easy to miss failures (logs become overwhelming).",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        },
+        {
+          "slug": "insufficient_audit_logging",
+          "title": "Insufficient Audit Logging",
+          "summary": "Deploy or publishing jobs that fetch secrets, push artifacts, or touch production often run without structured logging.",
+          "severity": "low",
+          "severities": [
+            "low"
+          ]
+        },
+        {
+          "slug": "environment_bypass_risk",
+          "title": "Environment Bypass Risk",
+          "summary": "Workflows triggered by pullrequesttarget, workflowrun, or other elevated events can call protected environments without the usual approval gates.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "cross_repository_access",
+          "title": "Cross Repository Access",
+          "summary": "When a workflow checks out or clones a repository other than the one that triggered it, any secrets granted to the workflow can cross trust boundaries.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        },
+        {
+          "slug": "cross_repository_access_command",
+          "title": "Cross Repository Access Command",
+          "summary": "Workflows that run shell commands like git clone https://github.com/foo/bar or curl https://raw.githubusercontent.com/... pull code straight from external repositories.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Advanced Threats",
+      "id": "advanced-threats",
+      "checks": [
+        {
+          "slug": "malicious_curl_pipe_bash",
+          "title": "Malicious Curl Pipe Bash",
+          "summary": "curl ... | bash downloads and executes remote code in one step with zero verification.",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "malicious_base64_decode",
+          "title": "Malicious Base64 Decode",
+          "summary": "Attackers often smuggle malicious scripts in base64-encoded strings, then decode and execute them inside workflows (base64 -d | bash).",
+          "severity": "critical",
+          "severities": [
+            "critical"
+          ]
+        },
+        {
+          "slug": "obfuscation_detection",
+          "title": "Obfuscation Detection",
+          "summary": "Workflows containing obfuscated code patterns (base64 encoding, hex escapes, nested command substitution, variable expansion tricks) are suspicious because\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical",
+            "high",
+            "medium"
+          ]
+        },
+        {
+          "slug": "artifact_exposure_risk",
+          "title": "Artifact Exposure Risk",
+          "summary": "Uploading workflow artifacts with overly broad path patterns, missing retention policies, or unsafe configurations can create risks of exposing sensitive files\u2026",
+          "severity": "critical",
+          "severities": [
+            "critical",
+            "high",
+            "low"
+          ]
+        },
+        {
+          "slug": "artifact_poisoning",
+          "title": "Artifact Poisoning",
+          "summary": "Workflows triggered by workflowrun or pullrequesttarget run in a privileged context (secrets, write-scoped token) but are often kicked off by a build that ran\u2026",
+          "severity": "medium",
+          "severities": [
+            "medium"
+          ]
+        },
+        {
+          "slug": "cache_poisoning",
+          "title": "Cache Poisoning",
+          "summary": "GitHub Actions caches (via actions/cache or the built-in caching of setup- actions) are shared across workflow runs to speed up builds.",
+          "severity": "high",
+          "severities": [
+            "high"
+          ]
+        }
+      ]
+    }
+  ]
+}

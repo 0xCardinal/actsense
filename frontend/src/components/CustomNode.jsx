@@ -1,75 +1,75 @@
-import React from 'react'
+import React, { memo } from 'react'
 import { Handle, Position } from 'reactflow'
+import { normalizeNodeType } from '../utils/nodeIcons'
 
-function CustomNode({ data, selected }) {
-  const handleClick = (e) => {
+export const NODE_WIDTH = 248
+export const NODE_HEIGHT = 62
+
+const TYPE_LABELS = {
+  repository: 'Repository',
+  workflow: 'Workflow',
+  reusable_workflow: 'Reusable workflow',
+  action: 'Action',
+  image: 'Image',
+  package: 'Package',
+}
+
+function CustomNode({ data }) {
+  const severity = data.hasIssues ? data.severity : 'none'
+  const classes = [
+    'graph-node',
+    `sev-${severity}`,
+    data.isHighlighted ? 'is-highlighted' : '',
+    data.isDimmed ? 'is-dimmed' : '',
+    data.isSelected ? 'is-selected' : '',
+  ].filter(Boolean).join(' ')
+
+  const activate = (e) => {
     e.stopPropagation()
-    e.preventDefault()
-    console.log('CustomNode clicked:', data)
-    if (data && data.onNodeClick) {
-      data.onNodeClick(data)
-    }
+    data.onNodeClick && data.onNodeClick(data)
   }
-
-  const handleMouseEnter = (e) => {
-    e.stopPropagation()
-    if (data && data.onNodeHover) {
-      // Use nodeId if available, otherwise fall back to originalId or nodeLabel
-      const nodeId = data.nodeId || data.originalId || data.nodeLabel
-      data.onNodeHover(nodeId)
-    }
-  }
-
-  const handleMouseLeave = (e) => {
-    e.stopPropagation()
-    if (data && data.onNodeUnhover) {
-      data.onNodeUnhover()
-    }
-  }
-
-  const isHighlighted = data?.isHighlighted || false
 
   return (
     <div
-      onClick={handleClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      style={{
-        background: isHighlighted 
-          ? (data.hasIssues ? `${data.color}20` : '#eff6ff')
-          : (data.hasIssues ? `${data.color}08` : '#ffffff'),
-        border: `2px solid ${isHighlighted 
-          ? '#3b82f6' 
-          : (data.hasIssues ? data.color : '#e5e7eb')}`,
-        borderRadius: '8px',
-        color: '#111827',
-        width: 220,
-        padding: '12px',
-        fontSize: '0.875rem',
-        cursor: 'pointer',
-        boxShadow: isHighlighted 
-          ? '0 4px 12px 0 rgba(59, 130, 246, 0.3)' 
-          : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-        transition: 'all 0.15s ease',
-        transform: isHighlighted ? 'scale(1.05)' : 'scale(1)',
-        position: 'relative',
+      className={classes}
+      style={{ width: NODE_WIDTH, height: NODE_HEIGHT }}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          activate(e)
+        }
       }}
-      className="custom-node"
+      onMouseEnter={() => data.onNodeHover && data.onNodeHover(data.nodeId)}
+      onMouseLeave={() => data.onNodeUnhover && data.onNodeUnhover()}
+      role="button"
+      tabIndex={0}
+      aria-label={`${TYPE_LABELS[normalizeNodeType(data.nodeType)] || 'Node'} ${data.label}${data.hasIssues ? `, ${data.issueCount} findings` : ''}`}
+      title={data.label}
     >
-      <div className="node-label">
-        <span className="node-icon">{data.icon}</span>
-        <span className="node-text">{data.label}</span>
-        {data.hasIssues && (
-          <span className="node-badge" style={{ backgroundColor: data.color }}>
-            {data.issueCount}
-          </span>
-        )}
-      </div>
-      <Handle type="target" position={Position.Left} />
-      <Handle type="source" position={Position.Right} />
+      <span className="graph-node-rail" aria-hidden="true" />
+      <span className="graph-node-icon" aria-hidden="true">{data.icon}</span>
+      <span className="graph-node-body">
+        <span className="graph-node-type">
+          {TYPE_LABELS[normalizeNodeType(data.nodeType)] || data.nodeType}
+          {data.isLocal && <span className="graph-node-tag">local</span>}
+          {data.roles?.length > 0 && (
+            <span className="graph-node-roles">{data.roles.join(' · ')}</span>
+          )}
+        </span>
+        <span className="graph-node-label">{data.label}</span>
+      </span>
+      {data.hasIssues ? (
+        <span className="graph-node-badge">{data.issueCount}</span>
+      ) : (
+        <span className="graph-node-ok" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 6.2 5 8.5l4.5-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </span>
+      )}
+      <Handle type="target" position={Position.Left} className="graph-node-handle" isConnectable={false} />
+      <Handle type="source" position={Position.Right} className="graph-node-handle" isConnectable={false} />
     </div>
   )
 }
 
-export default CustomNode
-
+export default memo(CustomNode)

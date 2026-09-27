@@ -358,3 +358,9 @@ class TestOnKeyParsing:
         w = result["jobs"]["j"]["steps"][0]["with"]
         assert w["mode"] == "on"
         assert w["other"] == "off"
+
+    def test_python_object_constructor_is_rejected(self):
+        result = WorkflowParser.parse_workflow(
+            "!!python/object/apply:builtins.eval ['1 + 1']"
+        )
+        assert result == {"error": "Invalid YAML content"}

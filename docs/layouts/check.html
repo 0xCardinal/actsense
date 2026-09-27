@@ -1,0 +1,64 @@
+{{ define "main" }}
+{{- $data := site.Data.checks -}}
+{{- $slug := .File.ContentBaseName -}}
+{{- $current := dict -}}
+{{- $currentCat := dict -}}
+{{- range $data.categories }}
+  {{- $cat := . }}
+  {{- range .checks }}
+    {{- if eq .slug $slug }}{{ $current = . }}{{ $currentCat = $cat }}{{ end }}
+  {{- end }}
+{{- end }}
+<div class="ck-page">
+  {{ partial "sidebar.html" (dict "context" . "disableSidebar" true "displayPlaceholder" false) }}
+
+  <div class="ck-detail-layout">
+    <aside class="ck-rail" aria-label="All checks" data-checks-root>
+      <div class="ck-rail-inner">
+        <a class="ck-rail-back" href="/vulnerabilities/">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          All {{ $data.total }} checks
+        </a>
+        {{ partial "checks/filters.html" (dict "data" $data "categories" false) }}
+        <nav class="ck-rail-list">
+          {{- range $data.categories }}
+          {{- $cat := . }}
+          <div class="ck-rail-group" data-check-group>
+            <p class="ck-rail-heading">{{ .name }}</p>
+            {{- range .checks }}
+            <a href="/vulnerabilities/{{ .slug }}/" class="ck-rail-item ck-sev-{{ .severity }}{{ if eq .slug $slug }} is-current{{ end }}"
+               {{- if eq .slug $slug }} aria-current="page"{{ end }}
+               data-check data-severity="{{ .severity }}" data-category="{{ $cat.id }}"
+               data-text="{{ lower (printf "%s %s %s" .title .slug .summary) }}">
+              <span class="ck-dot" aria-hidden="true"></span>{{ .title }}
+            </a>
+            {{- end }}
+          </div>
+          {{- end }}
+          <p class="ck-rail-empty" data-check-empty hidden>No checks match.</p>
+        </nav>
+      </div>
+    </aside>
+
+    {{ partial "toc.html" . }}
+    <article class="ck-article">
+      <main class="ck-article-main">
+        {{- if $current.slug }}
+        <div class="ck-meta">
+          <a class="ck-meta-cat" href="/vulnerabilities/#{{ $currentCat.id }}">{{ $currentCat.name }}</a>
+          <span class="ck-pill ck-sev-{{ $current.severity }}">{{ humanize $current.severity }}{{ if gt (len $current.severities) 1 }}<span class="ck-pill-range"> – {{ humanize (index $current.severities (sub (len $current.severities) 1)) }}</span>{{ end }}</span>
+          <code class="ck-slug" title="Issue type reported by actsense">{{ $current.slug }}</code>
+        </div>
+        {{- end }}
+        <div class="content">
+          {{ if .Title }}<h1>{{ .Title }}</h1>{{ end }}
+          {{ .Content }}
+        </div>
+        {{ partial "components/last-updated.html" . }}
+        {{ partial "components/pager.html" . }}
+      </main>
+    </article>
+  </div>
+</div>
+<script src="{{ "js/checks.js" | relURL }}" defer></script>
+{{ end }}

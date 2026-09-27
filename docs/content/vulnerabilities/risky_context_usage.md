@@ -2,7 +2,7 @@
 
 ## Description
 
-Workflows that use user-controllable GitHub context variables (such as `github.event.issue.body`, `github.event.pull_request.title`, `github.ref_name`, etc.) create injection attack vectors: these context variables contain user-provided data that can be manipulated by attackers to inject malicious code, execute arbitrary commands, or access sensitive information. Many GitHub context variables ending in `.body`, `.title`, `.message`, `.name`, `.ref`, `.head_ref`, `.default_branch`, or `.email` are user-controllable and should be treated as untrusted input. [^gh_actions_security] Which **events** deliver that data (issues, pull requests, discussions, `workflow_run`, etc.) is summarized alongside other high-risk triggers in [Dangerous Event](/vulnerabilities/dangerous_event/).
+Workflows that use user-controllable GitHub context variables (such as `github.event.issue.body`, `github.event.pull_request.title`, `github.ref_name`, etc.) create injection attack vectors: these context variables contain user-provided data that can be manipulated by attackers to inject malicious code, execute arbitrary commands, or access sensitive information. Many GitHub context variables ending in `.body`, `.title`, `.message`, `.name`, `.ref`, `.head_branch`, `.label`, or `.email` are user-controllable and should be treated as untrusted input. [^gh_actions_security] Which **events** deliver that data (issues, pull requests, discussions, `workflow_run`, etc.) is summarized alongside other high-risk triggers in [Dangerous Event](/vulnerabilities/dangerous_event/).
 
 > **Self-hosted runners:** When these risky context variables are executed on self-hosted runners, treat the finding as critical. Self-hosted infrastructure executes arbitrary user input with full network access, so the same risky context usage introduces a much higher impact than on GitHub-hosted runners.
 
@@ -36,7 +36,7 @@ The following GitHub context variables are considered risky and user-controllabl
 - `github.event.issue.title` / `github.event.issue.body`
 - `github.event.issue_comment.body` / `github.event.comment.body`
 - `github.event.pull_request.title` / `github.event.pull_request.body`
-- `github.event.pull_request.head_ref` / `github.event.pull_request.base_ref`
+- `github.head_ref` / `github.event.pull_request.head.ref` / `github.event.pull_request.head.label`
 - `github.event.release.name` / `github.event.release.tag_name`
 - `github.event.discussion.body`
 - `github.event.ref`
@@ -45,7 +45,19 @@ The following GitHub context variables are considered risky and user-controllabl
 - `github.event.label.name`
 - `github.event.sender.email`
 - `github.event.page_name`
-- Any context ending in `.body`, `.title`, `.message`, `.name`, `.ref`, `.head_ref`, `.default_branch`, or `.email`
+- Any context ending in `.body`, `.title`, `.message`, `.name`, `.ref`, `.head_branch`, `.label`, or `.email` (except the base repository's own fields, such as `github.event.repository.*`)
+
+## How actsense detects this
+
+actsense parses every `${{ }}` expression and classifies the context paths inside it. Attacker-chosen text is anything ending in `body`, `title`, `message`, `name`, `ref`, `head_ref`, `head_branch`, `label`, `email`, `page_name`, `description` or `default_branch`, plus `github.head_ref` and `github.ref_name`. IDs, numbers, SHAs, URLs, and anything under `github.event.repository.*` / `organization.*` / `sender.*` are treated as safe. Expressions with fallbacks, like `${{ github.event.issue.title || 'none' }}`, are still recognised.
+
+Severity follows where the value lands:
+
+- Interpolated into `run:` → **critical**. The expression is substituted before the shell parses the script.
+- Passed through `env:` → **low**. This is the recommended mitigation; the finding is a reminder to quote the variable and not `eval` it.
+- Passed to an action's `with:` → **low**. `actions/github-script`'s `script:` input is reported separately as [script injection](/vulnerabilities/script_injection/) (critical).
+
+The same checks run on the steps of composite actions in the dependency graph.
 
 ## Mitigation Strategies
 

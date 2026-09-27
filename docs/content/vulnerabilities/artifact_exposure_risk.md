@@ -8,10 +8,9 @@ Uploading workflow artifacts with overly broad path patterns, missing retention 
 - Uploading entire workspace including `.git/` directory
 - Checkout with persisted credentials increasing leak risk
 - Missing retention-days on upload-artifact
-- Upload-artifact steps happening before the end of a job
 - Misconfigured artifact paths potentially including sensitive files
 
-The check assigns severity levels based on the risk: **CRITICAL** for broad workspace uploads (`.`, `${{ github.workspace }}`) combined with persisted credentials (can expose `.git/config`), **HIGH** for broad path patterns (`**`, `*`) without persisted credentials, **MEDIUM** for missing `retention-days` configuration, and **LOW** for artifact uploads not at the end of a job (increases exposure window but still safe if paths are properly scoped).
+Severity depends on the path and on whether a persisted token can end up inside the artifact; see [How actsense detects this](#how-actsense-detects-this).
 
 **Note:** This check detects static workflow misconfigurations that create exposure risks. It does not perform runtime exploitation or artifact content analysis. For information about the ArtiPACKED vulnerability (which includes runtime exploitation), see the references section.
 
@@ -20,7 +19,6 @@ The check assigns severity levels based on the risk: **CRITICAL** for broad work
 - A workflow uploads the entire checkout directory (including `.git/`) as an artifact, which could expose persisted `GITHUB_TOKEN` values if credentials are persisted by `actions/checkout`.
 - Artifact uploads use broad glob patterns (`**`, `*`) that may unintentionally include sensitive files.
 - Missing `retention-days` configuration allows artifacts to be retained longer than necessary.
-- Artifact uploads occur before the final step, increasing the exposure window.
 
 ```yaml
 jobs:
@@ -37,6 +35,12 @@ jobs:
           path: .
           # Missing retention-days
 ```
+
+## How actsense detects this
+
+- Broad upload path (`.`, `./`, `*`, `**`, `**/*`, `${{ github.workspace }}`, `../`, `~`) → **high**.
+- The same, **plus** `actions/checkout` persisting credentials in the job, **plus** dotfiles being included → **critical**. Dotfiles are included when `include-hidden-files: true` is set, or when `upload-artifact` is older than v4, since v4.4+ excludes `.git/` by default.
+- `upload-artifact` without `retention-days` → **low**.
 
 ## Mitigation Strategies
 

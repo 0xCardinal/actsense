@@ -1,7 +1,7 @@
 <!-- Custom fonts for actsense -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..600&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Stack+Sans+Notch:wght@200..700&display=swap" rel="stylesheet">
 
 <!-- Font Awesome -->
@@ -25,29 +25,30 @@ document.addEventListener('DOMContentLoaded', function() {
     lastElement.remove();
   }
 
-  // Copy docker command on homepage hero
+  // Copy docker command on homepage hero. Feedback is an icon swap in a
+  // fixed-size slot (plus a screen-reader status), so the card never resizes.
   const commandCard = document.getElementById('hero-command-card');
-  const hintEl = document.getElementById('hero-command-hint');
+  const statusEl = document.getElementById('hero-command-status');
   const commandEl = document.getElementById('hero-docker-command');
 
   if (commandCard && commandEl) {
+    let resetTimer;
+    const flash = function(state, message) {
+      commandCard.classList.remove('copied', 'failed');
+      commandCard.classList.add(state);
+      if (statusEl) statusEl.textContent = message;
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(function() {
+        commandCard.classList.remove(state);
+        if (statusEl) statusEl.textContent = '';
+      }, 1400);
+    };
     const copyCommand = async function() {
-      const commandText = commandEl.textContent.trim();
-
       try {
-        await navigator.clipboard.writeText(commandText);
-        commandCard.classList.add('copied');
-        if (hintEl) hintEl.textContent = 'Copied';
-
-        setTimeout(function() {
-          commandCard.classList.remove('copied');
-          if (hintEl) hintEl.textContent = 'Click to copy';
-        }, 1400);
+        await navigator.clipboard.writeText(commandEl.textContent.trim());
+        flash('copied', 'Copied to clipboard');
       } catch (err) {
-        if (hintEl) hintEl.textContent = 'Copy failed';
-        setTimeout(function() {
-          if (hintEl) hintEl.textContent = 'Click to copy';
-        }, 1400);
+        flash('failed', 'Copy failed');
       }
     };
 

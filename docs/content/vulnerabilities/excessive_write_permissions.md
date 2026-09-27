@@ -24,6 +24,10 @@ jobs:
 
 If a malicious dependency escapes the lint job, it can use the token to push commits or create releases.
 
+## How actsense detects this
+
+actsense evaluates each job's **effective** permissions: job-level `permissions:` replace the workflow-level block entirely. A job is reported when its name suggests it is read-only (`test`, `lint`, `check`, `validate`, `scan`, `audit`, `analyze`, `verify`), it does not also suggest a write operation (`deploy`, `release`, `publish`, `push`, ...), and its effective token has any `write` scope. Reported as **medium**.
+
 ## Mitigation Strategies
 
 1. **Set minimal global permissions**  

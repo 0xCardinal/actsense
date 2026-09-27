@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "actsense - GitHub Actions Security Auditor",
+    "title": "actsense - Workflow Security Auditor",
     "version": "1.0.0"
   },
   "paths": {

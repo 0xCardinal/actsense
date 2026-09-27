@@ -117,7 +117,9 @@ function YAMLEditorPanel({ onClose, onAnalyze, githubToken, loading, initialCont
     let content = yamlContent
     const newApplied = new Set(appliedFixes)
     fixes.forEach((fix, i) => {
-      if (newApplied.has(i)) return
+      // Manual fixes contain a <SHA>/<digest> placeholder; applying them
+      // unattended would leave an invalid workflow.
+      if (newApplied.has(i) || fix.manual) return
       if (content.includes(fix.original)) {
         content = content.replace(fix.original, fix.replacement)
         newApplied.add(i)
@@ -143,7 +145,8 @@ function YAMLEditorPanel({ onClose, onAnalyze, githubToken, loading, initialCont
     }
   }
 
-  const unappliedCount = fixes.filter((_, i) => !appliedFixes.has(i)).length
+  const unappliedCount = fixes.filter((fix, i) => !appliedFixes.has(i) && !fix.manual).length
+  const manualPinCount = fixes.filter(fix => fix.manual).length
   const hasFixes = fixes.length > 0
   const hasIssues = issues.length > 0
 
@@ -199,8 +202,11 @@ function YAMLEditorPanel({ onClose, onAnalyze, githubToken, loading, initialCont
                     Security Analysis
                     {hasIssues && <span className="yaml-fixes-count">{issues.length} issue{issues.length !== 1 ? 's' : ''}</span>}
                   </h3>
-                  {rateLimited && (
-                    <div className="yaml-fix-rate-warning">Provide a GitHub token for SHA auto-resolve</div>
+                  {manualPinCount > 0 && (
+                    <div className="yaml-fix-rate-warning">
+                      {manualPinCount} pin{manualPinCount !== 1 ? 's' : ''} could not be resolved automatically
+                      {rateLimited ? ' (GitHub rate limit reached; a token raises it)' : ''} and must be filled in by hand.
+                    </div>
                   )}
                   {hasFixes && unappliedCount > 0 && (
                     <button className="yaml-fix-apply-all" onClick={applyAllFixes}>
@@ -219,6 +225,18 @@ function YAMLEditorPanel({ onClose, onAnalyze, githubToken, loading, initialCont
                           </span>
                           <span className="yaml-fix-type">{fix.issue_type}</span>
                           {fix.line && <span className="yaml-fix-line">L{fix.line}</span>}
+                          {fix.resolved_by === 'pin.actsense.dev' && (
+                            <a
+                              className="yaml-fix-source"
+                              href="https://pin.actsense.dev"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="SHA resolved by pin.actsense.dev"
+                            >
+                              pin.
+                            </a>
+                          )}
+                          {fix.manual && <span className="yaml-fix-manual">manual</span>}
                         </div>
                         <p className="yaml-fix-description">{fix.description}</p>
                         <div className="yaml-fix-diff">

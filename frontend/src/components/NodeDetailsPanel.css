@@ -4,10 +4,9 @@
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  background: rgba(0, 0, 0, 0.3) !important;
+  background: rgba(17, 24, 39, 0.14) !important;
   z-index: 9998 !important;
-  animation: fadeIn 0.3s ease-out !important;
-  backdrop-filter: blur(2px) !important;
+  animation: fadeIn 0.2s ease-out !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -30,9 +29,9 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .share-backdrop-button:hover {
@@ -49,16 +48,16 @@
   position: fixed !important;
   top: 0.75rem !important;
   right: 0.75rem !important;
-  width: 700px !important;
+  width: min(700px, calc(100vw - 1.5rem)) !important;
   height: calc(100vh - 1.5rem) !important;
-  background: #ffffff !important;
-  border: 1px solid #e5e7eb !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
   border-radius: 12px !important;
   z-index: 9999 !important;
   display: flex !important;
   flex-direction: column !important;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
-  animation: slideIn 0.3s ease-out !important;
+  box-shadow: var(--shadow-lg) !important;
+  animation: slideIn 0.32s var(--ease-out) !important;
   visibility: visible !important;
   opacity: 1 !important;
   overflow: hidden !important;
@@ -86,19 +85,19 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
-  background: #ffffff;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
   border-radius: 12px 12px 0 0;
 }
 
 .panel-header h2 {
   margin: 0;
-  color: #111827;
-  font-size: 1.25rem;
+  color: var(--ink);
+  font-size: 1rem;
   font-weight: 600;
-  font-family: 'Inter', sans-serif;
-  letter-spacing: -0.025em;
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
 }
 
 .panel-header-actions {
@@ -108,25 +107,26 @@
 }
 
 .share-link-button-header {
+  box-shadow: var(--shadow-xs), var(--bevel);
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  color: #000000;
+  color: var(--ink);
   font-weight: 500;
   padding: 0.375rem 0.75rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #ffffff;
-  transition: all 0.15s ease;
+  background: var(--surface);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
   font-size: 0.875rem;
   cursor: pointer;
   font-family: inherit;
 }
 
 .share-link-button-header:hover {
-  background: #f9fafb;
-  border-color: #000000;
-  color: #000000;
+  background: var(--surface-sunken);
+  border-color: var(--ink);
+  color: var(--ink);
 }
 
 .share-link-button-header i {
@@ -135,9 +135,10 @@
 }
 
 .close-button {
+  box-shadow: var(--shadow-xs), var(--bevel);
   background: transparent;
-  border: 1px solid #e5e7eb;
-  color: #6b7280;
+  border: 1px solid var(--line);
+  color: var(--ink-3);
   font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
@@ -148,21 +149,21 @@
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
   font-weight: 400;
 }
 
 .close-button:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
-  color: #111827;
+  background: var(--surface-sunken);
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
 
 .panel-content {
   flex: 1;
   overflow-y: auto;
   padding: 1.5rem;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .detail-section {
@@ -174,31 +175,31 @@
 }
 
 .detail-label {
-  color: #64748b;
+  color: var(--ink-3);
   font-size: 0.75rem;
   font-weight: 600;
   margin-bottom: 0.625rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .detail-value {
-  color: #1e293b;
+  color: var(--ink);
   font-size: 1rem;
   word-break: break-word;
   font-weight: 500;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .detail-value-small {
   font-size: 0.875rem;
-  color: #6b7280;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  background: #f9fafb;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  background: var(--surface-sunken);
   padding: 0.375rem 0.625rem;
   border-radius: 4px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--line);
 }
 
 .status-badge {
@@ -207,7 +208,7 @@
   border-radius: 6px;
   font-size: 0.8125rem;
   font-weight: 500;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .status-issues {
@@ -233,18 +234,18 @@
 }
 
 .issue-item {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-left-width: 3px;
   border-radius: 6px;
   padding: 1rem;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
 }
 
 .issue-item:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  background: var(--surface-sunken);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-xs);
 }
 
 .issue-header {
@@ -285,7 +286,7 @@
 .issue-icon-button i {
   font-size: 0.875rem;
   line-height: 1;
-  color: #6b7280;
+  color: var(--ink-3);
   transition: color 0.2s ease;
 }
 
@@ -301,34 +302,34 @@
   color: white;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .issue-type {
-  color: #1e293b;
+  color: var(--ink);
   font-size: 0.9375rem;
   font-weight: 600;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .issue-message {
-  color: #475569;
+  color: var(--ink-2);
   font-size: 0.9375rem;
   line-height: 1.6;
   margin-bottom: 0.625rem;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .issue-action,
 .issue-path {
-  color: #6b7280;
+  color: var(--ink-3);
   font-size: 0.8125rem;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-mono);
   margin-top: 0.625rem;
-  background: #f9fafb;
+  background: var(--surface-sunken);
   padding: 0.375rem 0.625rem;
   border-radius: 4px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--line);
 }
 
 .no-issues-message {
@@ -339,7 +340,7 @@
   color: #16a34a;
   text-align: center;
   font-weight: 500;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Dependency Chain Styles */
@@ -348,8 +349,8 @@
   margin-bottom: 1.75rem;
   padding-top: 1.5rem;
   padding-bottom: 1.5rem;
-  border-top: 1px solid #e5e7eb;
-  border-bottom: 1px solid #e5e7eb;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .dependency-group {
@@ -361,11 +362,11 @@
 }
 
 .dependency-group-label {
-  color: #64748b;
+  color: var(--ink-3);
   font-size: 0.8125rem;
   font-weight: 600;
   margin-bottom: 0.75rem;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .dependency-chain {
@@ -374,9 +375,9 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   padding: 1rem;
-  background: #f9fafb;
+  background: var(--surface-sunken);
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--line);
 }
 
 .chain-node {
@@ -384,11 +385,11 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 6px;
   font-size: 0.875rem;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
 }
 
 .chain-node-clickable {
@@ -424,7 +425,7 @@
 
 .chain-node .node-label {
   font-weight: 500;
-  color: #111827;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -433,7 +434,7 @@
 
 
 .chain-arrow {
-  color: #9ca3af;
+  color: var(--ink-4);
   font-size: 1rem;
   font-weight: 600;
   flex-shrink: 0;
@@ -454,22 +455,22 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: #000000;
+  color: var(--ink);
   font-weight: 500;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #ffffff;
-  transition: all 0.15s ease;
+  background: var(--surface);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
   font-size: 0.9375rem;
   cursor: pointer;
   font-family: inherit;
 }
 
 .share-link-button:hover {
-  background: #f9fafb;
-  border-color: #000000;
-  color: #000000;
+  background: var(--surface-sunken);
+  border-color: var(--ink);
+  color: var(--ink);
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -487,21 +488,21 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: #000000;
+  color: var(--ink);
   text-decoration: none;
   font-weight: 500;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #ffffff;
-  transition: all 0.15s ease;
+  background: var(--surface);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
   font-size: 0.9375rem;
 }
 
 .github-link:hover {
-  background: #f9fafb;
-  border-color: #000000;
-  color: #000000;
+  background: var(--surface-sunken);
+  border-color: var(--ink);
+  color: var(--ink);
   text-decoration: none;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -512,36 +513,36 @@
   line-height: 1;
 }
 
-/* Submit button style (matching InputForm) */
-.submit-button {
-  background: #111827;
-  border: 1px solid #111827;
+/* Submit button style (matching InputForm), scoped to the panel */
+.node-details-panel .submit-button {
+  background: var(--ink);
+  border: 1px solid var(--ink);
   border-radius: 6px;
   padding: 0.625rem 1rem;
   color: white;
   font-weight: 500;
   font-size: 0.875rem;
   cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: 'Inter', sans-serif;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
+  font-family: var(--font-sans);
+  box-shadow: var(--shadow-xs);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.submit-button:hover:not(:disabled) {
+.node-details-panel .submit-button:hover:not(:disabled) {
   background: #1f2937;
   border-color: #1f2937;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
 }
 
-.submit-button:active:not(:disabled) {
-  background: #111827;
+.node-details-panel .submit-button:active:not(:disabled) {
+  background: var(--ink);
   box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
 }
 
-.submit-button:disabled {
+.node-details-panel .submit-button:disabled {
   opacity: 0.8;
   cursor: not-allowed;
   transform: none;
@@ -549,3 +550,37 @@
 
 /* Scrollbar styling - using global minimal style */
 
+
+.detail-usages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-usages li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+.detail-usage-role {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.detail-usage-where {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}

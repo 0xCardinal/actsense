@@ -24,6 +24,10 @@ jobs:
           echo "${{ github.event.issue.title }}"  # User-controlled input
 ```
 
+## How actsense detects this
+
+Reported as **high** when a public repository runs a job on a self-hosted runner (the `self-hosted` label or a runner group) from `issues`, `issue_comment`, `discussion` or `discussion_comment` events, all of which anyone with a GitHub account can trigger.
+
 ## Mitigation Strategies
 
 1. **Use GitHub-hosted runners for issue workflows**  

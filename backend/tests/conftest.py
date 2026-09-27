@@ -3,6 +3,15 @@ import pytest
 from typing import Dict, Any
 
 
+@pytest.fixture(autouse=True)
+def _isolated_analysis_storage(tmp_path, monkeypatch):
+    """Keep API tests from writing analyses into the real data/analyses store."""
+    import main
+    from analysis_storage import AnalysisStorage
+
+    monkeypatch.setattr(main, "storage", AnalysisStorage(storage_dir=str(tmp_path / "analyses")))
+
+
 @pytest.fixture
 def sample_workflow() -> Dict[str, Any]:
     """Basic workflow structure for testing."""
@@ -707,7 +716,9 @@ def workflow_with_unsafe_shell() -> Dict[str, Any]:
                 "steps": [
                     {
                         "name": "Unsafe",
-                        "shell": "bash",
+                        # `shell: bash` already implies -eo pipefail; only a custom
+                        # template can drop -e.
+                        "shell": "bash {0}",
                         "run": "false\necho 'This should not run'"
                     }
                 ]

@@ -1,4 +1,6 @@
 """Security issue detection for GitHub Actions."""
+import asyncio
+import re
 from typing import List, Dict, Any, Optional, Callable
 from github_client import GitHubClient
 
@@ -277,36 +279,113 @@ class SecurityAuditor:
         """Check for unpinnable JavaScript actions (downloading external resources without checksums)."""
         return security_rules.check_unpinnable_javascript_action(action_yml, action_ref, action_content)
     @staticmethod
+    def _composite_step_issues(action_yml: Dict[str, Any], action_ref: str) -> List[Dict[str, Any]]:
+        """Run the step-level workflow checks over a composite action's steps.
+
+        Composite ``run:`` steps are shell scripts exactly like workflow steps and
+        are just as injectable; ``${{ inputs.* }}`` is the usual sink, because
+        callers routinely feed PR titles, branch names etc. into action inputs.
+        """
+        runs = action_yml.get("runs") if isinstance(action_yml.get("runs"), dict) else {}
+        steps = runs.get("steps")
+        if runs.get("using") != "composite" or not isinstance(steps, list):
+            return []
+        pseudo = {"jobs": {"composite": {"steps": [st for st in steps if isinstance(st, dict)]}}}
+
+        issues: List[Dict[str, Any]] = []
+        for check in (
+            security_rules.check_risky_context_usage,
+            security_rules.check_github_env_injection,
+            security_rules.check_github_script_injection,
+            security_rules.check_malicious_curl_pipe_bash,
+            security_rules.check_malicious_base64_decode,
+            security_rules.check_obfuscation_detection,
+            security_rules.check_insecure_commands,
+        ):
+            issues.extend(check(pseudo))
+
+        input_expr = re.compile(r'\$\{\{[^}]*\binputs\.([A-Za-z0-9_-]+)[^}]*\}\}')
+        for step in pseudo["jobs"]["composite"]["steps"]:
+            run = step.get("run")
+            if not isinstance(run, str):
+                continue
+            names = sorted(set(input_expr.findall(run)))
+            if names:
+                issues.append({
+                    "type": "code_injection_via_input",
+                    "severity": "medium",
+                    "message": f"Composite action interpolates input(s) {', '.join(names)} directly into a shell command (step: '{step.get('name', 'unnamed')}'). Any caller passing untrusted text (a PR title, branch name, comment) gets command injection. Map inputs to env: and quote the variables.",
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
+                        "inputs": names,
+                        "step": step.get("name", "unnamed"),
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
+                    },
+                    "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
+                })
+
+        for issue in issues:
+            issue["action"] = action_ref
+            if issue.get("job") == "composite":
+                issue["job"] = None
+                if isinstance(issue.get("message"), str):
+                    issue["message"] = issue["message"].replace("Job 'composite'", "Composite action")
+        return issues
+
+    @staticmethod
     def audit_action(action_ref: str, action_yml: Optional[Dict[str, Any]] = None, action_content: Optional[str] = None, dockerfile_content: Optional[str] = None) -> List[Dict[str, Any]]:
         """Audit a single action for security issues."""
         issues = []
-        
-        # Check pinned version
+
         version_issue = SecurityAuditor.check_pinned_version(action_ref)
         if version_issue:
             issues.append(version_issue)
-        
-        # Check action.yml if available
+
         if action_yml:
-            # Check for secrets in inputs
             inputs = action_yml.get("inputs", {})
-            for input_name, input_def in inputs.items():
+            for input_name, input_def in (inputs.items() if isinstance(inputs, dict) else []):
                 if isinstance(input_def, dict):
-                    description = input_def.get("description", "").lower()
+                    description = str(input_def.get("description", "")).lower()
                     if "secret" in description or "password" in description or "token" in description:
-                        if not input_def.get("required", False):
+                        # An optional token input with a default of github.token is
+                        # the standard, safe pattern; only flag real optional secrets.
+                        default = str(input_def.get("default", ""))
+                        if not input_def.get("required", False) and "github.token" not in default:
                             issues.append({
                                 "type": "optional_secret_input",
-                                "severity": "medium",
-                                "message": f"Action has optional secret input '{input_name}'",
-                                "action": action_ref
+                                "severity": "low",
+                                "message": f"Action has optional secret input '{input_name}'. If callers omit it the action may silently fall back to weaker or no authentication.",
+                                "action": action_ref,
+                                "evidence": {
+                                    "action": action_ref,
+                                    "input": input_name,
+                                    "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/optional_secret_input"
+                                },
+                                "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/optional_secret_input"
                             })
-            
+
+            runs = action_yml.get("runs") if isinstance(action_yml.get("runs"), dict) else {}
+            using = str(runs.get("using", "")).lower()
+            if using in ("node12", "node16"):
+                issues.append({
+                    "type": "deprecated_action",
+                    "severity": "medium",
+                    "message": f"Action '{action_ref}' runs on the deprecated {using} runtime. GitHub forces these actions onto a newer Node version, which can break them, and the old runtime no longer receives security fixes.",
+                    "action": action_ref,
+                    "evidence": {
+                        "action": action_ref,
+                        "runtime": using,
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/deprecated_action"
+                    },
+                    "recommendation": "Upgrade to a release of the action that targets node20 or node24."
+                })
+
             # Check for unpinnable actions (Palo Alto Networks research)
             issues.extend(security_rules.check_unpinnable_docker_action(action_yml, action_ref, dockerfile_content))
             issues.extend(security_rules.check_unpinnable_composite_action(action_yml, action_ref))
             issues.extend(security_rules.check_unpinnable_javascript_action(action_yml, action_ref, action_content))
-        
+            issues.extend(SecurityAuditor._composite_step_issues(action_yml, action_ref))
+
         return issues
 
     @staticmethod
@@ -374,7 +453,9 @@ class SecurityAuditor:
         issues.extend(token_issues)
         
         _log("  Checking secrets & credentials")
-        secret_issues = SecurityAuditor.check_secrets_in_workflow(workflow, content)
+        # Runs the TruffleHog subprocess; keep it off the event loop so
+        # concurrent workflow/action resolution is not stalled behind it.
+        secret_issues = await asyncio.to_thread(SecurityAuditor.check_secrets_in_workflow, workflow, content)
         if content and secret_issues:
             for issue in secret_issues:
                 # Try to find the secret pattern in content

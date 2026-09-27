@@ -1,6 +1,6 @@
 ---
 title: "Getting Started"
-description: "Quick start guide for actsense - GitHub Actions security auditor"
+description: "Quick start guide for actsense - Workflow Security Auditor"
 ---
 
 ## Quick Start

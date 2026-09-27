@@ -6,8 +6,8 @@ Running outdated versions of community actions leaves workflows exposed to known
 
 ## Vulnerable Instance
 
-- Workflow references `some/action@v1`.
-- Maintainers have published newer major versions or security advisories.
+- Workflow references a major version that has been retired, such as `actions/upload-artifact@v3`, or an action from an archived repository.
+- Or an action in the dependency graph still runs on the removed `node12` / `node16` runtime.
 - Action executes with elevated permissions (e.g., `actions/checkout@v1` with `persist-credentials`).
 
 ```yaml
@@ -19,6 +19,16 @@ jobs:
       - uses: actions/setup-node@v1
       - run: npm ci && npm test
 ```
+
+## How actsense detects this
+
+actsense reports:
+
+- **Known-retired majors**: `actions/upload-artifact` and `actions/download-artifact` below v4 (shut down on GitHub.com in January 2025), `actions/cache` below v3, `actions/checkout` v1, and the v1 majors of `actions/setup-*`.
+- **Archived repositories**: any action whose repository is archived.
+- **Deprecated runtimes**: any action in the dependency graph whose `action.yml` declares `using: node12` or `using: node16`.
+
+Earlier versions also flagged every `@v1` reference. That heuristic was removed: `v1` is the current major of many maintained actions, and staleness is covered by [older action version](/vulnerabilities/older_action_version/). All findings are **medium**.
 
 ## Mitigation Strategies
 

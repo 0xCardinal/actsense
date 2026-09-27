@@ -3,7 +3,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--surface);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -13,19 +13,19 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--line);
 }
 
 .issues-table-header h2 {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #111827;
-  font-family: 'Inter', sans-serif;
+  color: var(--ink);
+  font-family: var(--font-sans);
 }
 
 .issues-count {
-  color: #6b7280;
+  color: var(--ink-3);
   font-size: 0.875rem;
   font-weight: 500;
 }
@@ -35,7 +35,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #6b7280;
+  color: var(--ink-3);
   padding: 3rem;
 }
 
@@ -48,11 +48,11 @@
 .issues-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .issues-table thead {
-  background: #f9fafb;
+  background: var(--surface-sunken);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -63,19 +63,19 @@
   text-align: left;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--line);
 }
 
 .issues-table tbody tr {
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--surface-hover);
   transition: background-color 0.15s ease;
 }
 
 .issues-table tbody tr:hover {
-  background: #f9fafb;
+  background: var(--surface-sunken);
   cursor: pointer;
 }
 
@@ -86,7 +86,7 @@
 .issues-table td {
   padding: 1rem;
   font-size: 0.875rem;
-  color: #111827;
+  color: var(--ink);
 }
 
 .severity-badge {
@@ -102,7 +102,7 @@
 
 .issue-type-cell {
   font-weight: 500;
-  color: #374151;
+  color: var(--ink-2);
 }
 
 .node-cell {
@@ -113,17 +113,17 @@
 
 .node-label {
   font-weight: 500;
-  color: #111827;
+  color: var(--ink);
 }
 
 .node-type {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--ink-3);
   text-transform: capitalize;
 }
 
 .message-cell {
-  color: #374151;
+  color: var(--ink-2);
   max-width: 400px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -131,12 +131,12 @@
 }
 
 .action-cell {
-  background: #f9fafb;
+  background: var(--surface-sunken);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.8125rem;
-  color: #6b7280;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  border: 1px solid #e5e7eb;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  border: 1px solid var(--line);
 }
 

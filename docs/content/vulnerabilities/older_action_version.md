@@ -21,6 +21,10 @@ jobs:
       - run: npm test
 ```
 
+## How actsense detects this
+
+actsense compares the pinned version with the repository's latest release **at the precision the tag pins**. A floating major tag such as `@v4` tracks every `4.x` release, so it is reported only when a newer *major* exists (e.g. `v5`); `@v4.1` is compared on major.minor, and `@v4.1.2` on the full version. SHA pins are reported when the commit is more than a year older than the latest tag. Reported as **medium**.
+
 ## Mitigation Strategies
 
 1. **Check for latest releases**  

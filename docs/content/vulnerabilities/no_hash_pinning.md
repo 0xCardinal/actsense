@@ -27,6 +27,10 @@ jobs:
           path: dist/
 ```
 
+## How actsense detects this
+
+Reported as **medium** for every `uses:` reference pinned to a version tag instead of a full 40-character commit SHA. Short SHAs are reported separately as [short hash pinning](/vulnerabilities/short_hash_pinning/).
+
 ## Mitigation Strategies
 
 1. **Pin to full commit SHA**  

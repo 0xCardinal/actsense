@@ -18,6 +18,71 @@ from config_loader import get_trusted_publishers
 
 # Security vulnerability and best practice checks
 
+
+def _on_events(workflow: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize the ``on:`` block to ``{event_name: config_dict}``.
+
+    ``on`` may be a string (``on: push``), a list (``on: [push, pull_request]``)
+    or a mapping whose values can be ``None`` (``workflow_call:`` with no body).
+    Every trigger-aware check goes through this so none of them crash on, or
+    silently ignore, the shorter forms.
+    """
+    on = workflow.get("on") if isinstance(workflow, dict) else None
+    if isinstance(on, str):
+        return {on: {}}
+    if isinstance(on, list):
+        return {str(e): {} for e in on if isinstance(e, (str, int))}
+    if isinstance(on, dict):
+        return {str(k): (v if isinstance(v, dict) else {}) for k, v in on.items()}
+    return {}
+
+
+def _event_inputs(workflow: Dict[str, Any], event: str) -> Dict[str, Any]:
+    """Return the ``inputs`` mapping of workflow_dispatch / workflow_call (never None)."""
+    inputs = _on_events(workflow).get(event, {}).get("inputs")
+    return inputs if isinstance(inputs, dict) else {}
+
+
+def _runner_labels(runs_on: Any) -> List[str]:
+    """Flatten ``runs-on`` (string, list, or ``{group, labels}`` mapping) to lowercase labels."""
+    if isinstance(runs_on, str):
+        return [runs_on.lower()]
+    if isinstance(runs_on, list):
+        return [str(r).lower() for r in runs_on]
+    if isinstance(runs_on, dict):
+        labels = runs_on.get("labels", [])
+        labels = [labels] if isinstance(labels, str) else (labels if isinstance(labels, list) else [])
+        group = runs_on.get("group")
+        return [str(label).lower() for label in labels] + ([f"group:{str(group).lower()}"] if group else [])
+    return []
+
+
+def _is_self_hosted(runs_on: Any) -> bool:
+    """A job is self-hosted if it asks for the ``self-hosted`` label or a runner group.
+
+    Runner groups (``runs-on: {group: ...}``) only contain self-hosted or larger
+    runners, so they carry the same exposure as an explicit self-hosted label.
+    """
+    return any("self-hosted" in label or label.startswith("group:") for label in _runner_labels(runs_on))
+
+
+def _effective_permissions(workflow: Dict[str, Any], job: Dict[str, Any]) -> Any:
+    """Job-level ``permissions`` replace workflow-level ones entirely when present."""
+    if isinstance(job, dict) and "permissions" in job:
+        return job.get("permissions")
+    return workflow.get("permissions")
+
+
+def _permissions_include_write(permissions: Any) -> bool:
+    if permissions == "write-all":
+        return True
+    return isinstance(permissions, dict) and any(v == "write" for v in permissions.values())
+
+
+def _is_truthy(value: Any) -> bool:
+    return value is True or (isinstance(value, str) and value.strip().lower() in ("true", "1", "yes", "on"))
+
+
 def check_secrets_in_workflow(workflow: Dict[str, Any], content: Optional[str] = None) -> List[Dict[str, Any]]:
     """Check for potential secret exposure issues and long-term credentials."""
     issues = []
@@ -37,8 +102,18 @@ def check_secrets_in_workflow(workflow: Dict[str, Any], content: Optional[str] =
                     },
                     "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/potential_hardcoded_secret"
                 })
-            # Also check if the value itself looks like a secret (long alphanumeric string)
-            elif len(value) >= 20 and re.match(r'^[a-zA-Z0-9_\-]{20,}$', value) and path and re.search(r'(password|secret|token|key|api[_-]?key)', path, re.IGNORECASE):
+            # Also check if the value itself looks like a secret: a long token under a
+            # secret-looking key that mixes letters and digits. Requiring both keeps
+            # human-readable values such as a cache key
+            # ("linux-node-modules-build-cache") from being reported as credentials.
+            elif (
+                len(value) >= 20
+                and re.match(r'^[a-zA-Z0-9_\-]{20,}$', value)
+                and re.search(r'[0-9]', value)
+                and re.search(r'[a-zA-Z]', value)
+                and path
+                and re.search(r'(password|secret|token|api[_-]?key|(^|[._-])key$)', path, re.IGNORECASE)
+            ):
                 issues.append({
                     "type": "potential_hardcoded_secret",
                     "severity": "critical",
@@ -64,82 +139,97 @@ def check_secrets_in_workflow(workflow: Dict[str, Any], content: Optional[str] =
         trufflehog_issues = _run_trufflehog(content)
         issues.extend(trufflehog_issues)
 
-    # Check for long-term credentials in jobs
+    # Long-term cloud credentials (static keys instead of OIDC federation).
+    # Only secret material counts: AZURE_CLIENT_ID / AZURE_TENANT_ID are also
+    # what azure/login uses *with* OIDC, so they are not evidence of a static key.
+    aws_env = ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")
+    azure_env = ("AZURE_CLIENT_SECRET", "AZURE_CREDENTIALS")
+    gcp_env = ("GCP_SA_KEY", "GOOGLE_CREDENTIALS", "GCP_CREDENTIALS", "GOOGLE_APPLICATION_CREDENTIALS")
+    # Action inputs that take a static key (the OIDC variants of these actions
+    # use role-to-assume / workload_identity_provider / client-id instead).
+    aws_inputs = ("aws-access-key-id", "aws-secret-access-key")
+    azure_inputs = ("creds", "client-secret")
+    gcp_inputs = ("credentials_json", "service_account_key")
+
+    def long_term_issue(kind: str, provider: str, job_name: str, step_name: Optional[str], where: str):
+        return {
+            "type": f"long_term_{kind}_credentials",
+            "severity": "high",
+            "message": f"Job '{job_name}' uses long-term {provider} credentials ({where}) instead of OIDC. Long-term credentials are less secure and harder to rotate.",
+            "job": job_name,
+            "step": step_name,
+            "evidence": {
+                "job": job_name,
+                "step": step_name,
+                "location": where,
+                "credential_type": f"{provider} long-term credentials",
+                "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
+            },
+            "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
+        }
+
+    def scan_env(env: Any, job_name: str, step_name: Optional[str], scope: str, reported: set):
+        if not isinstance(env, dict):
+            return
+        for kind, provider, keys in (("aws", "AWS", aws_env), ("azure", "Azure", azure_env), ("gcp", "GCP", gcp_env)):
+            hit = next((k for k in keys if k in env), None)
+            if hit and (kind, step_name) not in reported:
+                reported.add((kind, step_name))
+                issues.append(long_term_issue(kind, provider, job_name, step_name, f"{scope} env {hit}"))
+
     jobs = workflow.get("jobs", {})
+    jobs = jobs if isinstance(jobs, dict) else {}
     for job_name, job in jobs.items():
-        steps = job.get("steps", [])
-        for step in steps:
-            env = step.get("env", {})
+        if not isinstance(job, dict):
+            continue
+        reported: set = set()
+        scan_env(job.get("env"), job_name, None, "job", reported)
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            step_name = step.get("name", "unnamed")
+            scan_env(step.get("env"), job_name, step_name, "step", reported)
+
+            with_params = step.get("with") if isinstance(step.get("with"), dict) else {}
+            uses = str(step.get("uses", "")).lower()
+            for kind, provider, keys, action_hint in (
+                ("aws", "AWS", aws_inputs, "aws-actions/configure-aws-credentials"),
+                ("azure", "Azure", azure_inputs, "azure/login"),
+                ("gcp", "GCP", gcp_inputs, "google-github-actions/auth"),
+            ):
+                hit = next((k for k in keys if with_params.get(k)), None)
+                if hit and action_hint in uses and (kind, step_name) not in reported:
+                    reported.add((kind, step_name))
+                    issues.append(long_term_issue(kind, provider, job_name, step_name, f"input '{hit}'"))
+
+            # Hardcoded key material in run commands. Only a *literal* value is a
+            # finding: `aws configure set aws_access_key_id "$KEY"` or a
+            # `${{ secrets.X }}` reference is the correct way to pass a key.
             run = step.get("run", "")
-
-            # Check for AWS credentials
-            if any(key in env for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]):
+            if isinstance(run, str) and (
+                re.search(r'\b(AKIA|ASIA)[0-9A-Z]{16}\b', run)
+                or re.search(
+                    r'(aws_access_key_id|aws_secret_access_key|azure_client_secret)["\']?\s*[=:\s]\s*["\']?(?![$"\'{])[A-Za-z0-9/+=]{16,}',
+                    run, re.IGNORECASE,
+                )
+            ):
                 issues.append({
-                    "type": "long_term_aws_credentials",
-                    "severity": "high",
-                    "message": f"Job '{job_name}' uses long-term AWS credentials instead of OIDC. Long-term credentials are less secure and harder to rotate.",
+                    "type": "potential_hardcoded_cloud_credentials",
+                    "severity": "critical",
+                    "message": f"Job '{job_name}' appears to contain hardcoded cloud credentials in a run command. This is a critical security vulnerability.",
                     "job": job_name,
-                    "step": step.get("name", "unnamed"),
+                    "step": step_name,
                     "evidence": {
                         "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "credential_type": "AWS long-term credentials",
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
+                        "step": step_name,
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/potential_hardcoded_cloud_credentials"
                     },
-                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
+                    "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/potential_hardcoded_cloud_credentials"
                 })
 
-            # Check for Azure credentials
-            if any(key in env for key in ["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"]):
-                issues.append({
-                    "type": "long_term_azure_credentials",
-                    "severity": "high",
-                    "message": f"Job '{job_name}' uses long-term Azure credentials instead of OIDC. Long-term credentials are less secure and harder to rotate.",
-                    "job": job_name,
-                    "step": step.get("name", "unnamed"),
-                    "evidence": {
-                        "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "credential_type": "Azure long-term credentials",
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
-                    },
-                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
-                })
-
-            # Check for GCP credentials
-            if "GOOGLE_APPLICATION_CREDENTIALS" in env or "GCP_SA_KEY" in env:
-                issues.append({
-                    "type": "long_term_gcp_credentials",
-                    "severity": "high",
-                    "message": f"Job '{job_name}' uses long-term GCP credentials instead of OIDC. Long-term credentials are less secure and harder to rotate.",
-                    "job": job_name,
-                    "step": step.get("name", "unnamed"),
-                    "evidence": {
-                        "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "credential_type": "GCP long-term credentials",
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
-                    },
-                    "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/long_term_cloud_credentials"
-                })
-
-            # Check for hardcoded credentials in run commands
-            if isinstance(run, str):
-                # Check for common credential patterns
-                if re.search(r'(aws_access_key|aws_secret|azure_client_secret|gcp_key|service_account_key)', run, re.IGNORECASE):
-                    issues.append({
-                        "type": "potential_hardcoded_cloud_credentials",
-                        "severity": "critical",
-                        "message": f"Job '{job_name}' may contain hardcoded cloud credentials in run command. This is a critical security vulnerability.",
-                        "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "evidence": {
-                            "job": job_name,
-                            "step": step.get("name", "unnamed"),
-                            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/potential_hardcoded_cloud_credentials"
-                        },
-                        "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/potential_hardcoded_cloud_credentials"
-                    })
+    # Workflow-level env applies to every job.
+    top_reported: set = set()
+    scan_env(workflow.get("env"), "(workflow)", None, "workflow", top_reported)
 
     return issues
 
@@ -149,17 +239,11 @@ def check_self_hosted_runners(workflow: Dict[str, Any], is_public_repo: bool = F
     issues = []
 
     jobs = workflow.get("jobs", {})
-    on_events = workflow.get("on", {})
+    on_events = _on_events(workflow)
     is_pr_triggered = "pull_request" in on_events or "pull_request_target" in on_events
-    is_issue_triggered = "issues" in on_events
+    is_issue_triggered = any(e in on_events for e in ("issues", "issue_comment", "discussion", "discussion_comment"))
 
-    def uses_self_hosted_runner(runs_on_value) -> bool:
-        """Check if runs-on uses self-hosted runner."""
-        if isinstance(runs_on_value, str):
-            return "self-hosted" in runs_on_value.lower()
-        elif isinstance(runs_on_value, list):
-            return any("self-hosted" in str(r).lower() for r in runs_on_value)
-        return False
+    uses_self_hosted_runner = _is_self_hosted
 
     # Check each job for self-hosted runners
     for job_name, job in jobs.items():
@@ -201,7 +285,7 @@ def check_self_hosted_runners(workflow: Dict[str, Any], is_public_repo: bool = F
         if is_issue_triggered and is_public_repo:
             issues.append({
                 "type": "self_hosted_runner_issue_exposure",
-                "severity": "critical",
+                "severity": "high",
                 "message": f"Self-hosted runner in job '{job_name}' can be triggered by issue events in a public repository, allowing potential abuse.",
                 "job": job_name,
                 "evidence": {
@@ -213,13 +297,11 @@ def check_self_hosted_runners(workflow: Dict[str, Any], is_public_repo: bool = F
             })
 
         # Check for write-all permissions (CRITICAL)
-        permissions = workflow.get("permissions", {})
-        job_permissions = job.get("permissions", {})
-        has_write_all = (
-            permissions == "write-all" or 
-            job_permissions == "write-all" or
-            (isinstance(permissions, dict) and permissions.get("contents") == "write" and all(v == "write" for v in permissions.values())) or
-            (isinstance(job_permissions, dict) and job_permissions.get("contents") == "write" and all(v == "write" for v in job_permissions.values()))
+        permissions = _effective_permissions(workflow, job)
+        has_write_all = permissions == "write-all" or (
+            isinstance(permissions, dict)
+            and permissions.get("contents") == "write"
+            and all(v == "write" for v in permissions.values())
         )
 
         if has_write_all:
@@ -258,15 +340,9 @@ def check_runner_label_confusion(workflow: Dict[str, Any]) -> List[Dict[str, Any
         if not runs_on_value:
             continue
 
-        # Parse runs-on (can be string or list)
-        if isinstance(runs_on_value, str):
-            runners = [runs_on_value]
-        elif isinstance(runs_on_value, list):
-            runners = [str(r) for r in runs_on_value]
-        else:
+        runner_set = set(_runner_labels(runs_on_value))
+        if not runner_set:
             continue
-
-        runner_set = {r.lower() for r in runners}
 
         # Only relevant when the job targets a self-hosted runner.
         if not any("self-hosted" in r for r in runner_set):
@@ -300,8 +376,7 @@ def check_self_hosted_runner_secrets(workflow: Dict[str, Any]) -> List[Dict[str,
     jobs = workflow.get("jobs", {})
 
     for job_name, job in jobs.items():
-        runs_on_value = job.get("runs-on", "")
-        if not runs_on_value or "self-hosted" not in str(runs_on_value).lower():
+        if not _is_self_hosted(job.get("runs-on", "")):
             continue
 
         steps = job.get("steps", [])
@@ -340,16 +415,15 @@ def check_runner_environment_security(workflow: Dict[str, Any]) -> List[Dict[str
 
     # Network security risk patterns
     network_risks = [
-        (r'curl.*\|\s*bash', 'curl piped to bash'),
-        (r'wget.*\|\s*sh', 'wget piped to shell'),
+        (r'curl.*\|\s*(sudo\s+)?(ba)?sh\b', 'curl piped to shell'),
+        (r'wget.*\|\s*(sudo\s+)?(ba)?sh\b', 'wget piped to shell'),
         (r'Invoke-WebRequest.*\|\s*iex', 'PowerShell download and execute'),
         (r'docker\s+run.*--privileged', 'Docker with privileged mode'),
         (r'docker\s+run.*--cap-add', 'Docker with additional capabilities'),
     ]
 
     for job_name, job in jobs.items():
-        runs_on_value = job.get("runs-on", "")
-        if not runs_on_value or "self-hosted" not in str(runs_on_value).lower():
+        if not _is_self_hosted(job.get("runs-on", "")):
             continue
 
         steps = job.get("steps", [])
@@ -389,8 +463,7 @@ def check_repository_visibility_risks(workflow: Dict[str, Any], is_public_repo: 
 
     # Check if any job uses self-hosted runner
     for job in jobs.values():
-        runs_on_value = job.get("runs-on", "")
-        if runs_on_value and "self-hosted" in str(runs_on_value).lower():
+        if _is_self_hosted(job.get("runs-on", "")):
             has_self_hosted = True
             break
 
@@ -460,96 +533,124 @@ def check_repository_visibility_risks(workflow: Dict[str, Any], is_public_repo: 
     return issues
 
 
+# Expressions that make actions/checkout fetch the pull request's own code.
+_PR_HEAD_REF_MARKERS = (
+    "pull_request.head",          # .sha / .ref / .repo.full_name
+    "github.head_ref",
+    "refs/pull/",                 # refs/pull/<n>/merge|head
+    "pull_request.number",
+    "github.event.number",
+    "merge_commit_sha",
+    "workflow_run.head_sha",
+    "workflow_run.head_branch",
+    "workflow_run.head_repository",
+)
+
+
+def _checkout_targets_untrusted_code(with_params: Dict[str, Any]) -> bool:
+    """True when a checkout step's ref/repository points at PR (fork) code."""
+    for key in ("ref", "repository"):
+        value = str(with_params.get(key, "") or "").lower()
+        if any(marker in value for marker in _PR_HEAD_REF_MARKERS):
+            return True
+    return False
+
+
 def check_dangerous_events(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Check for dangerous workflow trigger events."""
     issues = []
 
-    on_events = workflow.get("on", {})
+    on_events = _on_events(workflow)
+    jobs = workflow.get("jobs", {}) if isinstance(workflow.get("jobs"), dict) else {}
 
-    # Check for pull_request_target (can be dangerous)
-    if "pull_request_target" in on_events:
-        # Check if workflow uses checkout with pull_request_target (critical vulnerability)
-        has_checkout = False
-        jobs = workflow.get("jobs", {})
+    # pull_request_target / workflow_run run with the base repository's secrets
+    # and a read/write token. They are only exploitable when the workflow then
+    # checks out and runs the untrusted PR code. A bare `actions/checkout`
+    # under pull_request_target checks out the *base* commit, which is safe.
+    for event in ("pull_request_target", "workflow_run"):
+        if event not in on_events:
+            continue
         for job_name, job in jobs.items():
-            steps = job.get("steps", [])
-            for step in steps:
-                uses = step.get("uses", "")
-                if "actions/checkout" in uses:
-                    has_checkout = True
-                    # Check if it's checking out the PR branch (dangerous)
-                    with_params = step.get("with", {})
-                    ref = with_params.get("ref", "")
-                    # If no ref specified or ref points to PR head, it's dangerous
-                    if not ref or "pull_request.head" in str(ref) or "pull_request.head.sha" in str(ref):
-                        issues.append({
-                            "type": "insecure_pull_request_target",
-                            "severity": "high",
-                            "message": f"Workflow uses pull_request_target with checkout of PR code. This is a critical vulnerability that allows PRs from forks to execute code with write permissions.",
+            if not isinstance(job, dict):
+                continue
+            for step in job.get("steps", []) or []:
+                if not isinstance(step, dict):
+                    continue
+                uses = str(step.get("uses", ""))
+                with_params = step.get("with") if isinstance(step.get("with"), dict) else {}
+                if "actions/checkout" in uses and _checkout_targets_untrusted_code(with_params):
+                    ref = with_params.get("ref") or with_params.get("repository")
+                    # pull_request_target always runs for fork PRs. For workflow_run the
+                    # checked-out head is only untrusted if the *triggering* workflow
+                    # accepts fork PRs, which cannot be seen from this file alone.
+                    if event == "pull_request_target":
+                        severity = "critical"
+                        message = f"Workflow triggered by pull_request_target checks out the pull request's code (ref: {ref}) in job '{job_name}'. Any later step that builds or runs it executes attacker-controlled code with access to secrets and a write-scoped token."
+                    else:
+                        severity = "high"
+                        message = f"Workflow triggered by workflow_run checks out the triggering run's head (ref: {ref}) in job '{job_name}'. If the triggering workflow runs on pull requests from forks, this executes untrusted code with this workflow's secrets and token."
+                    issues.append({
+                        "type": "insecure_pull_request_target",
+                        "severity": severity,
+                        "message": message,
+                        "job": job_name,
+                        "step": step.get("name", "unnamed"),
+                        "event": event,
+                        "evidence": {
+                            "event": event,
                             "job": job_name,
                             "step": step.get("name", "unnamed"),
-                            "event": "pull_request_target",
-                            "evidence": {
-                                "event": "pull_request_target",
-                                "job": job_name,
-                                "step": step.get("name", "unnamed"),
-                                "checkout_ref": ref or "default (PR branch)",
-                                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/insecure_pull_request_target"
-                            },
-                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/insecure_pull_request_target"
-                        })
-                        break
-                    # If checking out base branch, it's safer but still warn
-                    elif "pull_request.base" in str(ref) or "base.ref" in str(ref):
-                        # This is the safe pattern, but still warn about pull_request_target usage
-                        pass
+                            "checkout_ref": str(ref),
+                            "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/insecure_pull_request_target"
+                        },
+                        "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/insecure_pull_request_target"
+                    })
 
-        # General warning about pull_request_target (if no critical checkout issue found)
-        if not any(issue.get("type") == "insecure_pull_request_target" for issue in issues):
-            issues.append({
-                "type": "dangerous_event",
-                "severity": "high",
-                "message": "Workflow uses pull_request_target event which can be exploited by PRs from forks. This event runs with write permissions and can be dangerous.",
+    if "pull_request_target" in on_events and not any(
+        i.get("event") == "pull_request_target" and i["type"] == "insecure_pull_request_target" for i in issues
+    ):
+        issues.append({
+            "type": "dangerous_event",
+            "severity": "high",
+            "message": "Workflow uses the pull_request_target event, which runs with the base repository's secrets and a write-scoped token for pull requests from forks. It is safe only as long as no step checks out or executes the PR's code.",
+            "event": "pull_request_target",
+            "evidence": {
                 "event": "pull_request_target",
-                "evidence": {
-                    "event": "pull_request_target",
-                    "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/dangerous_event"
-                },
-                "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/dangerous_event"
-            })
+                "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/dangerous_event"
+            },
+            "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/dangerous_event"
+        })
 
-    # Check for workflow_run (can be chained)
-    if "workflow_run" in on_events:
+    if "workflow_run" in on_events and not any(i.get("event") == "workflow_run" for i in issues):
         issues.append({
             "type": "dangerous_event",
             "severity": "medium",
-            "message": "Workflow uses workflow_run event which can create dependency chains and potential security risks.",
+            "message": "Workflow uses the workflow_run event, which runs privileged after a (possibly fork-triggered) workflow. Artifacts and outputs from the triggering run must be treated as untrusted.",
             "event": "workflow_run",
             "evidence": {
                 "event": "workflow_run",
-                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/dangerous_event"
+                "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/dangerous_event"
             },
-            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/dangerous_event"
+            "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/dangerous_event"
         })
 
-    # Check for workflow_call without proper validation
-    if "workflow_call" in on_events:
-        inputs = on_events.get("workflow_call", {}).get("inputs", {})
-        for input_name, input_def in inputs.items():
-            if isinstance(input_def, dict):
-                if input_def.get("type") == "string" and not input_def.get("required", False):
-                    # Check if input might be used in dangerous ways
-                    issues.append({
-                        "type": "unvalidated_workflow_input",
-                        "severity": "high",
-                        "message": f"Workflow_call has optional input '{input_name}' without validation. Optional inputs should be validated to prevent security issues.",
+    # Optional free-form inputs on a reusable workflow are a hygiene concern, not
+    # an exploit on their own: callers are workflows in repositories that chose
+    # to call this one. The injection sink itself is reported separately.
+    for input_name, input_def in _event_inputs(workflow, "workflow_call").items():
+        if isinstance(input_def, dict) and input_def.get("type") == "string" and not input_def.get("required", False):
+            if _input_used_in_run_command(workflow, input_name):
+                issues.append({
+                    "type": "unvalidated_workflow_input",
+                    "severity": "medium",
+                    "message": f"Reusable workflow input '{input_name}' is optional, free-form, and interpolated into a shell command. Validate it before use.",
+                    "input": input_name,
+                    "evidence": {
                         "input": input_name,
-                        "evidence": {
-                            "input": input_name,
-                            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
-                        },
-                        "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
-                    })
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
+                    },
+                    "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
+                })
 
     return issues
 
@@ -561,65 +662,74 @@ def check_checkout_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     jobs = workflow.get("jobs", {})
 
     for job_name, job in jobs.items():
-        steps = job.get("steps", [])
+        steps = job.get("steps", []) or []
+        job_uploads_artifacts = any(
+            isinstance(st, dict) and "upload-artifact" in str(st.get("uses", "")).lower()
+            for st in steps
+        )
         for step in steps:
-            uses = step.get("uses", "")
-            if "actions/checkout" in uses:
-                with_params = step.get("with", {})
+            uses = str(step.get("uses", ""))
+            if "actions/checkout" not in uses:
+                continue
+            with_params = step.get("with") if isinstance(step.get("with"), dict) else {}
 
-                # Check for persist-credentials. YAML parses `true` as a boolean,
-                # so accept both the boolean and the string form.
-                persist = with_params.get("persist-credentials")
-                if persist is True or (isinstance(persist, str) and persist.strip().lower() == "true"):
-                    issues.append({
-                        "type": "unsafe_checkout",
-                        "severity": "high",
-                        "message": f"Job '{job_name}' uses checkout with persist-credentials=true. This can expose credentials to subsequent steps.",
+            # actions/checkout persists the token into .git/config by default.
+            # Explicit `true` is always reported. The default is reported when
+            # the same job uploads artifacts, the path by which the persisted
+            # token most often leaks (e.g. uploading the workspace).
+            persist = with_params.get("persist-credentials")
+            explicit_true = _is_truthy(persist)
+            implicit_true = persist is None and job_uploads_artifacts
+            if explicit_true or implicit_true:
+                issues.append({
+                    "type": "unsafe_checkout",
+                    "severity": "high" if explicit_true else "medium",
+                    "message": (
+                        f"Job '{job_name}' uses checkout with persist-credentials=true. The GITHUB_TOKEN is written to .git/config, where every later step and any uploaded artifact containing .git can read it."
+                        if explicit_true else
+                        f"Job '{job_name}' checks out without persist-credentials: false (the default is true) and uploads artifacts. The GITHUB_TOKEN stored in .git/config can leak through the artifact."
+                    ),
+                    "job": job_name,
+                    "step": step.get("name", "unnamed"),
+                    "evidence": {
                         "job": job_name,
                         "step": step.get("name", "unnamed"),
-                        "evidence": {
-                            "job": job_name,
-                            "step": step.get("name", "unnamed"),
-                            "parameter": "persist-credentials=true",
-                            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unsafe_checkout"
-                        },
-                        "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unsafe_checkout"
-                    })
+                        "parameter": "persist-credentials=true" if explicit_true else "persist-credentials not set (defaults to true)",
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unsafe_checkout"
+                    },
+                    "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/unsafe_checkout"
+                })
 
-                # Check for ref without proper validation
-                ref = with_params.get("ref")
-                if ref and not ref.startswith("refs/"):
-                    # Check if it's a variable that could be manipulated
-                    if "${{" in str(ref):
-                        issues.append({
-                            "type": "unsafe_checkout_ref",
-                            "severity": "medium",
-                            "message": f"Job '{job_name}' uses checkout with potentially unsafe ref: {ref}. The ref may be manipulated if not properly validated.",
-                            "job": job_name,
-                            "ref": ref,
-                            "evidence": {
-                                "job": job_name,
-                                "ref": ref,
-                                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unsafe_checkout_ref"
-                            },
-                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unsafe_checkout_ref"
-                        })
-
-                # Check for fetch-depth
-                fetch_depth = with_params.get("fetch-depth")
-                if fetch_depth == 0:
-                    issues.append({
-                        "type": "checkout_full_history",
-                        "severity": "medium",
-                        "message": f"Job '{job_name}' fetches full git history (fetch-depth: 0). This may expose sensitive information from commit history.",
+            ref = with_params.get("ref")
+            if isinstance(ref, str) and "${{" in ref and not ref.startswith("refs/"):
+                issues.append({
+                    "type": "unsafe_checkout_ref",
+                    "severity": "medium",
+                    "message": f"Job '{job_name}' uses checkout with potentially unsafe ref: {ref}. The ref may be manipulated if not properly validated.",
+                    "job": job_name,
+                    "ref": ref,
+                    "evidence": {
                         "job": job_name,
-                        "evidence": {
-                            "job": job_name,
-                            "fetch_depth": 0,
-                            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/checkout_full_history"
-                        },
-                        "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/checkout_full_history"
-                    })
+                        "ref": ref,
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unsafe_checkout_ref"
+                    },
+                    "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/unsafe_checkout_ref"
+                })
+
+            fetch_depth = with_params.get("fetch-depth")
+            if fetch_depth == 0 or (isinstance(fetch_depth, str) and fetch_depth.strip() == "0"):
+                issues.append({
+                    "type": "checkout_full_history",
+                    "severity": "low",
+                    "message": f"Job '{job_name}' fetches full git history (fetch-depth: 0). This enlarges what a compromised step or leaked workspace exposes; prefer a shallow clone unless history is required.",
+                    "job": job_name,
+                    "evidence": {
+                        "job": job_name,
+                        "fetch_depth": 0,
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/checkout_full_history"
+                    },
+                    "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/checkout_full_history"
+                })
 
     return issues
 
@@ -642,12 +752,12 @@ def check_script_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         (r'\$\([^)]*\$\{\{\s*github\.event\.[^}]*\}\}[^)]*\)', 'Command substitution with user input'),
     ]
 
-    # Dangerous commands with user input
+    # Dangerous commands fed with user input (piping into an interpreter)
     dangerous_command_patterns = [
-        (r'curl.*\|.*bash', 'curl piped to bash'),
-        (r'wget.*\|.*sh', 'wget piped to shell'),
-        (r'echo.*\|.*sh', 'echo piped to shell'),
-        (r'printf.*\|.*bash', 'printf piped to bash'),
+        (r'\bcurl\b.*\|\s*(sudo\s+)?(ba|z)?sh\b', 'curl piped to bash'),
+        (r'\bwget\b.*\|\s*(sudo\s+)?(ba|z)?sh\b', 'wget piped to shell'),
+        (r'\becho\b.*\|\s*(sudo\s+)?(ba|z)?sh\b', 'echo piped to shell'),
+        (r'\bprintf\b.*\|\s*(sudo\s+)?(ba|z)?sh\b', 'printf piped to bash'),
     ]
 
     for job_name, job in jobs.items():
@@ -655,9 +765,16 @@ def check_script_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         for step in steps:
             run = step.get("run", "")
             if isinstance(run, str):
-                # Check for unsafe shell usage
+                # `shell: bash` already runs `bash --noprofile --norc -eo pipefail {0}`.
+                # Only a custom template (`bash {0}`) can drop -e.
                 shell = step.get("shell", "")
-                if shell and "bash" in shell.lower() and "-e" not in shell:
+                if (
+                    isinstance(shell, str)
+                    and "{0}" in shell
+                    and re.search(r'\bbash\b', shell)
+                    and not re.search(r'\s-[a-z]*e', shell)
+                    and "errexit" not in shell
+                ):
                     issues.append({
                         "type": "unsafe_shell",
                         "severity": "medium",
@@ -713,7 +830,7 @@ def check_script_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
 
                 # Check dangerous commands with user input
                 for pattern, description in dangerous_command_patterns:
-                    if re.search(pattern, run, re.IGNORECASE) and "${{" in run:
+                    if re.search(pattern, run, re.IGNORECASE) and _has_risky_context(run):
                         issues.append({
                             "type": "shell_injection",
                             "severity": "high",
@@ -753,10 +870,30 @@ def check_github_script_injection(workflow: Dict[str, Any]) -> List[Dict[str, An
         steps = job.get("steps", [])
         for step in steps:
             uses = step.get("uses", "")
-            if uses and "actions/github-script@" in uses:
+            if isinstance(uses, str) and "actions/github-script@" in uses:
                 with_params = step.get("with", {})
                 if with_params and "script" in with_params:
                     script = str(with_params["script"])
+
+                    # Interpolating attacker-controlled context into the script
+                    # body is code injection on its own: ${{ }} is substituted
+                    # before the JavaScript is parsed.
+                    if _has_risky_context(script):
+                        issues.append({
+                            "type": "script_injection",
+                            "severity": "critical",
+                            "message": f"Job '{job_name}' interpolates user-controllable context directly into an actions/github-script script. The value becomes JavaScript source; pass it through env: and read process.env instead.",
+                            "job": job_name,
+                            "step": step.get("name", "unnamed"),
+                            "evidence": {
+                                "job": job_name,
+                                "step": step.get("name", "unnamed"),
+                                "pattern": "expression interpolated into script",
+                                "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/script_injection"
+                            },
+                            "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/script_injection"
+                        })
+                        continue
 
                     for pattern, description in dangerous_js_patterns:
                         if re.search(pattern, script, re.IGNORECASE):
@@ -779,174 +916,139 @@ def check_github_script_injection(workflow: Dict[str, Any]) -> List[Dict[str, An
     return issues
 
 
+# --- Attacker-controllable context classification --------------------------
+#
+# An expression is dangerous when it expands to text an outside contributor can
+# choose: issue/PR/comment titles and bodies, branch names, commit messages,
+# author names/emails, labels, wiki page names. IDs, numbers, SHAs, URLs and
+# anything describing the *base* repository are not attacker-chosen.
+
+_EXPRESSION_RE = re.compile(r'\$\{\{(.*?)\}\}', re.DOTALL)
+_CONTEXT_PATH_RE = re.compile(r'\bgithub\.(?:event(?:\.[A-Za-z0-9_*-]+|\[[^\]]*\])+|head_ref\b|ref_name\b)')
+_RISKY_LEAVES = {
+    "body", "title", "message", "name", "ref", "head_ref", "head_branch",
+    "label", "default_branch", "email", "page_name", "description",
+}
+_SAFE_CONTEXT_PREFIXES = (
+    "github.event.repository.",    # the base repository
+    "github.event.organization.",
+    "github.event.enterprise.",
+    "github.event.installation.",
+    "github.event.sender.",        # login is restricted to [A-Za-z0-9-]
+    "github.event.inputs.",        # workflow_dispatch inputs: see code_injection_via_input
+)
+
+
+def _risky_contexts_in(value: Any) -> List[str]:
+    """Return attacker-controllable GitHub context paths used inside ${{ }} in value."""
+    if not isinstance(value, str) or "${{" not in value:
+        return []
+    found: List[str] = []
+    for expression in _EXPRESSION_RE.findall(value):
+        for match in _CONTEXT_PATH_RE.finditer(expression):
+            path = match.group(0)
+            lowered = path.lower()
+            if lowered in ("github.head_ref", "github.ref_name"):
+                risky = True
+            elif lowered.startswith(_SAFE_CONTEXT_PREFIXES):
+                risky = False
+            else:
+                leaf = re.split(r'[.\[]', lowered.rstrip("]"))[-1].strip("'\"")
+                risky = leaf in _RISKY_LEAVES
+            if risky and path not in found:
+                found.append(path)
+    return found
+
+
 def check_risky_context_usage(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Check for risky GitHub context usage that can be exploited for injection attacks."""
+    """Check for risky GitHub context usage that can be exploited for injection attacks.
+
+    Severity follows where the value lands:
+      * ``run:`` - the expression is substituted into the script *before* the
+        shell parses it: direct command injection (critical).
+      * ``env:`` - the recommended mitigation. Reported as low so the value is
+        still reviewed (it must be quoted, and not eval'd, where it is used).
+      * ``with:`` - handed to an action as data; low, informational.
+    ``actions/github-script``'s ``script`` input is reported by
+    check_github_script_injection instead.
+    """
     issues = []
-    
     jobs = workflow.get("jobs", {})
-    
-    # Specific risky GitHub context patterns (user-controllable)
-    risky_context_patterns = [
-        # Issue-related
-        (r'\$\{\{\s*github\.event\.issue\.title\s*\}\}', 'github.event.issue.title'),
-        (r'\$\{\{\s*github\.event\.issue\.body\s*\}\}', 'github.event.issue.body'),
-        # Issue comment
-        (r'\$\{\{\s*github\.event\.issue_comment\.body\s*\}\}', 'github.event.issue_comment.body'),
-        (r'\$\{\{\s*github\.event\.comment\.body\s*\}\}', 'github.event.comment.body'),
-        # Pull request related
-        (r'\$\{\{\s*github\.event\.pull_request\.title\s*\}\}', 'github.event.pull_request.title'),
-        (r'\$\{\{\s*github\.event\.pull_request\.body\s*\}\}', 'github.event.pull_request.body'),
-        (r'\$\{\{\s*github\.event\.pull_request\.head_ref\s*\}\}', 'github.event.pull_request.head_ref'),
-        (r'\$\{\{\s*github\.event\.pull_request\.base_ref\s*\}\}', 'github.event.pull_request.base_ref'),
-        # Release related
-        (r'\$\{\{\s*github\.event\.release\.name\s*\}\}', 'github.event.release.name'),
-        (r'\$\{\{\s*github\.event\.release\.tag_name\s*\}\}', 'github.event.release.tag_name'),
-        # Discussion
-        (r'\$\{\{\s*github\.event\.discussion\.body\s*\}\}', 'github.event.discussion.body'),
-        # Ref and branch related
-        (r'\$\{\{\s*github\.event\.ref\s*\}\}', 'github.event.ref'),
-        (r'\$\{\{\s*github\.ref_name\s*\}\}', 'github.ref_name'),
-        (r'\$\{\{\s*github\.event\.repository\.default_branch\s*\}\}', 'github.event.repository.default_branch'),
-        # Label
-        (r'\$\{\{\s*github\.event\.label\.name\s*\}\}', 'github.event.label.name'),
-        # Sender
-        (r'\$\{\{\s*github\.event\.sender\.email\s*\}\}', 'github.event.sender.email'),
-        # Page
-        (r'\$\{\{\s*github\.event\.page_name\s*\}\}', 'github.event.page_name'),
-    ]
-    
-    # Generic patterns for risky suffixes (any context ending in these)
-    risky_suffix_patterns = [
-        (r'\$\{\{\s*github\.event\.[^}]*\.body\s*\}\}', 'context ending in .body'),
-        (r'\$\{\{\s*github\.event\.[^}]*\.title\s*\}\}', 'context ending in .title'),
-        (r'\$\{\{\s*github\.event\.[^}]*\.message\s*\}\}', 'context ending in .message'),
-        (r'\$\{\{\s*github\.event\.[^}]*\.name\s*\}\}', 'context ending in .name'),
-        (r'\$\{\{\s*github\.event\.[^}]*\.ref\s*\}\}', 'context ending in .ref'),
-        (r'\$\{\{\s*github\.event\.[^}]*\.head_ref\s*\}\}', 'context ending in .head_ref'),
-        (r'\$\{\{\s*github\.event\.[^}]*\.default_branch\s*\}\}', 'context ending in .default_branch'),
-        (r'\$\{\{\s*github\.event\.[^}]*\.email\s*\}\}', 'context ending in .email'),
-    ]
-    
+
     for job_name, job in jobs.items():
-        steps = job.get("steps", [])
-        for step in steps:
-            found_contexts_in_run = []
-            found_contexts_in_env = []
-            found_contexts_in_with = []
-            
-            # Check in run commands (most dangerous - direct interpolation)
-            run = step.get("run", "")
-            if isinstance(run, str):
-                # Check specific risky contexts
-                for pattern, context_name in risky_context_patterns:
-                    if re.search(pattern, run, re.IGNORECASE):
-                        found_contexts_in_run.append(context_name)
-                
-                # Check generic risky suffix patterns
-                for pattern, suffix_desc in risky_suffix_patterns:
-                    matches = re.finditer(pattern, run, re.IGNORECASE)
-                    for match in matches:
-                        context_expr = match.group(0)
-                        # Extract the actual context name
-                        context_match = re.search(r'github\.event\.([^}]+)', context_expr)
-                        if context_match:
-                            context_name = context_match.group(1)
-                            full_name = f"{context_name} ({suffix_desc})"
-                            if full_name not in found_contexts_in_run:
-                                found_contexts_in_run.append(full_name)
-            
-            # Check in environment variables (safer but still risky without validation)
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict):
+                continue
+            step_name = step.get("name", "unnamed")
+            in_run = _risky_contexts_in(step.get("run", ""))
+
+            in_env: List[str] = []
             env = step.get("env", {})
             if isinstance(env, dict):
-                for env_key, env_value in env.items():
-                    if isinstance(env_value, str):
-                        for pattern, context_name in risky_context_patterns:
-                            if re.search(pattern, env_value, re.IGNORECASE):
-                                if context_name not in found_contexts_in_env:
-                                    found_contexts_in_env.append(context_name)
-                        
-                        for pattern, suffix_desc in risky_suffix_patterns:
-                            matches = re.finditer(pattern, env_value, re.IGNORECASE)
-                            for match in matches:
-                                context_expr = match.group(0)
-                                context_match = re.search(r'github\.event\.([^}]+)', context_expr)
-                                if context_match:
-                                    context_name = context_match.group(1)
-                                    full_name = f"{context_name} ({suffix_desc})"
-                                    if full_name not in found_contexts_in_env:
-                                        found_contexts_in_env.append(full_name)
-            
-            # Check in with parameters
+                for env_value in env.values():
+                    for ctx in _risky_contexts_in(env_value):
+                        if ctx not in in_env:
+                            in_env.append(ctx)
+
+            in_with: List[str] = []
             with_params = step.get("with", {})
+            is_github_script = "actions/github-script@" in str(step.get("uses", ""))
             if isinstance(with_params, dict):
-                for param_key, param_value in with_params.items():
-                    if isinstance(param_value, str):
-                        for pattern, context_name in risky_context_patterns:
-                            if re.search(pattern, param_value, re.IGNORECASE):
-                                if context_name not in found_contexts_in_with:
-                                    found_contexts_in_with.append(context_name)
-                        
-                        for pattern, suffix_desc in risky_suffix_patterns:
-                            matches = re.finditer(pattern, param_value, re.IGNORECASE)
-                            for match in matches:
-                                context_expr = match.group(0)
-                                context_match = re.search(r'github\.event\.([^}]+)', context_expr)
-                                if context_match:
-                                    context_name = context_match.group(1)
-                                    full_name = f"{context_name} ({suffix_desc})"
-                                    if full_name not in found_contexts_in_with:
-                                        found_contexts_in_with.append(full_name)
-            
-            # Report direct use in run commands (most critical)
-            if found_contexts_in_run:
-                all_contexts = found_contexts_in_run + found_contexts_in_env + found_contexts_in_with
-                unique_contexts = list(dict.fromkeys(all_contexts))  # Preserve order, remove duplicates
+                for key, param_value in with_params.items():
+                    if is_github_script and key == "script":
+                        continue
+                    for ctx in _risky_contexts_in(param_value):
+                        if ctx not in in_with:
+                            in_with.append(ctx)
+
+            def preview(ctxs: List[str]) -> str:
+                return ", ".join(ctxs[:3]) + ("..." if len(ctxs) > 3 else "")
+
+            if in_run:
                 issues.append({
                     "type": "risky_context_usage",
                     "severity": "critical",
-                    "message": f"Job '{job_name}' uses risky GitHub context variables directly in shell commands (step: '{step.get('name', 'unnamed')}'). User-controllable context like {', '.join(found_contexts_in_run[:3])}{'...' if len(found_contexts_in_run) > 3 else ''} should be passed through environment variables and validated before use to prevent command injection attacks.",
+                    "message": f"Job '{job_name}' interpolates user-controllable context directly into a shell command (step: '{step_name}'): {preview(in_run)}. The value is substituted into the script before the shell runs it, so crafted input executes as code. Pass it through env: and reference the variable instead.",
                     "job": job_name,
-                    "step": step.get("name", "unnamed"),
+                    "step": step_name,
                     "evidence": {
                         "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "risky_contexts": unique_contexts,
+                        "step": step_name,
+                        "risky_contexts": list(dict.fromkeys(in_run + in_env + in_with)),
                         "usage_location": "run_command",
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/risky_context_usage"
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/risky_context_usage"
                     },
                     "recommendation": "Move risky context variables to environment variables and add input validation. Never use ${{ github.event.* }} directly in shell commands. See: https://actsense.dev/vulnerabilities/risky_context_usage"
                 })
-            # Report use in environment variables (still risky without validation, but less critical)
-            elif found_contexts_in_env:
+            elif in_env:
                 issues.append({
                     "type": "risky_context_usage",
-                    "severity": "high",
-                    "message": f"Job '{job_name}' uses risky GitHub context variables in environment variables (step: '{step.get('name', 'unnamed')}'). While using environment variables is safer than direct interpolation, these values must be validated before use to prevent injection attacks: {', '.join(found_contexts_in_env[:3])}{'...' if len(found_contexts_in_env) > 3 else ''}",
+                    "severity": "low",
+                    "message": f"Job '{job_name}' passes user-controllable context through environment variables (step: '{step_name}'): {preview(in_env)}. This is the safe pattern; make sure the variable is always double-quoted and never passed to eval or a nested shell.",
                     "job": job_name,
-                    "step": step.get("name", "unnamed"),
+                    "step": step_name,
                     "evidence": {
                         "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "risky_contexts": found_contexts_in_env,
+                        "step": step_name,
+                        "risky_contexts": in_env,
                         "usage_location": "environment_variable",
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/risky_context_usage"
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/risky_context_usage"
                     },
-                    "recommendation": "Add input validation for environment variables containing user-controllable context. Validate against allowlists and sanitize before use. See: https://actsense.dev/vulnerabilities/risky_context_usage"
+                    "recommendation": "Quote the variable (\"$VAR\") wherever it is used and validate it against an allowlist if it drives control flow. See: https://actsense.dev/vulnerabilities/risky_context_usage"
                 })
-            # Report use in with parameters
-            elif found_contexts_in_with:
+            elif in_with:
                 issues.append({
                     "type": "risky_context_usage",
-                    "severity": "high",
-                    "message": f"Job '{job_name}' uses risky GitHub context variables in action parameters (step: '{step.get('name', 'unnamed')}'). These values should be validated: {', '.join(found_contexts_in_with[:3])}{'...' if len(found_contexts_in_with) > 3 else ''}",
+                    "severity": "low",
+                    "message": f"Job '{job_name}' passes user-controllable context to an action input (step: '{step_name}'): {preview(in_with)}. Confirm the action treats this input as data and does not execute it.",
                     "job": job_name,
-                    "step": step.get("name", "unnamed"),
+                    "step": step_name,
                     "evidence": {
                         "job": job_name,
-                        "step": step.get("name", "unnamed"),
-                        "risky_contexts": found_contexts_in_with,
+                        "step": step_name,
+                        "risky_contexts": in_with,
                         "usage_location": "action_parameter",
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/risky_context_usage"
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/risky_context_usage"
                     },
                     "recommendation": "Validate risky context variables before passing to actions. Use allowlists and sanitize input. See: https://actsense.dev/vulnerabilities/risky_context_usage"
                 })
@@ -954,19 +1056,12 @@ def check_risky_context_usage(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     return issues
 
 
-# User-controllable GitHub context expressions. Presence of any of these inside a
-# shell command means attacker-influenced data is being interpolated. Reused by
-# the runner-file injection checks below.
-_RISKY_CONTEXT_MARKERS = ("github.event.", "github.head_ref", "github.ref_name")
 _SHELL_SEPARATORS = {"&&", "||", ";", "|"}
 
 
 def _has_risky_context(value: str) -> bool:
     """Return True when a GitHub expression references attacker-controlled context."""
-    if not isinstance(value, str) or "${{" not in value:
-        return False
-    lowered = value.lower()
-    return any(marker in lowered for marker in _RISKY_CONTEXT_MARKERS)
+    return bool(_risky_contexts_in(value))
 
 
 def _split_shell_tokens(line: str) -> List[str]:
@@ -1377,15 +1472,7 @@ def check_cache_poisoning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     issues = []
 
-    on_events = workflow.get("on", {})
-    if isinstance(on_events, dict):
-        triggers = set(on_events.keys())
-    elif isinstance(on_events, list):
-        triggers = set(on_events)
-    elif isinstance(on_events, str):
-        triggers = {on_events}
-    else:
-        triggers = set()
+    triggers = set(_on_events(workflow))
 
     dangerous = triggers & {"pull_request_target", "workflow_run"}
     if not dangerous:
@@ -1678,15 +1765,7 @@ def check_artifact_poisoning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     issues = []
 
-    on_events = workflow.get("on", {})
-    if isinstance(on_events, dict):
-        triggers = set(on_events.keys())
-    elif isinstance(on_events, list):
-        triggers = set(on_events)
-    elif isinstance(on_events, str):
-        triggers = {on_events}
-    else:
-        triggers = set()
+    triggers = set(_on_events(workflow))
 
     dangerous = triggers & {"pull_request_target", "workflow_run"}
     if not dangerous:
@@ -1733,8 +1812,8 @@ def check_powershell_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]
     powershell_patterns = [
         (r'Invoke-Expression.*\$\{\{[^}]*\}\}', 'Invoke-Expression with user input'),
         (r'Invoke-Command.*\$\{\{[^}]*\}\}', 'Invoke-Command with user input'),
-        (r'&\s*\$\{\{[^}]*\}\}', 'Call operator with user input'),
-        (r'\.\s*\$\{\{[^}]*\}\}', 'Dot sourcing with user input'),
+        (r'(^|[\s;(])&\s*\$\{\{[^}]*\}\}', 'Call operator with user input'),
+        (r'(^|[\s;(])\.\s+\$\{\{[^}]*\}\}', 'Dot sourcing with user input'),
     ]
 
     for job_name, job in jobs.items():
@@ -1743,7 +1822,11 @@ def check_powershell_injection(workflow: Dict[str, Any]) -> List[Dict[str, Any]]
             shell = step.get("shell", "")
             run = step.get("run", "")
 
-            if isinstance(run, str) and (shell == "powershell" or shell == "pwsh") and "${{" in run:
+            # Here dispatch/reusable-workflow inputs count too: Invoke-Expression
+            # executes whatever string it is given.
+            if isinstance(run, str) and shell in ("powershell", "pwsh") and (
+                _has_risky_context(run) or re.search(r'\$\{\{[^}]*\binputs\.', run)
+            ):
                 for pattern, description in powershell_patterns:
                     if re.search(pattern, run, re.IGNORECASE):
                         issues.append({
@@ -1777,11 +1860,14 @@ def check_malicious_curl_pipe_bash(workflow: Dict[str, Any]) -> List[Dict[str, A
             run = step.get("run", "")
             if isinstance(run, str):
                 # Check for curl/wget piped to shell
+                # \b after the shell name: `| sha256sum` / `| shasum` are checksum
+                # verification, the opposite of this pattern.
                 patterns = [
-                    (r'curl\s+.*\|\s*(bash|sh|zsh)', 'curl piped to shell'),
-                    (r'wget\s+.*\|\s*(bash|sh|zsh)', 'wget piped to shell'),
-                    (r'curl\s+.*\|\s*/\s*bin/(bash|sh|zsh)', 'curl piped to absolute shell path'),
-                    (r'wget\s+.*\|\s*/\s*bin/(bash|sh|zsh)', 'wget piped to absolute shell path'),
+                    (r'\bcurl\s+.*\|\s*(sudo\s+(-\S+\s+)*)?(bash|sh|zsh)\b', 'curl piped to shell'),
+                    (r'\bwget\s+.*\|\s*(sudo\s+(-\S+\s+)*)?(bash|sh|zsh)\b', 'wget piped to shell'),
+                    (r'\bcurl\s+.*\|\s*(sudo\s+(-\S+\s+)*)?/(usr/)?bin/(bash|sh|zsh)\b', 'curl piped to absolute shell path'),
+                    (r'\bwget\s+.*\|\s*(sudo\s+(-\S+\s+)*)?/(usr/)?bin/(bash|sh|zsh)\b', 'wget piped to absolute shell path'),
+                    (r'(ba|z)?sh\s+(-c\s+)?["\']?\$\(\s*(curl|wget)\b', 'shell executing downloaded script via command substitution'),
                 ]
 
                 for pattern, description in patterns:
@@ -1872,10 +1958,9 @@ def check_malicious_base64_decode(workflow: Dict[str, Any]) -> List[Dict[str, An
             if isinstance(run, str):
                 # First, check for base64 decode execution patterns (existing check)
                 decode_patterns = [
-                    (r'echo\s+["\']?([A-Za-z0-9+/=]+)["\']?\s*\|\s*base64\s+-d\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
-                    (r'base64\s+-d\s+.*\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
-                    (r'base64\s+--decode\s+.*\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
-                    (r'echo\s+["\']?([A-Za-z0-9+/=]+)["\']?\s*\|\s*base64\s+--decode\s*\|\s*(bash|sh|zsh)', 'base64 decode piped to shell'),
+                    (r'echo\s+["\']?([A-Za-z0-9+/=]+)["\']?\s*\|\s*base64\s+-d\s*\|\s*(bash|sh|zsh)\b', 'base64 decode piped to shell'),
+                    (r'base64\s+(-d|--decode)\b.*\|\s*(sudo\s+)?(bash|sh|zsh)\b', 'base64 decode piped to shell'),
+                    (r'echo\s+["\']?([A-Za-z0-9+/=]+)["\']?\s*\|\s*base64\s+--decode\s*\|\s*(bash|sh|zsh)\b', 'base64 decode piped to shell'),
                     (r'eval\s*\(\s*base64\s+-d', 'eval with base64 decode'),
                     (r'eval\s*\(\s*base64\s+--decode', 'eval with base64 decode'),
                 ]
@@ -1964,14 +2049,16 @@ def check_obfuscation_detection(workflow: Dict[str, Any]) -> List[Dict[str, Any]
             run = step.get("run", "")
             if isinstance(run, str):
                 # Check for various obfuscation patterns
+                # Single escapes are everyday terminal colouring (printf '\033[31m',
+                # '\x1b[0m'); obfuscation encodes whole strings, so require a run.
+                # "${arr[*]}" is ordinary bash array expansion and is not flagged.
                 obfuscation_patterns = [
-                    (r'\$\{[^}]*\[.*\*.*\].*\}', 'Variable expansion with wildcards', 'high'),
-                    (r'eval\s*\$\(.*base64.*\)', 'Base64 decoded eval', 'critical'),
+                    (r'\beval\s*["\']?\$\(.*base64.*\)', 'Base64 decoded eval', 'critical'),
                     (r'\$\(\$\(.*\)\)', 'Nested command substitution', 'medium'),
-                    (r'\\x[0-9a-f]{2}', 'Hex-encoded characters', 'medium'),
+                    (r'(\\x[0-9a-f]{2}){4,}', 'Hex-encoded characters', 'medium'),
                     (r'\$\{[^}]*#[^}]*\$\{\{[^}]*\}\}[^}]*\}', 'Parameter expansion with user input pattern removal', 'high'),
-                    (r'\|\s*xxd\s*-r', 'Hex decode pipeline', 'high'),
-                    (r'printf.*\\[0-9]{3}', 'Octal escape sequences', 'medium'),
+                    (r'\|\s*xxd\s+-r', 'Hex decode pipeline', 'high'),
+                    (r'(\\[0-3][0-7]{2}){4,}', 'Octal escape sequences', 'medium'),
                 ]
 
                 for pattern, description, severity in obfuscation_patterns:
@@ -2046,13 +2133,15 @@ def check_artifact_exposure_risk(workflow: Dict[str, Any]) -> List[Dict[str, Any
                             break
 
                     if matched_description:
-                        # Base severity
+                        # upload-artifact v4.4+ excludes dotfiles (and so .git/config)
+                        # unless include-hidden-files is set; v3 and older include them.
+                        ref = uses.split("@", 1)[1] if "@" in uses else ""
+                        major = re.match(r'^v?(\d+)', ref)
+                        hidden_included = _is_truthy(with_params.get("include-hidden-files")) or (
+                            major is not None and int(major.group(1)) < 4
+                        )
                         severity = "high"
-
-                        # Escalate to critical when:
-                        # - checkout persists credentials, AND
-                        # - path is likely to include .git / entire workspace
-                        if checkout_persists_credentials and (
+                        if checkout_persists_credentials and hidden_included and (
                             path in (".", "./")
                             or re.search(r'\${{\s*github\.workspace\s*}}', path)
                         ):
@@ -2062,7 +2151,7 @@ def check_artifact_exposure_risk(workflow: Dict[str, Any]) -> List[Dict[str, Any
                             f"Job '{job_name}' uploads artifacts with a broad path pattern: {matched_description}."
                         ]
 
-                        if checkout_persists_credentials:
+                        if checkout_persists_credentials and hidden_included:
                             message_parts.append(
                                 "This job also uses actions/checkout with persisted credentials, "
                                 "so `.git/config` may contain a credentialed URL with `GITHUB_TOKEN`, "
@@ -2104,7 +2193,7 @@ def check_artifact_exposure_risk(workflow: Dict[str, Any]) -> List[Dict[str, Any
                     if "retention-days" not in with_params:
                         issues.append({
                             "type": "artifact_exposure_risk",
-                            "severity": "medium",
+                            "severity": "low",
                             "message": (
                                 f"Job '{job_name}' uploads artifacts without an explicit `retention-days` value. "
                                 "Artifacts will use the repository default retention, which may be longer than necessary "
@@ -2131,38 +2220,6 @@ def check_artifact_exposure_risk(workflow: Dict[str, Any]) -> List[Dict[str, Any
                             ),
                         })
 
-                    # 4. Upload-artifact not being the last step (exposure window heuristic)
-                    if idx != len(steps) - 1:
-                        issues.append({
-                            "type": "artifact_exposure_risk",
-                            "severity": "low",
-                            "message": (
-                                f"Job '{job_name}' uploads artifacts in step '{step_name}' before the final step. "
-                                "Uploading artifacts earlier in the job increases the exposure window for any sensitive "
-                                "data that may be included in artifacts."
-                            ),
-                            "job": job_name,
-                            "step": step_name,
-                            "evidence": {
-                                "job": job_name,
-                                "step": step_name,
-                                "step_index": idx,
-                                "total_steps": len(steps),
-                                "vulnerability": (
-                                    "For detailed information about this vulnerability, visit: "
-                                    "https://actsense.dev/vulnerabilities/artifact_exposure_risk"
-                                ),
-                                "risk_description": (
-                                    "Artifact uploads occurring before the end of a job increase the exposure window "
-                                    "but the configuration itself is still safe if paths are properly scoped."
-                                ),
-                            },
-                            "recommendation": (
-                                "Move artifact uploads toward the end of the job for safer ordering. "
-                                "For mitigation steps, visit: "
-                                "https://actsense.dev/vulnerabilities/artifact_exposure_risk"
-                            ),
-                        })
 
     return issues
 
@@ -2175,10 +2232,11 @@ def check_token_permission_escalation(workflow: Dict[str, Any]) -> List[Dict[str
 
     # Patterns that could lead to permission escalation
     escalation_patterns = [
-        (r'gh\s+auth\s+token', 'GitHub CLI token generation'),
-        (r'GITHUB_TOKEN.*base64', 'GITHUB_TOKEN base64 encoding'),
-        (r'echo.*GITHUB_TOKEN.*\|\s*base64', 'GITHUB_TOKEN base64 encoding via echo'),
-        (r'curl.*-H.*Authorization.*Bearer.*GITHUB_TOKEN', 'GITHUB_TOKEN in curl Authorization header'),
+        # Encoding the token defeats log masking -- the classic exfiltration
+        # step. Ordinary use of the token (an Authorization header, gh CLI) is
+        # not escalation and is intentionally not matched.
+        (r'(GITHUB_TOKEN|github\.token|secrets\.[A-Z0-9_]*TOKEN).*\|\s*(base64|xxd|od|rev)\b', 'token encoded to bypass log masking'),
+        (r'\bbase64\b.*<<<\s*["\']?\$\{?(GITHUB_TOKEN|GH_TOKEN)', 'token encoded to bypass log masking'),
         (r'git\s+config.*credential.*helper.*token', 'Git credential helper with token'),
     ]
 
@@ -2277,7 +2335,7 @@ def check_environment_bypass(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Check for potential environment protection bypass."""
     issues = []
 
-    on_events = workflow.get("on", {})
+    on_events = _on_events(workflow)
     is_pr_triggered = "pull_request" in on_events or "pull_request_target" in on_events
 
     # Check if workflow can bypass environment protections
@@ -2325,14 +2383,13 @@ def check_secrets_access_untrusted(workflow: Dict[str, Any]) -> List[Dict[str, A
     # See config.yaml for instructions on adding trusted publishers
     trusted_publishers = get_trusted_publishers()
 
+    trusted_lower = [t.lower() for t in trusted_publishers]
+
     def is_untrusted_action(action_uses: str) -> bool:
-        """Check if action is from untrusted publisher."""
-        if not action_uses:
+        """Check if action is from untrusted publisher (local actions are the repo's own code)."""
+        if not isinstance(action_uses, str) or not action_uses or action_uses.startswith(("./", "docker://")):
             return False
-        for trusted in trusted_publishers:
-            if action_uses.startswith(trusted):
-                return False
-        return True
+        return not any(action_uses.lower().startswith(t) for t in trusted_lower)
 
     jobs = workflow.get("jobs", {})
 
@@ -2422,18 +2479,18 @@ def check_network_traffic_filtering(workflow: Dict[str, Any]) -> List[Dict[str, 
             if isinstance(run, str):
                 # Check for network operations that could exfiltrate data
                 dangerous_patterns = [
-                    r'curl\s+.*(http|https)://',
-                    r'wget\s+.*(http|https)://',
-                    r'nc\s+.*\d+',
-                    r'ncat\s+.*\d+',
-                    r'ssh\s+.*@',
+                    r'\bcurl\s+.*https?://',
+                    r'\bwget\s+.*https?://',
+                    r'(^|[\s;|&])nc\s+\S+\s+\d+',
+                    r'\bncat\s+\S+\s+\d+',
+                    r'\bssh\s+(\S+\s+)*\S+@\S+',
                 ]
                 for pattern in dangerous_patterns:
                     if re.search(pattern, run, re.IGNORECASE):
                         issues.append({
                             "type": "unfiltered_network_traffic",
-                            "severity": "high",
-                            "message": f"Job '{job_name}' performs network operations that could exfiltrate credentials or data. Unfiltered network traffic poses security risks.",
+                            "severity": "low",
+                            "message": f"Job '{job_name}' makes outbound network connections with no egress filtering configured. If a step or dependency is compromised, nothing restricts where it can send credentials or data.",
                             "job": job_name,
                             "step": step.get("name", "unnamed"),
                             "evidence": {
@@ -2490,7 +2547,7 @@ def check_branch_protection_bypass(workflow: Dict[str, Any]) -> List[Dict[str, A
     """Check for workflows that could bypass branch protection rules."""
     issues = []
 
-    on_events = workflow.get("on", {})
+    on_events = _on_events(workflow)
 
     # Check for workflows that auto-approve PRs
     if "pull_request" in on_events or "pull_request_target" in on_events:
@@ -2549,7 +2606,9 @@ def _input_used_in_run_command(workflow: Dict[str, Any], input_name: str) -> boo
     action ``with:`` parameter, an ``env:`` value) is not equivalent, so callers
     must not treat mere presence of the input anywhere in the workflow as a hit.
     """
-    pattern = re.compile(r'\$\{\{\s*inputs\.' + re.escape(input_name) + r'\s*\}\}')
+    pattern = re.compile(
+        r'\$\{\{[^}]*\b(?:github\.event\.)?inputs\.' + re.escape(input_name) + r'\b[^}]*\}\}'
+    )
     jobs = workflow.get("jobs", {})
     if not isinstance(jobs, dict):
         return False
@@ -2566,39 +2625,28 @@ def _input_used_in_run_command(workflow: Dict[str, Any], input_name: str) -> boo
 
 
 def check_code_injection_via_workflow_inputs(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Check for code injection via workflow inputs."""
+    """Check for workflow_dispatch string inputs interpolated into run commands.
+
+    Only people with write access can dispatch a workflow, so this is high
+    rather than critical, but it still lets a less-trusted maintainer (or a
+    stolen PAT with only actions:write) run arbitrary code with the
+    workflow's secrets.
+    """
     issues = []
-
-    on_events = workflow.get("on", {})
-
-    # Handle case where 'on' is a list (e.g., ["push", "pull_request"])
-    if isinstance(on_events, list):
-        # If 'on' is a list, workflow_dispatch won't be present
-        return issues
-
-    # Check workflow_dispatch inputs
-    workflow_dispatch = on_events.get("workflow_dispatch", {}) if isinstance(on_events, dict) else {}
-    if workflow_dispatch:
-        inputs = workflow_dispatch.get("inputs", {})
-        for input_name, input_def in inputs.items():
-            if isinstance(input_def, dict):
-                input_type = input_def.get("type", "string")
-                if input_type == "string":
-                    # Flag only when the input is interpolated directly into a
-                    # run: command, which is the real injection sink.
-                    if _input_used_in_run_command(workflow, input_name):
-                        issues.append({
-                            "type": "code_injection_via_input",
-                            "severity": "critical",
-                            "message": f"Workflow_dispatch input '{input_name}' may be vulnerable to code injection. User-controlled input is used in shell commands without proper validation.",
-                            "input": input_name,
-                            "evidence": {
-                                "input": input_name,
-                                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
-                            },
-                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
-                        })
-
+    for input_name, input_def in _event_inputs(workflow, "workflow_dispatch").items():
+        input_type = input_def.get("type", "string") if isinstance(input_def, dict) else "string"
+        if input_type == "string" and _input_used_in_run_command(workflow, input_name):
+            issues.append({
+                "type": "code_injection_via_input",
+                "severity": "high",
+                "message": f"Workflow_dispatch input '{input_name}' is interpolated directly into a shell command. A crafted value executes as code; pass it through env: instead.",
+                "input": input_name,
+                "evidence": {
+                    "input": input_name,
+                    "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
+                },
+                "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/code_injection_via_input"
+            })
     return issues
 
 
@@ -2616,10 +2664,11 @@ def check_typosquatting_actions(workflow: Dict[str, Any]) -> List[Dict[str, Any]
     }
 
     # Common typosquatting patterns
+    # Anchored on the owner: "someorg/deploy-action/sub" is not a typo of
+    # "actions/*". Owners that impersonate GitHub's own orgs are.
     suspicious_patterns = [
-        (r'action/[^/]+', 'Uses "action" instead of "actions" (singular)'),
-        (r'actions/[^/]+-action', 'Uses "-action" suffix (uncommon for official actions)'),
-        (r'actions/[^/]+action', 'Uses "action" without hyphen (uncommon)'),
+        (r'^action/[^/]+', 'Uses "action" instead of "actions" (singular)'),
+        (r'^(actions?-?(official|github|org|team)|github-?actions?|actons|acitons|actiions)/', 'Owner name imitates the official "actions" organization'),
     ]
 
     jobs = workflow.get("jobs", {})
@@ -2699,7 +2748,7 @@ def check_untrusted_third_party_actions(workflow: Dict[str, Any]) -> List[Dict[s
         steps = job.get("steps", [])
         for step in steps:
             uses = step.get("uses", "")
-            if isinstance(uses, str) and "/" in uses and "@" in uses:
+            if isinstance(uses, str) and "/" in uses and "@" in uses and not uses.startswith(("./", "docker://")):
                 # Extract owner from action reference
                 action_part = uses.split("@")[0]
                 if "/" in action_part:
@@ -2899,6 +2948,23 @@ def check_pinned_version(action_ref: str) -> Dict[str, Any]:
 
     Returns detailed vulnerability information with evidence and mitigation steps.
     """
+    # Docker images are pinned only by digest (docker://img@sha256:...).
+    if action_ref.startswith("docker://"):
+        if "@sha256:" in action_ref:
+            return None
+        return {
+            "type": "unpinned_version",
+            "severity": "high",
+            "message": f"Docker image '{action_ref}' is referenced by a mutable tag instead of an immutable @sha256 digest.",
+            "action": action_ref,
+            "evidence": {
+                "action_reference": action_ref,
+                "reference_type": "docker_tag",
+                "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinned_version"
+            },
+            "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinned_version"
+        }
+
     # Extract action name and reference
     if "@" in action_ref:
         action_name, ref = action_ref.rsplit("@", 1)
@@ -3012,7 +3078,7 @@ def check_hash_pinning(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         if is_tag and not (is_full_sha or is_short_sha):
             issues.append({
                 "type": "no_hash_pinning",
-                "severity": "high",
+                "severity": "medium",
                 "message": f"Action '{action_ref}' uses version tag '{ref}' instead of an immutable commit SHA hash. Tags can be moved or overwritten, creating a security risk.",
                 "action": action_ref,
                 "tag": ref,
@@ -3286,8 +3352,11 @@ async def check_older_action_versions(workflow: Dict[str, Any], client: Optional
                     latest_version = parse_version(latest_tag)
                     if latest_version:
                         version_checked = True
-                        # Compare versions
-                        if current_version < latest_version:
+                        # A floating tag only pins the components it names: `v4`
+                        # tracks every 4.x release, so it is only behind when the
+                        # latest major is newer. Compare at the tag's precision.
+                        precision = len(re.findall(r'\d+', ref.lstrip("v").split("-")[0])[:3]) or 1
+                        if current_version[:precision] < latest_version[:precision]:
                             issues.append({
                                 "type": "older_action_version",
                                 "severity": "medium",
@@ -3490,6 +3559,8 @@ def check_github_token_permissions(workflow: Dict[str, Any]) -> List[Dict[str, A
 
     # Check job-level permissions
     for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
         job_permissions = job.get("permissions", {})
         if job_permissions == "write-all":
             issues.append({
@@ -3497,7 +3568,13 @@ def check_github_token_permissions(workflow: Dict[str, Any]) -> List[Dict[str, A
                 "severity": "high",
                 "message": f"Job '{job_name}' uses write-all permissions for GITHUB_TOKEN",
                 "job": job_name,
-                "permissions": job_permissions
+                "permissions": job_permissions,
+                "evidence": {
+                    "job": job_name,
+                    "permissions": "write-all",
+                    "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/github_token_write_all"
+                },
+                "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/github_token_write_all"
             })
         elif isinstance(job_permissions, dict):
             write_perms = [k for k, v in job_permissions.items() if v == "write"]
@@ -3507,7 +3584,14 @@ def check_github_token_permissions(workflow: Dict[str, Any]) -> List[Dict[str, A
                     "severity": "medium",
                     "message": f"Job '{job_name}' GITHUB_TOKEN has write permissions: {', '.join(write_perms)}",
                     "job": job_name,
-                    "permissions": job_permissions
+                    "permissions": job_permissions,
+                    "evidence": {
+                        "job": job_name,
+                        "permissions": job_permissions,
+                        "write_permissions": write_perms,
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/github_token_write_permissions"
+                    },
+                    "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/github_token_write_permissions"
                 })
 
     return issues
@@ -3573,58 +3657,42 @@ def check_continue_on_error_critical_job(workflow: Dict[str, Any]) -> List[Dict[
 
 
 def check_excessive_write_permissions(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Check for excessive write permissions on read-only workflows."""
+    """Check for write-scoped tokens on jobs that look read-only (test/lint/scan...).
+
+    Uses each job's *effective* permissions: job-level ``permissions`` replace
+    the workflow-level block, so a read-only job in a workflow that grants
+    write elsewhere is not reported.
+    """
     issues = []
+    read_only_operations = ('test', 'lint', 'check', 'validate', 'scan', 'audit', 'analyze', 'verify')
+    write_operations = ('deploy', 'release', 'publish', 'push', 'tag', 'merge', 'commit', 'label', 'comment', 'update', 'bump', 'sync')
 
-    # Check if workflow has write permissions
-    def has_write_permissions(wf: Dict[str, Any]) -> bool:
-        permissions = wf.get("permissions", {})
-        if permissions == "write-all" or permissions == "write":
-            return True
-        if isinstance(permissions, dict):
-            for perm_value in permissions.values():
-                if perm_value == "write":
-                    return True
-        # Check job-level permissions
-        jobs = wf.get("jobs", {})
-        for job in jobs.values():
-            job_perms = job.get("permissions", {})
-            if job_perms == "write-all" or job_perms == "write":
-                return True
-            if isinstance(job_perms, dict):
-                for perm_value in job_perms.values():
-                    if perm_value == "write":
-                        return True
-        return False
-
-    if not has_write_permissions(workflow):
-        return issues  # No write permissions, nothing to check
-
-    # Check if workflow appears to be read-only
-    read_only_operations = ['test', 'build', 'lint', 'check', 'validate', 'scan', 'audit', 'analyze']
-
-    workflow_name = workflow.get("name", "").lower()
-    if not workflow_name:
-        # Try to infer from file path
-        # This would need the file path, but we don't have it in the workflow dict
-        # So we'll check job names instead
-        jobs = workflow.get("jobs", {})
-        for job_name in jobs.keys():
-            job_name_lower = job_name.lower()
-            for operation in read_only_operations:
-                if operation in job_name_lower:
-                    issues.append({
-                        "type": "excessive_write_permissions",
-                        "severity": "high",
-                        "message": f"Workflow has write permissions but job '{job_name}' appears to be read-only. Consider using read-only permissions.",
-                        "job": job_name,
-                        "evidence": {
-                            "job": job_name,
-                            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/excessive_write_permissions"
-                        },
-                        "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/excessive_write_permissions"
-                    })
-                    break
+    jobs = workflow.get("jobs", {})
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        name_lower = f"{job_name} {job.get('name', '')}".lower()
+        if not any(op in name_lower for op in read_only_operations):
+            continue
+        if any(op in name_lower for op in write_operations):
+            continue
+        permissions = _effective_permissions(workflow, job)
+        if not _permissions_include_write(permissions):
+            continue
+        scope = "job" if "permissions" in job else "workflow"
+        issues.append({
+            "type": "excessive_write_permissions",
+            "severity": "medium",
+            "message": f"Job '{job_name}' appears to be read-only but its GITHUB_TOKEN has write permissions (set at the {scope} level). Grant write only to jobs that need it.",
+            "job": job_name,
+            "evidence": {
+                "job": job_name,
+                "permissions": permissions,
+                "scope": scope,
+                "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/excessive_write_permissions"
+            },
+            "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/excessive_write_permissions"
+        })
 
     return issues
 
@@ -3640,9 +3708,13 @@ def check_artifact_retention(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
         for step in steps:
             uses = step.get("uses", "")
             if "actions/upload-artifact" in uses:
-                with_params = step.get("with", {})
+                with_params = step.get("with") if isinstance(step.get("with"), dict) else {}
                 retention_days = with_params.get("retention-days")
-                if retention_days and int(retention_days) > 90:
+                try:
+                    retention_value = int(str(retention_days).strip())
+                except (TypeError, ValueError):
+                    continue  # unset, or an expression resolved at runtime
+                if retention_value > 90:
                     issues.append({
                         "type": "long_artifact_retention",
                         "severity": "low",
@@ -3668,7 +3740,7 @@ def check_matrix_strategy(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     for job_name, job in jobs.items():
         strategy = job.get("strategy", {})
-        matrix = strategy.get("matrix", {})
+        matrix = strategy.get("matrix", {}) if isinstance(strategy, dict) else strategy
 
         if matrix:
             # Check if secrets are used in matrix
@@ -3686,11 +3758,17 @@ def check_matrix_strategy(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
                     "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/secrets_in_matrix"
                 })
 
-            # Check for large matrix sizes
-            matrix_sizes = [len(v) if isinstance(v, list) else 1 for v in matrix.values()]
+            # Size is only knowable for a literal matrix (a fromJSON(...) matrix
+            # is a string). include/exclude adjust combinations, not dimensions.
+            if not isinstance(matrix, dict):
+                continue
             total_combinations = 1
-            for size in matrix_sizes:
-                total_combinations *= size
+            for key, values in matrix.items():
+                if key in ("include", "exclude"):
+                    continue
+                total_combinations *= len(values) if isinstance(values, list) else 1
+            if isinstance(matrix.get("include"), list):
+                total_combinations += len(matrix["include"])
 
             if total_combinations > 100:
                 issues.append({
@@ -3714,38 +3792,27 @@ def check_workflow_dispatch_inputs(workflow: Dict[str, Any]) -> List[Dict[str, A
     """Check for workflow_dispatch inputs without validation."""
     issues = []
 
-    on_events = workflow.get("on", {})
-    # Handle case where 'on' is a list (e.g., ["push", "pull_request"])
-    if isinstance(on_events, list):
-        # If 'on' is a list, workflow_dispatch won't be present
-        return issues
-    
-    # Handle case where 'on' is a dict
-    workflow_dispatch = on_events.get("workflow_dispatch", {}) if isinstance(on_events, dict) else {}
+    for input_name, input_def in _event_inputs(workflow, "workflow_dispatch").items():
+        if isinstance(input_def, dict):
+            input_type = input_def.get("type", "string")
+            required = input_def.get("required", False)
 
-    if workflow_dispatch:
-        inputs = workflow_dispatch.get("inputs", {})
-        for input_name, input_def in inputs.items():
-            if isinstance(input_def, dict):
-                input_type = input_def.get("type", "string")
-                required = input_def.get("required", False)
-
-                # Check if input is used without validation
-                if not required and input_type == "string":
-                    # Flag only when the optional input is interpolated directly
-                    # into a run: command, where lack of validation is exploitable.
-                    if _input_used_in_run_command(workflow, input_name):
-                        issues.append({
-                            "type": "unvalidated_workflow_input",
-                            "severity": "high",
-                            "message": f"Workflow_dispatch input '{input_name}' may be used without validation. Optional inputs should be validated to prevent security issues.",
+            # Check if input is used without validation
+            if not required and input_type == "string":
+                # Flag only when the optional input is interpolated directly
+                # into a run: command, where lack of validation is exploitable.
+                if _input_used_in_run_command(workflow, input_name):
+                    issues.append({
+                        "type": "unvalidated_workflow_input",
+                        "severity": "medium",
+                        "message": f"Workflow_dispatch input '{input_name}' may be used without validation. Optional inputs should be validated to prevent security issues.",
+                        "input": input_name,
+                        "evidence": {
                             "input": input_name,
-                            "evidence": {
-                                "input": input_name,
-                                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
-                            },
-                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
-                        })
+                            "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
+                        },
+                        "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unvalidated_workflow_input"
+                    })
 
     return issues
 
@@ -3788,16 +3855,31 @@ async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[Gi
     issues = []
 
     # Known deprecated actions with replacement recommendations
-    deprecated_actions = {
-        "actions/setup-node@v1": "Use actions/setup-node@v2 or later",
-        "actions/setup-python@v1": "Use actions/setup-python@v2 or later",
-        "actions/setup-go@v1": "Use actions/setup-go@v2 or later",
-        "actions/setup-java@v1": "Use actions/setup-java@v2 or later",
-        "actions/cache@v1": "Use actions/cache@v2 or later",
-        "actions/upload-artifact@v1": "Use actions/upload-artifact@v2 or later",
-        "actions/download-artifact@v1": "Use actions/download-artifact@v2 or later",
-        "stefanzweifel/git-auto-commit-action@v2": "Use stefanzweifel/git-auto-commit-action@v4 or later",
+    # action -> (first supported major, replacement advice). Majors below the
+    # threshold are deprecated or have been shut off by GitHub: artifact
+    # actions v1-v3 and cache v1-v2 stopped working in early 2025, and the
+    # setup-* v1 majors run on removed Node runtimes.
+    deprecated_majors = {
+        "actions/upload-artifact": (4, "Upgrade to actions/upload-artifact@v4 or later; v1-v3 were shut down on GitHub.com in January 2025."),
+        "actions/download-artifact": (4, "Upgrade to actions/download-artifact@v4 or later; v1-v3 were shut down on GitHub.com in January 2025."),
+        "actions/cache": (3, "Upgrade to actions/cache@v4; v1 and v2 were shut down on GitHub.com in February 2025."),
+        "actions/checkout": (2, "Upgrade to a supported actions/checkout major (v4 or later)."),
+        "actions/setup-node": (2, "Use actions/setup-node@v4 or later"),
+        "actions/setup-python": (2, "Use actions/setup-python@v5 or later"),
+        "actions/setup-go": (2, "Use actions/setup-go@v5 or later"),
+        "actions/setup-java": (2, "Use actions/setup-java@v4 or later"),
+        "stefanzweifel/git-auto-commit-action": (4, "Use stefanzweifel/git-auto-commit-action@v4 or later"),
     }
+
+    def deprecated_advice(uses_ref: str) -> Optional[str]:
+        if "@" not in uses_ref:
+            return None
+        name, ref = uses_ref.rsplit("@", 1)
+        rule = deprecated_majors.get(name.lower())
+        major = re.match(r'^v?(\d+)(\.|$)', ref)
+        if rule and major and int(major.group(1)) < rule[0]:
+            return rule[1]
+        return None
 
     jobs = workflow.get("jobs", {})
     checked_repos = {}  # Cache for repository archived status
@@ -3806,7 +3888,7 @@ async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[Gi
         steps = job.get("steps", [])
         for step in steps:
             uses = step.get("uses", "")
-            if not uses:
+            if not isinstance(uses, str) or not uses or uses.startswith(("./", "docker://")):
                 continue
 
             # Extract action owner/repo for archived check
@@ -3858,12 +3940,15 @@ async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[Gi
                     })
                     continue  # Skip other checks if archived
 
-            # Check if action is in deprecated list
-            if uses in deprecated_actions:
+            # Known-deprecated majors. (A generic "any @v1 is deprecated" guess
+            # was removed: v1 is the current major of many maintained actions;
+            # staleness is reported by the older_action_version check.)
+            advice = deprecated_advice(uses) if isinstance(uses, str) else None
+            if advice:
                 issues.append({
                     "type": "deprecated_action",
                     "severity": "medium",
-                    "message": f"Job '{job_name}' uses deprecated action '{uses}'. This version may have security vulnerabilities.",
+                    "message": f"Job '{job_name}' uses deprecated action '{uses}'. This version is no longer supported and may have security vulnerabilities or stop working.",
                     "job": job_name,
                     "step": step.get("name", "unnamed"),
                     "action": uses,
@@ -3871,39 +3956,10 @@ async def check_deprecated_actions(workflow: Dict[str, Any], client: Optional[Gi
                         "job": job_name,
                         "step": step.get("name", "unnamed"),
                         "action": uses,
-                        "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/deprecated_action"
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/deprecated_action"
                     },
-                    "recommendation": deprecated_actions[uses]
+                    "recommendation": advice
                 })
-            else:
-                # Check for generic v1 versions (potentially deprecated)
-                if "@v1" in uses and uses not in deprecated_actions:
-                    # Don't emit generic "deprecated v1" finding when repository existence
-                    # couldn't be determined (for example, deleted/non-existent/private repos).
-                    # In those cases, check_missing_action_repositories is the source of truth.
-                    if client and action_owner and action_repo:
-                        repo_key = f"{action_owner}/{action_repo}"
-                        if checked_repos.get(repo_key) is None:
-                            continue
-                    # Extract action name without version
-                    action_name = uses.split("@")[0]
-                    # Skip if it's a well-known action that might legitimately use v1
-                    if action_name not in ["actions/checkout", "actions/upload-artifact", "actions/download-artifact"]:
-                        issues.append({
-                            "type": "deprecated_action",
-                            "severity": "medium",
-                            "message": f"Job '{job_name}' uses action '{uses}' with v1 version. v1 versions are often deprecated in favor of newer versions.",
-                            "job": job_name,
-                            "step": step.get("name", "unnamed"),
-                            "action": uses,
-                            "evidence": {
-                                "job": job_name,
-                                "step": step.get("name", "unnamed"),
-                                "action": uses,
-                                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/deprecated_action"
-                            },
-                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/deprecated_action"
-                        })
 
     return issues
 
@@ -4042,36 +4098,36 @@ def check_unpinnable_docker_action(action_yml: Dict[str, Any], action_ref: str, 
     if runs.get("using") == "docker":
         # Check for Docker image with mutable tag
         image = runs.get("image", "")
-        if isinstance(image, str):
-            # Check if it uses a mutable tag (latest, v1, v2, etc.) instead of digest
-            if ":" in image:
-                tag = image.split(":")[-1]
-                # Check if it's a digest (sha256:... or just a long hex string)
-                if not (tag.startswith("sha256:") or (len(tag) >= 40 and re.match(r'^[a-f0-9]+$', tag))):
-                    # It's a mutable tag
-                    issues.append({
-                        "type": "unpinnable_docker_image",
-                        "severity": "high",
-                            "message": f"Docker action uses mutable tag '{tag}' instead of immutable digest. Tags can be moved or overwritten, creating a security risk.",
+        if isinstance(image, str) and image.startswith("docker://"):
+            # Registry image: pinned only by digest. No tag at all means :latest.
+            ref = image[len("docker://"):]
+            last_segment = ref.rsplit("/", 1)[-1]
+            tag = last_segment.split(":", 1)[1] if ":" in last_segment else "latest"
+            if "@sha256:" not in ref:
+                issues.append({
+                    "type": "unpinnable_docker_image",
+                    "severity": "high",
+                    "message": f"Docker action uses mutable tag '{tag}' instead of immutable digest. Tags can be moved or overwritten, creating a security risk.",
+                    "action": action_ref,
+                    "image": image,
+                    "evidence": {
                         "action": action_ref,
                         "image": image,
-                            "evidence": {
-                                "action": action_ref,
-                                "image": image,
-                                "tag": tag,
-                                "vulnerability": f"For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinnable_docker_image"
-                            },
-                            "recommendation": f"For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinnable_docker_image"
-                    })
+                        "tag": tag,
+                        "vulnerability": "For detailed information about this vulnerability, visit: https://actsense.dev/vulnerabilities/unpinnable_docker_image"
+                    },
+                    "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/unpinnable_docker_image"
+                })
 
         # Check Dockerfile for unpinned dependencies (if Dockerfile path is specified)
         dockerfile_path = runs.get("image", "")
-        if dockerfile_path and not dockerfile_path.startswith("docker://") and ":" not in dockerfile_path:
-            # This is likely a Dockerfile path
+        if isinstance(dockerfile_path, str) and dockerfile_path and not dockerfile_path.startswith("docker://"):
+            # This is a Dockerfile path
             content_to_check = dockerfile_content or ""
 
-            # Check for unpinned Python packages
-            if re.search(r'pip\s+install\s+(?!.*==)', content_to_check, re.IGNORECASE):
+            # Check for unpinned Python packages (RUN lines, with continuations joined)
+            run_text = re.sub(r'\\\n', ' ', content_to_check)
+            if _pip_unpinned_packages(run_text):
                 issues.append({
                     "type": "unpinned_dockerfile_dependencies",
                     "severity": "high",
@@ -4194,7 +4250,7 @@ def check_unpinnable_javascript_action(action_yml: Dict[str, Any], action_ref: s
     issues = []
 
     runs = action_yml.get("runs", {})
-    if runs.get("using") == "node12" or runs.get("using") == "node16" or runs.get("using") == "node20":
+    if str(runs.get("using", "")).lower() in ("node12", "node16", "node20", "node24"):
         # Check action code if available
         if action_content:
             # Check for downloading external resources without checksums

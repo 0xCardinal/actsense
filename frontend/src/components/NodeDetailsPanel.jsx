@@ -212,15 +212,15 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'critical':
-        return '#f85149'
+        return '#dc2626'
       case 'high':
-        return '#f0883e'
+        return '#ea580c'
       case 'medium':
-        return '#d29922'
+        return '#ca8a04'
       case 'low':
-        return '#8b949e'
+        return '#6b7280'
       default:
-        return '#238636'
+        return '#16a34a'
     }
   }
 
@@ -232,10 +232,12 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
         return 'Workflow'
       case 'action':
         return 'Action'
+      case 'image':
       case 'container_image':
-        return 'Container image'
       case 'docker_image':
-        return 'Docker image'
+        return 'Image'
+      case 'reusable_workflow':
+        return 'Reusable workflow'
       case 'package':
         return 'Package'
       default:
@@ -325,7 +327,7 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
           }
         }
       }
-    } else if (nodeType === 'container_image' || nodeType === 'docker_image') {
+    } else if (nodeType === 'image' || nodeType === 'container_image' || nodeType === 'docker_image') {
       const wf = getParentWorkflowNode()
       if (wf) {
         const wpath = wf.metadata?.path
@@ -420,7 +422,7 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
     const nodeId = originalNodeId || node.id
 
     // Job container: issues (e.g. unpinned image) point at lines in the workflow file
-    if (nodeType === 'container_image' || nodeType === 'docker_image') {
+    if (nodeType === 'image' || nodeType === 'container_image' || nodeType === 'docker_image') {
       const wf = getParentWorkflowNode()
       if (wf) {
         const wpath = wf.metadata?.path
@@ -631,6 +633,33 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
           <div className="detail-label">Type</div>
           <div className="detail-value">{getNodeTypeLabel(node.data?.nodeType || node.data?.type)}</div>
         </div>
+
+        {(() => {
+          const meta = graphData?.nodes?.find(n => n.id === (node.data?.originalId || node.id))?.metadata || node.data?.metadata || {}
+          const usages = Array.isArray(meta.usages) ? meta.usages : []
+          if (!usages.length) return null
+          return (
+            <div className="detail-section">
+              <div className="detail-label">Used as</div>
+              <ul className="detail-usages">
+                {usages.map((u, i) => (
+                  <li key={i}>
+                    <span className="detail-usage-role">{u.role}</span>
+                    {(u.job || u.service || u.action || u.used_by) && (
+                      <span className="detail-usage-where">
+                        {u.service
+                          ? `service "${u.service}" in job ${u.job}`
+                          : u.job
+                            ? `job ${u.job}`
+                            : (graphData?.nodes?.find(n => n.id === (u.action || u.used_by))?.label || u.action || u.used_by)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })()}
 
         <div className="detail-section">
           <div className="detail-label">Node ID</div>

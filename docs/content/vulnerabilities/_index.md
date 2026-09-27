@@ -1,9 +1,15 @@
 ---
-title: "Security Vulnerabilities"
-description: "Comprehensive documentation for all security vulnerabilities detected by actsense"
+title: "Security Checks"
+description: "Every security check actsense runs, with severity, what it means, and how to fix it."
+layout: checks
 cascade:
   type: docs
+  layout: check
 ---
+
+<!-- The explorer UI is rendered by layouts/checks.html from data/checks.json.
+     This list is the source of categories and order for
+     docs/scripts/build_checks_data.py; rerun it after editing. -->
 
 This section documents all security vulnerabilities detected by actsense. Each vulnerability includes a detailed description, evidence, and mitigation strategies.
 
@@ -40,6 +46,8 @@ This section documents all security vulnerabilities detected by actsense. Each v
 - [Reusable Workflow Secrets Inheritance](/vulnerabilities/secrets_inherit/)
 - [Secrets Used Outside Environment Variables](/vulnerabilities/secrets_outside_env/)
 - [Hardcoded Container Credentials](/vulnerabilities/hardcoded_container_credentials/)
+- [Secret Detected by TruffleHog](/vulnerabilities/trufflehog_secret_detected/)
+- [Optional Secret Input](/vulnerabilities/optional_secret_input/)
 
 ### Workflow Security
 - [Dangerous Event](/vulnerabilities/dangerous_event/)

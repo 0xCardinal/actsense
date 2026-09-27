@@ -59,6 +59,16 @@ const icons = {
   ),
 }
 
+// Images are one node type; analyses saved before the merge still carry the
+// old docker_image / container_image types.
+icons.image = icons.container_image
+
+export const IMAGE_TYPES = new Set(['image', 'docker_image', 'container_image'])
+
+export function normalizeNodeType(type) {
+  return IMAGE_TYPES.has(type) ? 'image' : type
+}
+
 export function getNodeTypeIcon(type) {
-  return icons[type] || icons.action
+  return icons[normalizeNodeType(type)] || icons.action
 }

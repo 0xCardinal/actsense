@@ -2,7 +2,13 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock, MagicMock
-from main import app, resolve_action_dependencies, audit_repository, _add_package_dependency_nodes
+from main import (
+    app,
+    resolve_action_dependencies,
+    audit_repository,
+    _add_package_dependency_nodes,
+    _replace_fetch_depth_zero,
+)
 from github_client import GitHubClient
 from graph_builder import GraphBuilder
 
@@ -21,6 +27,37 @@ class TestHealthEndpoint:
         response = client.get("/api/health")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
+
+
+class TestFetchDepthFix:
+    @pytest.mark.parametrize(
+        ("line", "expected"),
+        [
+            ("          fetch-depth: 0", "          fetch-depth: 1"),
+            ("          fetch-depth: '0' # history", "          fetch-depth: '1' # history"),
+            ('          fetch-depth: "0"', '          fetch-depth: "1"'),
+        ],
+    )
+    def test_replaces_literal_zero(self, line, expected):
+        assert _replace_fetch_depth_zero(line) == expected
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "          fetch-depth: 10",
+            "          fetch-depth: ${{ inputs.depth }}",
+            "          other: 0",
+            "          # fetch-depth: 0",
+            "          not-fetch-depth: 0",
+            "          fetch-depth: 0 trailing-data",
+        ],
+    )
+    def test_ignores_non_literal_or_malformed_values(self, line):
+        assert _replace_fetch_depth_zero(line) is None
+
+    def test_handles_long_comment_without_regex_backtracking(self):
+        line = "fetch-depth:0#" + "fetch-depth:0#" * 10_000
+        assert _replace_fetch_depth_zero(line) == "fetch-depth:1#" + "fetch-depth:0#" * 10_000
 
 
 class TestAuditEndpoint:
@@ -376,4 +413,3 @@ class TestAuditRepository:
             assert "owner/repo" in graph.nodes
             # Should cleanup
             mock_cloner.cleanup.assert_called_once()
-

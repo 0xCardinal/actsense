@@ -2,79 +2,68 @@
 
 ## Description
 
-Bash scripts that run without the `-e` flag (exit on error) create security and reliability risks: scripts continue executing even if a command fails, errors may be silently ignored, and security checks or validations may be bypassed. This can lead to unexpected behavior, invalid states, and security vulnerabilities going undetected. [^gh_actions_security]
+A step that runs Bash without exit-on-error keeps going after a command fails. A failed download, signature check, or test is silently ignored, and later steps build, publish, or deploy on top of a broken or unverified state.
+
+GitHub already protects the common cases. A `run:` step with no `shell:` key on a Linux or macOS runner runs as `bash -e {0}`, and `shell: bash` runs as `bash --noprofile --norc -eo pipefail {0}`. [^gh_shell] The protection is lost only when a workflow supplies its own **custom shell template** (a `shell:` value containing `{0}`) and leaves out `-e`.
 
 ## Vulnerable Instance
 
-- Bash script runs without `set -e`, allowing execution to continue after failures.
-- Failed security checks may not be detected.
-- Script may continue with invalid state.
+- A step sets a custom shell template such as `shell: bash {0}` or `shell: bash --noprofile {0}`.
+- The template has no `-e` / `-o errexit`, so a failing command does not stop the step.
 
 ```yaml
-name: Build
+name: Release
 on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Run script
+      - name: Verify and publish
+        shell: bash {0}   # custom template without -e
         run: |
-          # No set -e - errors ignored
-          npm install
-          npm test  # May not run if install fails
-          npm build
+          cosign verify-blob --signature app.sig app.tar.gz   # failure is ignored
+          ./publish.sh app.tar.gz                             # still runs
 ```
+
+## How actsense detects this
+
+actsense reports a step only when its `shell:` value is a custom template (contains `{0}`), invokes `bash`, and has no `-e` flag or `errexit` option. Steps with no `shell:` key, or with plain `shell: bash`, are not reported, because GitHub already runs them with `-e`. Reported as **medium**.
 
 ## Mitigation Strategies
 
-1. **Add -e flag to bash commands**  
-   Use `set -e` at the start of scripts to exit immediately if any command fails.
+1. **Use the built-in shell**
+   Prefer `shell: bash` (or omit `shell:`); GitHub adds `-eo pipefail` for you.
 
-2. **Use stricter error handling**  
-   Use `set -euo pipefail` for stricter error handling: exit on error, undefined variables, and pipe failures.
+2. **Keep `-e` in custom templates**
+   If you need custom flags, include exit-on-error: `shell: bash --noprofile --norc -eo pipefail {0}`.
 
-3. **Specify in shell**  
-   Use `shell: bash -e {0}` to enable exit-on-error for the entire step.
-
-4. **Review all bash scripts**  
-   Audit all workflows for bash scripts without error handling. Add `set -e` or `set -euo pipefail` to all scripts.
-
-5. **Test error handling**  
-   Test error handling to ensure failures are caught. Verify that scripts fail appropriately when commands fail.
-
-6. **Use proper error messages**  
-   When using `set -e`, ensure error messages are clear and actionable. Consider using `trap` for cleanup on errors.
+3. **Be strict inside scripts too**
+   Start longer scripts with `set -euo pipefail`, so unset variables and failures inside pipelines also stop the step.
 
 ### Secure Version
 
 ```diff
- name: Build
- on: [push]
- jobs:
-   build:
-     runs-on: ubuntu-latest
-     steps:
-       - name: Run script
+       - name: Verify and publish
+-        shell: bash {0}
++        shell: bash -eo pipefail {0}
          run: |
-+          set -euo pipefail  # Exit on error, undefined vars, pipe failures
--          # No set -e - errors ignored
-           npm install
-           npm test
-           npm build
+           cosign verify-blob --signature app.sig app.tar.gz
+           ./publish.sh app.tar.gz
 ```
 
 ## Impact
 
 | Dimension | Severity | Notes |
 | --- | --- | --- |
-| Likelihood | ![High](https://img.shields.io/badge/-High-orange?style=flat-square) | Bash scripts without error handling are common, especially in legacy workflows. |
-| Risk | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Failed security checks or validations may go undetected, potentially allowing vulnerabilities to persist. |
-| Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Impact depends on what the script does, but can affect build processes, deployments, and security checks. |
+| Likelihood | ![Low](https://img.shields.io/badge/-Low-green?style=flat-square) | Custom shell templates are uncommon; the defaults are already safe. |
+| Risk | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | A skipped verification step can let unverified or broken artifacts through. |
+| Blast radius | ![Medium](https://img.shields.io/badge/-Medium-yellow?style=flat-square) | Limited to what the affected step builds, publishes, or deploys. |
 
 ## References
 
-- GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions [^gh_actions_security]
+- GitHub Docs, "Workflow syntax — defaults.run.shell / jobs.<job_id>.steps[*].shell," https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsshell [^gh_shell]
+- GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions
 
 ---
 
-[^gh_actions_security]: GitHub Docs, "Security hardening for GitHub Actions," https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions
+[^gh_shell]: GitHub Docs, "Workflow syntax for GitHub Actions — shell," https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsshell

@@ -5,15 +5,15 @@ function IssuesTable({ graphData, filter, onNodeSelect, onIssueSelect }) {
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'critical':
-        return '#f85149'
+        return '#dc2626'
       case 'high':
-        return '#f0883e'
+        return '#ea580c'
       case 'medium':
-        return '#d29922'
+        return '#ca8a04'
       case 'low':
-        return '#8b949e'
+        return '#6b7280'
       default:
-        return '#238636'
+        return '#16a34a'
     }
   }
 
@@ -35,6 +35,19 @@ function IssuesTable({ graphData, filter, onNodeSelect, onIssueSelect }) {
       })
     })
     
+    // The backend mirrors a finding onto the package / image node it is
+    // about, so the graph is navigable. List those once: drop a finding on a
+    // package or image node when the identical finding exists on its source
+    // node. Identical findings on two workflows are distinct and both kept.
+    const MIRROR_TYPES = new Set(['package', 'image', 'container_image', 'docker_image'])
+    const keyOf = ({ nodeId, nodeLabel, nodeType, ...finding }) => JSON.stringify(finding)
+    const sourceKeys = new Set(issues.filter(i => !MIRROR_TYPES.has(i.nodeType)).map(keyOf))
+    const unique = issues.filter(i => !MIRROR_TYPES.has(i.nodeType) || !sourceKeys.has(keyOf(i)))
+    const rank = { critical: 0, high: 1, medium: 2, low: 3 }
+    unique.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9) || String(a.type).localeCompare(String(b.type)))
+    issues.length = 0
+    issues.push(...unique)
+
     // Apply filter if present
     if (filter) {
       if (filter.type === 'severity' && filter.severity) {

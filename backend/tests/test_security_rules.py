@@ -209,7 +209,8 @@ class TestDangerousEvents:
         
         pr_target_issues = [i for i in issues if i.get("type") == "insecure_pull_request_target"]
         assert len(pr_target_issues) > 0
-        assert pr_target_issues[0]["severity"] == "high"
+        # Checking out the PR head under pull_request_target is the "pwn request" pattern.
+        assert pr_target_issues[0]["severity"] == "critical"
         assert "actsense.dev/vulnerabilities/insecure_pull_request_target" in pr_target_issues[0]["evidence"]["vulnerability"]
     
     def test_dangerous_event_workflow_run(self):
@@ -411,7 +412,7 @@ class TestRiskyContextUsage:
         assert "github.ref_name" in risky_issues[0]["evidence"]["risky_contexts"]
     
     def test_risky_context_in_env(self):
-        """Test detection of risky context usage in environment variables (should be high severity, not critical)."""
+        """Test detection of risky context usage in environment variables (low severity: the safe pattern)."""
         workflow = {
             "name": "Process Issue",
             "on": {
@@ -436,8 +437,9 @@ class TestRiskyContextUsage:
         issues = security_rules.check_risky_context_usage(workflow)
         risky_issues = [i for i in issues if i.get("type") == "risky_context_usage"]
         assert len(risky_issues) > 0
-        # When used in env vars (not directly in run), severity should be "high" not "critical"
-        assert risky_issues[0]["severity"] == "high"
+        # Passing through env is GitHub's recommended mitigation, so it is only
+        # reported as a low-severity reminder to quote/validate the variable.
+        assert risky_issues[0]["severity"] == "low"
         assert "github.event.issue.title" in risky_issues[0]["evidence"]["risky_contexts"]
         assert risky_issues[0]["evidence"]["usage_location"] == "environment_variable"
     

@@ -243,7 +243,13 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
   const issueInfo = getIssueDescription(issue)
   
   // Get actsense.dev URL for this vulnerability
+  // Prefer the doc link the backend put in the evidence: several issue types
+  // share one page (e.g. long_term_aws_credentials -> long_term_cloud_credentials).
   const getActsenseUrl = (type) => {
+    const fromEvidence = [issue?.evidence?.vulnerability, issue?.recommendation]
+      .map(text => typeof text === 'string' && text.match(/https:\/\/actsense\.dev\/vulnerabilities\/[a-z0-9_]+/))
+      .find(Boolean)
+    if (fromEvidence) return fromEvidence[0]
     if (!type) return 'https://actsense.dev/vulnerabilities'
     return `https://actsense.dev/vulnerabilities/${type}`
   }
