@@ -130,6 +130,10 @@ Each finding explains the risk, gives a mitigation, and shows the **evidence** i
 
 If a finding is a false positive or a risk you accept, click **Dismiss finding** at the bottom of its details and, optionally, note why. A dismissed finding leaves the graph, the counts and search, and stays dismissed when you audit the same repository or action again. It comes back if the finding itself changes, for example when the step it points at is edited.
 
+{{< shot name="dismiss-finding" alt="A dangerous_event finding's details with the dismiss form open: a reason typed in, and Cancel and Dismiss buttons" >}}
+Dismissing a `dangerous_event` finding, with a reason for whoever reviews it later.
+{{< /shot >}}
+
 To review dismissals, open the **Findings** table and tick **Show dismissed**. Open a dismissed finding to see when it was dismissed and why, and click **Restore** to bring it back.
 
 Dismissals are stored with your saved analyses in the container's `data` directory. Findings from a pasted workflow (**Create a secure workflow**) can't be dismissed, since there is no repository to remember them against.
