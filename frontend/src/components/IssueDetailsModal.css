@@ -355,3 +355,149 @@
   color: #7c3aed;
 }
 
+
+/* ---- Triage: dismiss / restore ------------------------------------ */
+
+.dismissed-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  font-family: var(--font-sans);
+}
+
+.issue-triage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--line);
+  background: var(--surface-sunken);
+  font-family: var(--font-sans);
+}
+
+.issue-triage-hint,
+.issue-triage-status {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.875rem;
+  color: var(--ink-3);
+}
+
+.issue-triage-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.issue-triage-status strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.issue-triage-reason {
+  overflow-wrap: anywhere;
+}
+
+.issue-triage-form {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.issue-triage-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.issue-triage-label span {
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.issue-triage-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.issue-triage-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.issue-triage-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.issue-triage-note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-3);
+}
+
+.issue-triage-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--danger-ink);
+}
+
+.triage-btn {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs), var(--bevel);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.triage-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.triage-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.triage-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.triage-btn-quiet {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.triage-btn-primary {
+  color: var(--on-inverse);
+  background: linear-gradient(180deg, var(--btn-top), var(--btn-bottom));
+  border-color: var(--btn-border);
+  box-shadow: var(--shadow-xs), var(--bevel-dark);
+}
+
+.triage-btn-primary:hover:not(:disabled) {
+  background: var(--inverse-hover);
+}

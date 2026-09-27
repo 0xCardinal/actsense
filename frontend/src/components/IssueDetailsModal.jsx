@@ -1,5 +1,96 @@
-import React from 'react'
+import React, { useState } from 'react'
+import { isDismissed, useDismissals } from '../dismissals'
 import './IssueDetailsModal.css'
+
+// Dismiss (with an optional reason) or restore the finding. Dismissals are
+// remembered for the audited repository or action, so they hold on re-runs.
+function TriageBar({ issue, onDone }) {
+  const { canDismiss, dismiss, restore } = useDismissals()
+  const [editing, setEditing] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  if (!issue.fingerprint || (!canDismiss && !isDismissed(issue))) return null
+
+  const run = async (action) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+      onDone()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  if (isDismissed(issue)) {
+    const { reason: savedReason, dismissed_at: dismissedAt } = issue.dismissed
+    const date = dismissedAt ? new Date(dismissedAt).toLocaleDateString() : null
+    return (
+      <div className="issue-triage">
+        <div className="issue-triage-status">
+          <strong>Dismissed{date ? ` on ${date}` : ''}</strong>
+          {savedReason && <span className="issue-triage-reason">{savedReason}</span>}
+        </div>
+        {canDismiss && (
+          <button type="button" className="triage-btn" disabled={busy} onClick={() => run(() => restore(issue))}>
+            {busy ? 'Restoring…' : 'Restore'}
+          </button>
+        )}
+        {error && <p className="issue-triage-error" role="alert">{error}</p>}
+      </div>
+    )
+  }
+
+  if (!editing) {
+    return (
+      <div className="issue-triage">
+        <span className="issue-triage-hint">False positive or accepted risk?</span>
+        <button type="button" className="triage-btn" onClick={() => setEditing(true)}>
+          Dismiss finding
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <form
+      className="issue-triage issue-triage-form"
+      onSubmit={(event) => {
+        event.preventDefault()
+        run(() => dismiss(issue, reason))
+      }}
+    >
+      <label className="issue-triage-label" htmlFor="dismiss-reason">
+        Reason <span>(optional)</span>
+      </label>
+      <input
+        id="dismiss-reason"
+        className="issue-triage-input"
+        type="text"
+        maxLength={500}
+        placeholder="e.g. test-only workflow, accepted risk"
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        autoFocus
+      />
+      <div className="issue-triage-actions">
+        <button type="button" className="triage-btn triage-btn-quiet" disabled={busy} onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+        <button type="submit" className="triage-btn triage-btn-primary" disabled={busy}>
+          {busy ? 'Dismissing…' : 'Dismiss'}
+        </button>
+      </div>
+      <p className="issue-triage-note">
+        Hidden from counts and views on every audit of this target. You can restore it from the findings table.
+      </p>
+      {error && <p className="issue-triage-error" role="alert">{error}</p>}
+    </form>
+  )
+}
 
 function IssueDetailsModal({ issue, otherInstances, onClose }) {
   if (!issue) return null
@@ -301,6 +392,7 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
         <div className="issue-modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <h3>{formatTitle(issue.type)}</h3>
+            {isDismissed(issue) && <span className="dismissed-pill">Dismissed</span>}
             {issue.type === 'trufflehog_secret_detected' && issue.evidence && (
               <span 
                 className={`verification-pill ${issue.evidence.verified ? 'verified' : 'unverified'}`}
@@ -422,6 +514,8 @@ function IssueDetailsModal({ issue, otherInstances, onClose }) {
             </div>
           )}
         </div>
+
+        <TriageBar key={issue.fingerprint} issue={issue} onDone={onClose} />
       </div>
     </>
   )

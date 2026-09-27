@@ -197,3 +197,23 @@
 .clear-filter:hover {
   background: var(--accent-soft);
 }
+
+/* Dismissed findings are out of the counts above; say so, and link to them. */
+.dismissed-note {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px 6px;
+  font-size: 0.75rem;
+  color: var(--ink-3);
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.dismissed-note:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}

@@ -716,6 +716,19 @@ Get specific analysis by ID.
 ### DELETE `/api/analyses/{id}`
 Delete analysis by ID.
 
+### POST `/api/analyses/{id}/dismissals`
+Dismiss a finding (`{"fingerprint": "...", "reason": "..."}`) for the analysis's repository or action. Returns the analysis with dismissals applied.
+
+### DELETE `/api/analyses/{id}/dismissals/{fingerprint}`
+Restore a dismissed finding. Returns the analysis with dismissals applied.
+
+### GET `/api/dismissals?target=owner/repo`
+List dismissals for a repository or action.
+
+## Dismissed Findings
+
+`backend/dismissals.py` gives every issue a `fingerprint`: a hash of its node id, type, identifying fields and message, leaving out what shifts between runs (`line_number`, `latest_version`, `days_old`, `commit_date`, digits in the message). Dismissals are stored per audit target in `data/dismissals.json` and applied when an audit is built and whenever a stored analysis is read, so one dismissal covers every run of that target. A dismissed issue carries `"dismissed": {"reason", "dismissed_at"}` and is left out of `issue_count`, node `severity` and the statistics (`dismissed_issues` counts them). If you add a volatile field to an issue, add it to `_VOLATILE_FIELDS` or dismissals of that finding won't survive a re-run.
+
 ## Configuration
 
 ### Trusted Action Publishers

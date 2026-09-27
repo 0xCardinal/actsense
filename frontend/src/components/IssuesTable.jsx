@@ -1,7 +1,10 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
+import { isDismissed } from '../dismissals'
 import './IssuesTable.css'
 
 function IssuesTable({ graphData, filter, onNodeSelect, onIssueSelect }) {
+  const [showDismissed, setShowDismissed] = useState(false)
+
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'critical':
@@ -42,27 +45,32 @@ function IssuesTable({ graphData, filter, onNodeSelect, onIssueSelect }) {
     const MIRROR_TYPES = new Set(['package', 'image', 'container_image', 'docker_image'])
     const keyOf = ({ nodeId, nodeLabel, nodeType, ...finding }) => JSON.stringify(finding)
     const sourceKeys = new Set(issues.filter(i => !MIRROR_TYPES.has(i.nodeType)).map(keyOf))
-    const unique = issues.filter(i => !MIRROR_TYPES.has(i.nodeType) || !sourceKeys.has(keyOf(i)))
+    // A rule can report the same finding twice on one node; the backend
+    // counts it once (by fingerprint), so list it once.
+    const seen = new Set()
+    const unique = issues.filter(i => {
+      if (MIRROR_TYPES.has(i.nodeType) && sourceKeys.has(keyOf(i))) return false
+      if (!i.fingerprint) return true
+      const key = `${i.nodeId}|${i.fingerprint}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
     const rank = { critical: 0, high: 1, medium: 2, low: 3 }
     unique.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9) || String(a.type).localeCompare(String(b.type)))
     issues.length = 0
     issues.push(...unique)
 
     // Apply filter if present
-    if (filter) {
-      if (filter.type === 'severity' && filter.severity) {
-        return issues.filter(issue => issue.severity === filter.severity)
-      }
-      if (filter.type === 'has_issues') {
-        // Show all issues when filtering by has_issues
-        return issues
-      }
-      // For other filter types, show all issues
-      return issues
+    if (filter?.type === 'severity' && filter.severity) {
+      return issues.filter(issue => issue.severity === filter.severity)
     }
-    
     return issues
   }, [graphData, filter])
+
+  const dismissedCount = allIssues.filter(isDismissed).length
+  const shownIssues = showDismissed ? allIssues : allIssues.filter(issue => !isDismissed(issue))
+  const activeCount = allIssues.length - dismissedCount
 
   const handleRowClick = (issue) => {
     if (onIssueSelect) {
@@ -90,12 +98,28 @@ function IssuesTable({ graphData, filter, onNodeSelect, onIssueSelect }) {
     <div className="issues-table-container">
       <div className="issues-table-header">
         <h2>Security Issues</h2>
-        <div className="issues-count">{allIssues.length} issue{allIssues.length !== 1 ? 's' : ''}</div>
+        <div className="issues-table-meta">
+          {dismissedCount > 0 && (
+            <label className="show-dismissed">
+              <input
+                type="checkbox"
+                checked={showDismissed}
+                onChange={(event) => setShowDismissed(event.target.checked)}
+              />
+              Show {dismissedCount} dismissed
+            </label>
+          )}
+          <div className="issues-count">{activeCount} issue{activeCount !== 1 ? 's' : ''}</div>
+        </div>
       </div>
       
-      {allIssues.length === 0 ? (
+      {shownIssues.length === 0 ? (
         <div className="issues-empty">
-          <p>No issues found{filter ? ' matching the current filter' : ''}</p>
+          <p>
+            {dismissedCount > 0 && !showDismissed
+              ? `No open issues${filter ? ' matching the current filter' : ''}. ${dismissedCount} dismissed.`
+              : `No issues found${filter ? ' matching the current filter' : ''}`}
+          </p>
         </div>
       ) : (
         <div className="issues-table-wrapper">
@@ -110,11 +134,11 @@ function IssuesTable({ graphData, filter, onNodeSelect, onIssueSelect }) {
               </tr>
             </thead>
             <tbody>
-              {allIssues.map((issue, index) => (
+              {shownIssues.map((issue, index) => (
                 <tr 
-                  key={`${issue.nodeId}-${index}`}
+                  key={issue.fingerprint ? `${issue.nodeId}-${issue.fingerprint}` : `${issue.nodeId}-${index}`}
                   onClick={() => handleRowClick(issue)}
-                  className="issues-table-row"
+                  className={`issues-table-row ${isDismissed(issue) ? 'is-dismissed' : ''}`}
                 >
                   <td>
                     <span 
@@ -126,6 +150,9 @@ function IssuesTable({ graphData, filter, onNodeSelect, onIssueSelect }) {
                   </td>
                   <td>
                     <span className="issue-type-cell">{issue.type || 'Unknown'}</span>
+                    {isDismissed(issue) && (
+                      <span className="dismissed-chip" title={issue.dismissed.reason || undefined}>Dismissed</span>
+                    )}
                   </td>
                   <td>
                     <div className="node-cell">

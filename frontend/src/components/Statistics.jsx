@@ -60,6 +60,17 @@ function Statistics({ data, onFilterChange, onViewModeChange, currentViewMode, c
         ))}
       </div>
 
+      {data.dismissed_issues > 0 && (
+        <button
+          type="button"
+          className="dismissed-note"
+          onClick={() => applyFilter({ type: 'has_issues' }, 'table')}
+          title="Dismissed findings are left out of every count. Open the findings table to review or restore them."
+        >
+          {data.dismissed_issues} dismissed finding{data.dismissed_issues !== 1 ? 's' : ''} hidden
+        </button>
+      )}
+
       <div className="view-mode-toggle" role="tablist" aria-label="View">
         {['graph', 'table'].map(mode => (
           <button

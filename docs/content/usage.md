@@ -126,6 +126,14 @@ A `dangerous_event` finding with the event that triggered it.
 
 Each finding explains the risk, gives a mitigation, and shows the **evidence** it was raised on: the event, step, line or value in the workflow. The link at the bottom opens that check's page in the [check reference](/vulnerabilities/).
 
+### Dismiss a finding
+
+If a finding is a false positive or a risk you accept, click **Dismiss finding** at the bottom of its details and, optionally, note why. A dismissed finding leaves the graph, the counts and search, and stays dismissed when you audit the same repository or action again. It comes back if the finding itself changes, for example when the step it points at is edited.
+
+To review dismissals, open the **Findings** table and tick **Show dismissed**. Open a dismissed finding to see when it was dismissed and why, and click **Restore** to bring it back.
+
+Dismissals are stored with your saved analyses in the container's `data` directory. Findings from a pasted workflow (**Create a secure workflow**) can't be dismissed, since there is no repository to remember them against.
+
 ### Share a node
 
 **Share** in the panel header creates a link to that node and its findings.
