@@ -1,0 +1,19 @@
+{{- /*
+  The demo loop recorded by docs/scripts/record_demo.py, as a light and a
+  dark video that follow the docs theme. static/demo-video.js decides which
+  one loads and plays. Files are fingerprinted so a new recording is never
+  served from a stale cache. Pass a dict with `class` for the video elements.
+*/ -}}
+{{- $class := .class | default "" -}}
+{{- range slice (dict "theme" "light" "suffix" "") (dict "theme" "dark" "suffix" "-dark") }}
+{{- $base := printf "videos/demo%s" .suffix -}}
+{{- $webm := resources.Get (printf "%s.webm" $base) | fingerprint "md5" -}}
+{{- $mp4 := resources.Get (printf "%s.mp4" $base) | fingerprint "md5" -}}
+{{- $poster := resources.Get (printf "%s.webp" $base) | fingerprint "md5" }}
+<video data-demo class="as-shot-{{ .theme }} {{ $class }}" muted loop playsinline preload="none" width="1600" height="1000"
+  poster="{{ $poster.RelPermalink }}"
+  aria-label="actsense demo: auditing a repository, filtering to critical findings, opening one, and fixing the workflow in the editor">
+  <source src="{{ $webm.RelPermalink }}" type="video/webm">
+  <source src="{{ $mp4.RelPermalink }}" type="video/mp4">
+</video>
+{{- end }}

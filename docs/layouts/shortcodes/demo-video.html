@@ -1,0 +1,20 @@
+{{- /*
+  The demo loop in a screenshot frame, with an optional Markdown caption:
+
+    {{< demo-video >}}Caption.{{< /demo-video >}}
+
+  bare="true" renders only the videos, for layouts that frame them already.
+*/ -}}
+{{- if eq (.Get "bare") "true" -}}
+{{ partial "demo-video.html" (dict "class" "") }}
+{{- else -}}
+{{- $caption := trim .Inner "\n " -}}
+<figure class="as-shot-fig">
+  <div class="as-shot-frame">
+    {{ partial "demo-video.html" (dict "class" "") }}
+  </div>
+  {{- with $caption }}
+  <figcaption>{{ . | markdownify }}</figcaption>
+  {{- end }}
+</figure>
+{{- end -}}
