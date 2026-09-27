@@ -2,6 +2,7 @@
   width: 100%;
   height: 100%;
   position: relative;
+  container: graph / inline-size;
   background: var(--surface-sunken);
 }
 
@@ -228,10 +229,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
-  max-width: calc(100% - 260px);
-  padding: 6px 10px;
+  max-width: calc(100% - 256px);
+  height: 34px;
+  padding: 0 6px 0 12px;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line);
@@ -249,7 +251,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .legend-item {
@@ -321,8 +323,28 @@
   box-shadow: var(--shadow-sm), var(--bevel-dark);
 }
 
-@media (max-width: 900px) {
+/* The legend stays one row and sheds detail as the canvas narrows:
+   node types drop to icons, then severities go, leaving the Map toggle. */
+@container graph (max-width: 1080px) {
+  .legend-group--types {
+    gap: 8px;
+  }
+  .legend-group--types .legend-label {
+    display: none;
+  }
+}
+
+@container graph (max-width: 760px) {
+  .legend-group--types,
+  .legend-divider--types,
+  .legend-group--severity,
+  .legend-divider--toggle {
+    display: none;
+  }
   .graph-legend {
+    padding: 0 6px;
+  }
+  .graph-legend:not(:has(.legend-toggle)) {
     display: none;
   }
 }

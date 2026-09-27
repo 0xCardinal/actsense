@@ -6,50 +6,60 @@
   z-index: 0;
 }
 
-/* Fine 1px grid, strongest around the search area and fading to nothing at
-   the edges, so it frames the centre instead of filling the page. */
-.home-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(to right, rgba(17, 24, 39, 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(17, 24, 39, 0.07) 1px, transparent 1px);
-  background-size: 56px 56px;
-  background-position: center center;
-  -webkit-mask-image: radial-gradient(ellipse 55% 50% at 50% 40%, #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 80%);
-  mask-image: radial-gradient(ellipse 55% 50% at 50% 40%, #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 80%);
-}
-
-/* One soft, cool glow behind the card. Low chroma so it reads as light,
-   not as colour. */
-.home-glow {
+/* A faint echo of the bloom behind the brand: cool on the left, warm on the
+   right, pale enough that the wordmark keeps full contrast. It carries the
+   same grain so it reads as part of the same surface. */
+.home-halo {
   position: absolute;
   left: 50%;
-  top: 40%;
-  width: min(900px, 90vw);
-  height: 420px;
+  top: 30%;
+  width: min(760px, 110vw);
+  height: 340px;
   transform: translate(-50%, -50%);
   background:
-    radial-gradient(closest-side at 38% 50%, rgba(99, 125, 255, 0.26), transparent),
-    radial-gradient(closest-side at 64% 46%, rgba(56, 189, 248, 0.2), transparent),
-    radial-gradient(closest-side at 50% 60%, rgba(255, 255, 255, 0.9), transparent);
-  filter: blur(48px);
-  animation: glow-breathe 14s ease-in-out infinite alternate;
+    radial-gradient(closest-side at 36% 55%, rgba(37, 99, 235, 0.2), transparent),
+    radial-gradient(closest-side at 66% 45%, rgba(255, 90, 31, 0.14), transparent);
+  filter: blur(40px);
 }
 
-@keyframes glow-breathe {
-  from { transform: translate(-50%, -50%) scale(1); opacity: 0.85; }
-  to { transform: translate(-50%, -50%) scale(1.06); opacity: 1; }
-}
-
-/* A faint horizon under the content gives the page depth without a hard edge. */
-.home-horizon {
+.home-halo::after {
+  content: '';
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 38%;
-  background: linear-gradient(180deg, transparent, rgba(226, 230, 238, 0.55));
+  inset: 0;
+  opacity: 0.7;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  -webkit-mask-image: radial-gradient(closest-side, #000 0%, rgba(0, 0, 0, 0.6) 55%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 0%, rgba(0, 0, 0, 0.6) 55%, transparent 100%);
+}
+
+/* Colour bloom from the bottom edge: strongest in the right corner (blue
+   burning to orange), a cooler echo on the left, and the centre left light
+   so the footer stays readable. */
+.home-bloom {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(30% 26% at 100% 102%, #ff5a1f 0%, rgba(255, 90, 31, 0.8) 35%, rgba(255, 90, 31, 0) 100%),
+    radial-gradient(42% 40% at 98% 104%, #0d3b6e 0%, rgba(14, 70, 130, 0.9) 40%, rgba(37, 99, 235, 0) 100%),
+    radial-gradient(34% 22% at 0% 106%, rgba(13, 59, 110, 0.85) 0%, rgba(37, 99, 235, 0.25) 55%, rgba(37, 99, 235, 0) 100%);
+  filter: blur(12px) saturate(1.15);
+}
+
+/* Coarse grain, masked to the bloom so the colour looks printed while the
+   rest of the page stays clean. */
+.home-bloom-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  -webkit-mask-image:
+    radial-gradient(50% 46% at 100% 104%, #000 0%, rgba(0, 0, 0, 0.8) 50%, transparent 100%),
+    radial-gradient(36% 24% at 0% 106%, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  mask-image:
+    radial-gradient(50% 46% at 100% 104%, #000 0%, rgba(0, 0, 0, 0.8) 50%, transparent 100%),
+    radial-gradient(36% 24% at 0% 106%, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
 }
 
 .home-grain {
@@ -58,10 +68,4 @@
   opacity: 0.3;
   mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.48 0 0 0 0 0.55 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .home-glow {
-    animation: none;
-  }
 }

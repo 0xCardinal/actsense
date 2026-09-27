@@ -9,7 +9,8 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
   const [githubToken, setGithubToken] = useState(defaults.token || '')
   const [useClone, setUseClone] = useState(Boolean(defaults.useClone))
   const [fieldError, setFieldError] = useState('')
-  const [optionsOpen, setOptionsOpen] = useState(false)
+  const [tokenOpen, setTokenOpen] = useState(false)
+  const [showToken, setShowToken] = useState(false)
 
   useEffect(() => {
     onValuesChange && onValuesChange({ input, token: githubToken, useClone })
@@ -82,105 +83,176 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
     ? 'owner/repo@v1 or owner/repo@main' 
     : 'owner/repo or https://github.com/owner/repo'
 
+  const isHero = variant === 'hero'
+  const isAction = inputType === 'action'
+  const kindLabel = input.trim() ? (isAction ? 'Action' : 'Repo') : null
+
+  const submitLabel = loading ? (
+    <span className="loading-container">
+      <span className="loading-dots">
+        <span></span>
+        <span></span>
+        <span></span>
+      </span>
+      <span className="loading-text">Auditing</span>
+    </span>
+  ) : (isHero ? 'Audit' : 'Run audit')
+
+  const createWorkflowButton = (
+    <button
+      type="button"
+      className="yaml-editor-button"
+      onClick={onOpenYAMLEditor}
+      disabled={loading}
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 1.5 2.75 3.5v4c0 3.1 2.2 5.6 5.25 7 3.05-1.4 5.25-3.9 5.25-7v-4L8 1.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        <path d="M8 5.5v4M6 7.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+      <span>{isHero ? 'Secure workflow' : 'Create a secure workflow'}</span>
+    </button>
+  )
+
   return (
-    <form className={`input-form input-form--${variant}`} onSubmit={handleSubmit} role={variant === 'hero' ? 'search' : undefined}>
+    <form className={`input-form input-form--${variant}`} onSubmit={handleSubmit} role={isHero ? 'search' : undefined}>
       <div className="form-group">
-        <label htmlFor="input" className={variant === 'hero' ? 'visually-hidden' : ''}>
+        <label htmlFor="input" className={isHero ? 'visually-hidden' : ''}>
           Repository or action
-          {input.trim() && (
-            <span className={`input-kind ${inputType}`}>{inputType === 'action' ? 'Action' : 'Repo'}</span>
+          {!isHero && kindLabel && (
+            <span className={`input-kind ${inputType}`}>{kindLabel}</span>
           )}
         </label>
-        <input
-          id="input"
-          type="text"
-          placeholder={placeholder}
-          value={input}
-          onChange={(e) => { setInput(e.target.value); if (fieldError) setFieldError('') }}
-          disabled={loading}
-          spellCheck={false}
-          autoComplete="off"
-          aria-invalid={Boolean(fieldError)}
-          aria-describedby={fieldError ? 'input-help' : undefined}
-          className={`audit-input ${fieldError ? 'has-error' : ''}`}
-          autoFocus={variant === 'hero'}
-        />
-        {variant === 'hero' && (
-          <button type="submit" disabled={loading} className="submit-button hero-submit">
-            Audit
-          </button>
-        )}
+        <div className="audit-field">
+          <input
+            id="input"
+            type="text"
+            placeholder={placeholder}
+            value={input}
+            onChange={(e) => { setInput(e.target.value); if (fieldError) setFieldError('') }}
+            disabled={loading}
+            spellCheck={false}
+            autoComplete="off"
+            aria-invalid={Boolean(fieldError)}
+            aria-describedby={fieldError ? 'input-help' : undefined}
+            className={`audit-input ${fieldError ? 'has-error' : ''} ${isHero && kindLabel ? 'has-kind' : ''}`}
+            autoFocus={isHero}
+          />
+          {isHero && kindLabel && (
+            <span className={`input-kind input-kind--inline ${inputType}`} aria-live="polite">{kindLabel}</span>
+          )}
+          {isHero && (
+            <button type="submit" disabled={loading} className="submit-button hero-submit">
+              {submitLabel}
+            </button>
+          )}
+        </div>
         {fieldError && <small id="input-help" className="field-error">{fieldError}</small>}
       </div>
 
-      <details className="form-options" open={optionsOpen} onToggle={(e) => setOptionsOpen(e.currentTarget.open)}>
-        <summary>
-          Options
-          {githubToken && <span className="options-dot" title="Token set" />}
-        </summary>
-        <div className="form-options-body">
-          <div className="form-group">
-            <label htmlFor="token">
-              GitHub token
-              <a
-                className="label-link"
-                href="https://github.com/settings/tokens"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Create
-              </a>
-            </label>
+      {tokenOpen && (
+        <div className="token-panel" id="token-panel">
+          <div className="token-panel-head">
+            <label htmlFor="token">GitHub token</label>
+            <a
+              className="label-link"
+              href="https://github.com/settings/tokens/new?description=actsense"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Create token ↗
+            </a>
+          </div>
+          <div className="token-field">
             <input
               id="token"
-              type="password"
-              placeholder="ghp_…"
+              type={showToken ? 'text' : 'password'}
+              placeholder="ghp_… or github_pat_…"
               value={githubToken}
               onChange={(e) => setGithubToken(e.target.value)}
               disabled={loading}
+              spellCheck={false}
+              autoComplete="off"
+              aria-describedby="token-help"
             />
-            <small>60 → 5,000 API requests/hour. Needed for deep graphs.</small>
+            {githubToken && (
+              <button
+                type="button"
+                className="token-field-action"
+                onClick={() => setShowToken(v => !v)}
+                aria-label={showToken ? 'Hide token' : 'Show token'}
+                aria-pressed={showToken}
+              >
+                {showToken ? 'Hide' : 'Show'}
+              </button>
+            )}
+            {githubToken && (
+              <button
+                type="button"
+                className="token-field-action"
+                onClick={() => { setGithubToken(''); setShowToken(false) }}
+                aria-label="Clear token"
+              >
+                Clear
+              </button>
+            )}
           </div>
-
-          {inputType === 'repository' && (
-            <label className="toggle-row" title="For private repositories. Actions are still resolved through the API.">
-              <input
-                type="checkbox"
-                role="switch"
-                checked={useClone}
-                onChange={(e) => setUseClone(e.target.checked)}
-                disabled={loading}
-              />
-              <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
-              <span>Read workflows from a git clone</span>
-            </label>
-          )}
+          <small id="token-help">
+            Raises the API limit from 60 to 5,000 requests/hour, which deep graphs need. A token with no scopes works for public repositories. It is sent with the audit only and never saved.
+          </small>
         </div>
-      </details>
+      )}
 
-      {variant !== 'hero' && <button type="submit" disabled={loading} className="submit-button">
-        {loading ? (
-          <span className="loading-container">
-            <span className="loading-dots">
-              <span></span>
-              <span></span>
-              <span></span>
-            </span>
-            <span className="loading-text">Auditing</span>
-          </span>
-        ) : (
-          'Run audit'
-        )}
-      </button>}
+      <div className="form-toolbar">
+        <button
+          type="button"
+          className={`tool-chip ${githubToken ? 'is-set' : ''}`}
+          onClick={() => setTokenOpen(v => !v)}
+          aria-expanded={tokenOpen}
+          aria-controls="token-panel"
+          disabled={loading}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="5.5" cy="10.5" r="3" stroke="currentColor" strokeWidth="1.4" />
+            <path d="m7.7 8.3 5.8-5.8M11.5 4.5l1.75 1.75M9.75 6.25 11 7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+          <span>{githubToken ? 'Token set' : 'Add token'}</span>
+          {githubToken && <span className="tool-chip-dot" aria-hidden="true" />}
+        </button>
 
-      <button
-        type="button"
-        className="yaml-editor-button"
-        onClick={onOpenYAMLEditor}
-        disabled={loading}
-      >
-        or create a secure workflow
-      </button>
+        <label
+          className={`tool-chip tool-chip--switch ${useClone && !isAction ? 'is-on' : ''} ${isAction ? 'is-disabled' : ''}`}
+          title={isAction
+            ? 'Cloning applies to repositories, not single actions.'
+            : 'Read workflows from a git clone instead of the API. Useful for private repositories.'}
+        >
+          <input
+            type="checkbox"
+            role="switch"
+            checked={useClone && !isAction}
+            onChange={(e) => setUseClone(e.target.checked)}
+            disabled={loading || isAction}
+          />
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="4.5" cy="3.5" r="1.75" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="4.5" cy="12.5" r="1.75" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="11.5" cy="5.5" r="1.75" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M4.5 5.25v5.5M11.5 7.25c0 2.5-3 2.25-6.5 3.75" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+          <span>Clone repo</span>
+          <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
+        </label>
+
+        {isHero && <span className="form-toolbar-spacer" aria-hidden="true" />}
+        {isHero && createWorkflowButton}
+      </div>
+
+      {!isHero && (
+        <button type="submit" disabled={loading} className="submit-button">
+          {submitLabel}
+        </button>
+      )}
+
+      {!isHero && createWorkflowButton}
     </form>
   )
 })

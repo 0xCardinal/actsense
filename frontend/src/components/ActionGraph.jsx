@@ -318,16 +318,16 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
       </ReactFlow>
 
       <div className="graph-legend" aria-label="Legend">
-        <div className="legend-group">
+        <div className="legend-group legend-group--types">
           {LEGEND_TYPES.filter(([type]) => presentTypes.has(type)).map(([type, label]) => (
-            <span key={type} className="legend-item">
+            <span key={type} className="legend-item" title={label}>
               <span className="legend-icon">{getNodeTypeIcon(type)}</span>
-              {label}
+              <span className="legend-label">{label}</span>
             </span>
           ))}
         </div>
-        <span className="legend-divider" />
-        <div className="legend-group">
+        <span className="legend-divider legend-divider--types" />
+        <div className="legend-group legend-group--severity">
           {['critical', 'high', 'medium', 'low', 'none'].map(sev => (
             <span key={sev} className="legend-item">
               <span className="sev-dot" style={{ background: SEVERITY_VAR[sev] }} />
@@ -337,7 +337,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
         </div>
         {laidOutNodes.length > 12 && (
           <>
-            <span className="legend-divider" />
+            <span className="legend-divider legend-divider--toggle" />
             <button
               type="button"
               className="legend-toggle"

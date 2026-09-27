@@ -112,60 +112,6 @@
   text-decoration-color: var(--ink);
 }
 
-/* ---- Switch ------------------------------------------------------- */
-
-.toggle-row {
-  cursor: pointer;
-  font-weight: 500 !important;
-  user-select: none;
-}
-
-.toggle-row input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-}
-
-.toggle-track {
-  position: relative;
-  width: 30px;
-  height: 18px;
-  flex-shrink: 0;
-  border-radius: 9px;
-  background: var(--line-strong);
-  box-shadow: inset 0 1px 2px rgba(17, 24, 39, 0.15);
-  transition: background 0.2s var(--ease-out);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.25);
-  transition: transform 0.2s var(--ease-out);
-}
-
-.toggle-row input:checked + .toggle-track {
-  background: var(--ink);
-}
-
-.toggle-row input:checked + .toggle-track .toggle-thumb {
-  transform: translateX(12px);
-}
-
-.toggle-row input:focus-visible + .toggle-track {
-  box-shadow: var(--focus-ring);
-}
-
-.toggle-row input:disabled + .toggle-track {
-  opacity: 0.5;
-}
-
 /* ---- Buttons ------------------------------------------------------ */
 
 .submit-button {
@@ -249,92 +195,223 @@
   40% { transform: scale(1); opacity: 1; }
 }
 
-/* Secondary path: a quiet text action, not a second primary button. */
-.yaml-editor-button {
-  align-self: center;
-  height: 28px;
-  padding: 0 8px;
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--ink-3);
+/* ---- Field -------------------------------------------------------- */
+
+.audit-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Toolbar: options as chips, one row --------------------------- */
+
+.form-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-toolbar-spacer {
+  flex: 1;
+}
+
+.tool-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
   font-size: 0.75rem;
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  user-select: none;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
-.yaml-editor-button:hover:not(:disabled) {
-  color: var(--ink);
+.tool-chip svg {
+  flex-shrink: 0;
+  color: var(--ink-3);
+  transition: color 0.15s ease;
+}
+
+.tool-chip:hover:not(:disabled):not(.is-disabled) {
   background: var(--surface-hover);
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
 
-.yaml-editor-button:disabled {
+.tool-chip:focus-visible,
+.tool-chip--switch:focus-within {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.tool-chip[aria-expanded="true"] {
+  background: var(--surface);
+  border-color: var(--ink-4);
+  color: var(--ink);
+}
+
+.tool-chip.is-set svg,
+.tool-chip.is-on svg {
+  color: var(--ink);
+}
+
+.tool-chip:disabled,
+.tool-chip.is-disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* ---- Options disclosure ------------------------------------------ */
-
-.form-options {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-.form-options summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--ink-2);
-  cursor: pointer;
-  list-style: none;
-  border-radius: var(--radius-md);
-  user-select: none;
-  transition: background 0.12s ease;
-}
-
-.form-options summary::-webkit-details-marker {
-  display: none;
-}
-
-.form-options summary::after {
-  content: '';
-  margin-left: auto;
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid var(--ink-3);
-  border-bottom: 1.5px solid var(--ink-3);
-  transform: rotate(45deg) translateY(-2px);
-  transition: transform 0.2s var(--ease-out);
-}
-
-.form-options[open] summary::after {
-  transform: rotate(-135deg) translateY(-1px);
-}
-
-.form-options summary:hover {
-  background: var(--surface-hover);
-}
-
-.options-dot {
+.tool-chip-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--sev-none);
 }
 
-.form-options-body {
+/* Switch inside a chip */
+.tool-chip--switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.tool-chip--switch.is-disabled {
+  pointer-events: auto;
+}
+
+.toggle-track {
+  position: relative;
+  width: 26px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--line-strong);
+  box-shadow: inset 0 1px 2px rgba(17, 24, 39, 0.15);
+  transition: background 0.2s var(--ease-out);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.25);
+  transition: transform 0.2s var(--ease-out);
+}
+
+.tool-chip--switch input:checked ~ .toggle-track {
+  background: var(--ink);
+}
+
+.tool-chip--switch input:checked ~ .toggle-track .toggle-thumb {
+  transform: translateX(10px);
+}
+
+/* ---- Token panel -------------------------------------------------- */
+
+.token-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 4px 12px 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
+  gap: 6px;
+  padding: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  animation: token-panel-in 0.18s var(--ease-out);
+}
+
+@keyframes token-panel-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.token-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-panel-head label {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.token-field {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding-right: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.token-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.token-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-family: var(--font-mono);
+}
+
+.token-field input::placeholder {
+  color: var(--ink-4);
+}
+
+.token-field-action {
+  height: 26px;
+  padding: 0 8px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.token-field-action:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.token-field-action:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.token-panel small {
+  color: var(--ink-3);
+  font-size: 0.71875rem;
+  line-height: 1.5;
 }
 
 .label-link {
@@ -350,10 +427,43 @@
   text-decoration: underline;
 }
 
-.toggle-row {
-  display: flex;
+/* ---- Secondary path: create a workflow ---------------------------- */
+
+.yaml-editor-button {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.75rem;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  background: none;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
   color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.yaml-editor-button svg {
+  color: var(--sev-none);
+  flex-shrink: 0;
+}
+
+.yaml-editor-button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--surface-hover);
+  border-color: var(--ink-4);
+  border-style: solid;
+}
+
+.yaml-editor-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.yaml-editor-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

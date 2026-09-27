@@ -1,14 +1,14 @@
 import React from 'react'
 import './HomeBackdrop.css'
 
-// Quiet, layered backdrop for the home page: a fine grid that fades out from
-// the centre, one soft glow behind the search card, and a touch of grain.
+// Home page backdrop: a grainy blue-to-orange bloom rising from the bottom
+// edge, echoed by a faint wash of the same colours behind the brand.
 function HomeBackdrop() {
   return (
     <div className="home-backdrop" aria-hidden="true">
-      <div className="home-grid" />
-      <div className="home-glow" />
-      <div className="home-horizon" />
+      <div className="home-halo" />
+      <div className="home-bloom" />
+      <div className="home-bloom-grain" />
       <div className="home-grain" />
     </div>
   )
