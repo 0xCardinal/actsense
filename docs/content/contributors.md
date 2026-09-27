@@ -4,43 +4,29 @@ description: "Meet the people and organizations building and supporting actsense
 toc: false
 ---
 
-<div class="contributors-intro">
-  <p class="contributors-intro__eyebrow">Built in the open</p>
-  <p class="contributors-intro__lead">The people behind the rules, research, dependency graph, pinning service, and product experience.</p>
-</div>
-
-## People shaping actsense
-
 <div class="contributors-grid">
   {{< contributor
     name="Kumar Ashwin"
-    role="Creator & maintainer"
     image="/kumar-ashwin.jpeg"
     linkedin="https://www.linkedin.com/in/0xCardinal"
     twitter="https://x.com/0xCardinal"
     github="https://github.com/0xCardinal"
     contributions="Created actsense and leads its security rules, dependency graph, and product direction."
-    focus="Security engine, Dependency graph, Product"
-    featured="true"
   >}}
 
   {{< contributor
     name="Shashank Mirji"
-    role="Security contributor"
     image="/shashank.jpeg"
     linkedin="https://www.linkedin.com/in/smirji/"
     github="https://github.com/shashank18"
     contributions="Contributed vulnerability research and refinement, identifying and validating security patterns that matter in enterprise workflows."
-    focus="Vulnerability research, Rule validation"
   >}}
 
   {{< contributor
     name="Yash Dave"
-    role="Software engineer & open-source contributor"
     image="/yash-dave.jpg"
     website="https://amorpheuz.dev/about/"
-    contributions="Built pin.actsense.dev and its integration into the editor, including full workflow-file support, multi-action resolution, and focused UI/UX improvements."
-    focus="pin.actsense.dev, Workflow files, Multi-action support, UI/UX"
+    contributions="Added full workflow-file support and multi-action resolution to pin.actsense.dev, along with focused UI/UX improvements."
   >}}
 </div>
 
