@@ -7,9 +7,9 @@ description: "A tour of the actsense app: start an audit, read the dependency gr
 actsense audits a repository, a single action, or a workflow you paste in. It maps everything that workflow runs, audits each piece at the version it runs, and puts every finding on the node and line it came from. This page follows one audit from start to finish.
 </p>
 
-{{< shot name="platform" alt="actsense showing the dependency graph of step-security/github-actions-goat, with the results panel on the left" >}}
-An audit of `step-security/github-actions-goat`: 41 nodes, 97 edges and 209 findings. The screenshots below use this audit and follow your light or dark theme.
-{{< /shot >}}
+{{< demo-video >}}
+The whole flow in 35 seconds: audit a repository, filter to critical findings, open one, and fix the workflow in the editor. The screenshots below come from an audit of the same repository, `step-security/github-actions-goat`, and follow your light or dark theme.
+{{< /demo-video >}}
 
 <nav class="as-tour" aria-label="On this page">
   <a href="#start-an-audit"><span>1</span>Start an audit</a>

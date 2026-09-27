@@ -904,7 +904,9 @@ html.dark .as-btn-primary {
   perspective: 1000px;
 }
 
-.as-shot img {
+.as-shot img,
+.as-demo video {
+  display: block;
   max-width: 100%;
   height: auto;
   border-radius: 14px;
@@ -2761,7 +2763,8 @@ html.dark .ck-rail .ck-filters {
   box-shadow: var(--as-shadow-md);
 }
 
-.as-shot-frame img {
+.as-shot-frame img,
+.as-shot-frame video {
   display: block;
   width: 100%;
   height: auto;
@@ -2787,6 +2790,18 @@ html.dark .as-shot-dark {
 .as-shot-fig--small {
   max-width: 18rem;
   margin: 0;
+}
+
+/* Home demo: centred like the screenshot it replaced; the wrapper tilts. */
+.as-demo {
+  max-width: 1600px;
+  margin: 0 auto;
+  transition: transform 0.3s ease-out;
+}
+
+.as-demo video {
+  width: 100%;
+  background: var(--as-sunken);
 }
 
 /* Section jump list under the lede. */

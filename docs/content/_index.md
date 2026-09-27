@@ -41,7 +41,7 @@ toc: false
 
 <div class="platform-image-container as-shot">
   <div class="as-horizon" aria-hidden="true"></div>
-  <img id="platform-image" src="/images/platform.png" alt="actsense dependency graph of a repository's workflows and actions, with findings on each node" class="platform-tilt-image" />
+  <div id="platform-image" class="as-demo">{{< demo-video bare="true" />}}</div>
 </div>
 
 <section class="as-section">
