@@ -57,6 +57,10 @@ params:
   # Site metadata
   description: "actsense is an open-source workflow security auditor. It maps every dependency a CI workflow runs and explains what each one exposes. GitHub Actions is supported today."
   author: "actsense"
+
+  # Social preview (og:image, twitter:image). Source: scripts/og/og.html
+  images:
+    - "og.png"
   
   # Navbar
   navbar:
