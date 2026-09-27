@@ -1,4 +1,4 @@
-"""FastAPI backend for GitHub Actions security auditor."""
+"""FastAPI backend for actsense, the workflow security auditor (GitHub Actions today)."""
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -20,9 +20,10 @@ from security_auditor import SecurityAuditor
 from graph_builder import GraphBuilder
 from repo_cloner import RepoCloner, CloneError
 from analysis_storage import AnalysisStorage
+import pin_client
 
 app = FastAPI(
-    title="actsense - GitHub Actions Security Auditor",
+    title="actsense - Workflow Security Auditor",
     version="1.0.0",
 )
 
@@ -690,11 +691,17 @@ async def _build_fixes(request: AuditYAMLRequest, client: GitHubClient, issues: 
                 continue
             seen_fixes.add(fix_key)
 
-            owner, repo_name, _, _ = client.parse_action_reference(action_ref)
+            # pin.actsense.dev first (no token needed), then the GitHub API.
             sha = None
-            if owner and repo_name and not rate_limited:
+            resolved_by = None
+            pinned = await pin_client.resolve(pin_client.action_query(action_ref) or "")
+            if pinned and pinned["kind"] == "commit-sha":
+                sha, resolved_by = pinned["hash"], "pin.actsense.dev"
+            owner, repo_name, _, _ = client.parse_action_reference(action_ref)
+            if not sha and owner and repo_name and not rate_limited:
                 try:
                     sha = await client.resolve_tag_to_sha(owner, repo_name, tag)
+                    resolved_by = "github" if sha else None
                 except HTTPException:
                     rate_limited = True
 
@@ -716,19 +723,20 @@ async def _build_fixes(request: AuditYAMLRequest, client: GitHubClient, issues: 
                     "replacement": replacement,
                     "issue_type": issue_type,
                     "severity": issue.get("severity", "medium"),
-                    "description": f"Pin {action_name}@{tag} to commit SHA {sha[:12]}..."
+                    "description": f"Pin {action_name}@{tag} to commit SHA {sha[:12]}...",
+                    "resolved_by": resolved_by,
                 })
             else:
-                desc = f"Pin {action_name}@{tag} to a full commit SHA"
-                if rate_limited:
-                    desc += " (provide a GitHub token to auto-resolve)"
+                desc = f"Pin {action_name}@{tag} to a full commit SHA (could not be resolved automatically; replace <SHA> by hand)"
                 fixes.append({
                     "line": fix_line or line_num,
                     "original": original,
                     "replacement": original.replace(action_ref, f"{action_name}@<SHA> # {tag}"),
                     "issue_type": issue_type,
                     "severity": issue.get("severity", "medium"),
-                    "description": desc
+                    "description": desc,
+                    # A placeholder would break the workflow if applied blindly.
+                    "manual": True,
                 })
 
         elif issue_type == "unpinned_container_image":
@@ -749,17 +757,32 @@ async def _build_fixes(request: AuditYAMLRequest, client: GitHubClient, issues: 
                     break
             if original is None:
                 continue
-            tag_part = image.split(':')[-1] if ':' in image else 'latest'
-            pinned = f"{image.split(':')[0]}@sha256:<digest> # {tag_part}"
-            replacement = original.replace(image, pinned)
-            fixes.append({
-                "line": fix_line or line_num,
-                "original": original,
-                "replacement": replacement,
-                "issue_type": issue_type,
-                "severity": issue.get("severity", "medium"),
-                "description": f"Pin container image '{image}' to a digest. Run: docker inspect --format='{{{{index .RepoDigests 0}}}}' {image}"
-            })
+            bare = image[len("docker://"):] if image.startswith("docker://") else image
+            last = bare.rsplit("/", 1)[-1]
+            tag_part = last.split(":", 1)[1] if ":" in last else "latest"
+            name = bare[: len(bare) - len(tag_part) - 1] if ":" in last else bare
+            prefix = "docker://" if image.startswith("docker://") else ""
+            pinned = await pin_client.resolve(pin_client.image_query(image) or "")
+            if pinned and pinned["kind"] == "oci-digest":
+                fixes.append({
+                    "line": fix_line or line_num,
+                    "original": original,
+                    "replacement": original.replace(image, f"{prefix}{name}@{pinned['hash']} # {tag_part}"),
+                    "issue_type": issue_type,
+                    "severity": issue.get("severity", "medium"),
+                    "description": f"Pin container image '{image}' to digest {pinned['hash'][:19]}...",
+                    "resolved_by": "pin.actsense.dev",
+                })
+            else:
+                fixes.append({
+                    "line": fix_line or line_num,
+                    "original": original,
+                    "replacement": original.replace(image, f"{prefix}{name}@sha256:<digest> # {tag_part}"),
+                    "issue_type": issue_type,
+                    "severity": issue.get("severity", "medium"),
+                    "description": f"Pin container image '{image}' to a digest (could not be resolved automatically). Run: docker inspect --format='{{{{index .RepoDigests 0}}}}' {bare}",
+                    "manual": True,
+                })
 
         elif issue_type in ("overly_permissive", "github_token_write_all", "github_token_write_permissions"):
             fix_key = f"perms:{issue_type}"

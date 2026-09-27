@@ -514,3 +514,30 @@
     flex: 1;
   }
 }
+
+.yaml-fix-source,
+.yaml-fix-manual {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  text-decoration: none;
+  border: 1px solid var(--line);
+}
+
+.yaml-fix-source {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.yaml-fix-source:hover {
+  border-color: var(--line-strong);
+}
+
+.yaml-fix-manual {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
