@@ -3,7 +3,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--surface);
   border-radius: 8px;
   overflow: hidden;
   min-height: 0;
@@ -14,7 +14,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 
@@ -22,12 +22,12 @@
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #111827;
-  font-family: 'Inter', sans-serif;
+  color: var(--ink);
+  font-family: var(--font-sans);
 }
 
 .dependencies-count {
-  color: #6b7280;
+  color: var(--ink-3);
   font-size: 0.875rem;
   font-weight: 500;
 }
@@ -37,7 +37,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  color: var(--ink-3);
   padding: 3rem;
   min-height: 0;
 }
@@ -54,24 +54,24 @@
 }
 
 .accordion-item {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   overflow: visible;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
   margin-bottom: 0.75rem;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-xs);
   width: 100%;
 }
 
 .accordion-item.has-issues {
-  border-left: 3px solid #f0883e;
+  border-left: 3px solid var(--sev-high);
 }
 
 .accordion-item:hover {
-  border-color: #d1d5db;
+  border-color: var(--line-strong);
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
 }
 
@@ -79,13 +79,13 @@
   padding: 1rem 1.25rem;
   cursor: pointer;
   transition: background-color 0.15s ease;
-  background: #ffffff;
+  background: var(--surface);
   flex-shrink: 0;
   border-radius: 8px 8px 8px 8px;
 }
 
 .accordion-header:hover {
-  background: #f9fafb;
+  background: var(--surface-sunken);
 }
 
 .accordion-header-content {
@@ -106,7 +106,7 @@
 .toggle-icon {
   display: inline-block;
   transition: transform 0.2s ease;
-  color: #6b7280;
+  color: var(--ink-3);
   font-size: 0.75rem;
   width: 16px;
   text-align: center;
@@ -141,11 +141,11 @@
   white-space: nowrap;
   font-size: 0.875rem;
   font-weight: 500;
-  color: #111827;
+  color: var(--ink);
 }
 
 .arrow-separator {
-  color: #9ca3af;
+  color: var(--ink-4);
   font-size: 0.875rem;
   flex-shrink: 0;
 }
@@ -155,9 +155,9 @@
 }
 
 .accordion-content {
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--line);
   padding: 1.25rem;
-  background: #f9fafb;
+  background: var(--surface-sunken);
   flex: 0 0 auto;
   display: block !important;
   visibility: visible !important;
@@ -178,8 +178,8 @@
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: #f3f4f6;
-  color: #111827;
+  background: var(--surface-hover);
+  color: var(--ink);
   font-size: 0.875rem;
   font-weight: 600;
   flex-shrink: 0;
@@ -194,7 +194,7 @@
 
 .node-label {
   font-weight: 500;
-  color: #111827;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -204,8 +204,8 @@
   display: inline-block;
   padding: 0.25rem 0.625rem;
   border-radius: 4px;
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--surface-hover);
+  color: var(--ink-2);
   font-size: 0.75rem;
   font-weight: 500;
   text-transform: capitalize;
@@ -224,7 +224,7 @@
 }
 
 .no-issues {
-  color: #9ca3af;
+  color: var(--ink-4);
   font-size: 0.875rem;
   white-space: nowrap;
 }
@@ -244,11 +244,11 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
   font-size: 0.875rem;
 }
 
@@ -260,7 +260,7 @@
 }
 
 .chain-arrow {
-  color: #9ca3af;
+  color: var(--ink-4);
   font-size: 1rem;
   font-weight: 600;
   flex-shrink: 0;

@@ -291,15 +291,15 @@ function SearchOverlay({ graphData, onClose, onNodeSelect, onIssueSelect, onView
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'critical':
-        return '#f85149'
+        return '#dc2626'
       case 'high':
-        return '#f0883e'
+        return '#ea580c'
       case 'medium':
-        return '#d29922'
+        return '#ca8a04'
       case 'low':
-        return '#8b949e'
+        return '#6b7280'
       default:
-        return '#238636'
+        return '#16a34a'
     }
   }
 

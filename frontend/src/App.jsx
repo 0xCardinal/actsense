@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import InputForm from './components/InputForm'
 import ActionGraph from './components/ActionGraph'
 import Statistics from './components/Statistics'
@@ -33,12 +34,43 @@ function App() {
   const [searchResults, setSearchResults] = useState([])
   const [showYAMLEditor, setShowYAMLEditor] = useState(false)
   const [savedYAMLContent, setSavedYAMLContent] = useState(null)
+  const [auditTarget, setAuditTarget] = useState('')
+  const [elapsed, setElapsed] = useState(0)
   const inputFormRef = useRef(null)
+  // Form values survive the home <-> workspace switch (the form remounts).
+  const formValuesRef = useRef({ input: '', token: '', useClone: false })
+  const handleFormValues = useCallback((values) => { formValuesRef.current = values }, [])
+  const setFormInput = useCallback((value) => {
+    formValuesRef.current = { ...formValuesRef.current, input: value }
+    inputFormRef.current?.setRepository(value)
+  }, [])
   const auditAbortRef = useRef(null)
   const logsEndRef = useRef(null)
 
   useEffect(() => {
-    console.log('App component mounted')
+    if (!loading) {
+      setElapsed(0)
+      return undefined
+    }
+    const started = Date.now()
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(timer)
+  }, [loading])
+
+  const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform)
+
+  // First run shows a single search box; anything else is the workspace.
+  const isHome = !graphData && !loading && !showSearchResults
+
+  // Morph between the home and workspace layouts with the View Transitions
+  // API where available; elsewhere (or with reduced motion) switch instantly.
+  const runLayoutTransition = useCallback((update) => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (!document.startViewTransition || reduce) {
+      update()
+      return
+    }
+    document.startViewTransition(() => flushSync(update))
   }, [])
 
   useEffect(() => {
@@ -64,7 +96,7 @@ function App() {
   }, [graphData])
 
   // Reset application state
-  const handleReset = () => {
+  const handleReset = () => runLayoutTransition(() => {
     setGraphData(null)
     setStatistics(null)
     setError(null)
@@ -74,11 +106,8 @@ function App() {
     setViewMode('graph')
     setShareMode(false)
     setRepositoryAuditStatus(null)
-    // Clear input form
-    if (inputFormRef.current) {
-      inputFormRef.current.setRepository('')
-    }
-  }
+    setFormInput('')
+  })
 
   // Check if repository is audited
   const checkRepositoryAudited = useCallback(async (repository) => {
@@ -296,19 +325,22 @@ function App() {
     }
   }
 
-  const handleLoadAnalysis = (analysis) => {
+  const handleLoadAnalysis = (analysis) => runLayoutTransition(() => {
     setGraphData(analysis.graph)
     setStatistics(analysis.statistics)
     setError(null)
+    // A filter or selection from the previous analysis refers to nodes that
+    // may not exist in this one.
+    setGraphFilter(null)
+    setViewMode('graph')
+    setSelectedNode(null)
+    setSelectedIssue(null)
     
-    // Fill the input field with the repository/action name
-    if (inputFormRef.current) {
-      const repositoryName = analysis.repository || analysis.action || ''
-      if (repositoryName) {
-        inputFormRef.current.setRepository(repositoryName)
-      }
+    const repositoryName = analysis.repository || analysis.action || ''
+    if (repositoryName) {
+      setFormInput(repositoryName)
     }
-  }
+  })
 
   const handleAudit = async (data) => {
     if (auditAbortRef.current) {
@@ -317,11 +349,14 @@ function App() {
     const controller = new AbortController()
     auditAbortRef.current = controller
 
-    setLoading(true)
-    setError(null)
-
-    setLoadingLogs([])
-    setLoadingStage('Connecting...')
+    runLayoutTransition(() => {
+      setLoading(true)
+      setError(null)
+      setAuditTarget(data.repository || data.action || '')
+      setLoadingLogs([])
+      setLoadingStage('Connecting…')
+    })
+    let receivedResult = false
 
     const addLog = (text) => {
       setLoadingLogs(prev => [...prev, { time: new Date(), text }])
@@ -375,6 +410,9 @@ function App() {
                   setLoadingStage(msg)
                 }
               } else if (eventType === 'result') {
+                receivedResult = true
+                setSelectedNode(null)
+                setSelectedIssue(null)
                 setGraphData(parsed.graph)
                 setStatistics(parsed.statistics)
                 setGraphFilter(null)
@@ -384,6 +422,7 @@ function App() {
                   window.refreshAnalysisHistory()
                 }
               } else if (eventType === 'error') {
+                receivedResult = true
                 throw new Error(parsed.detail || 'Audit failed')
               }
             } catch (parseErr) {
@@ -395,6 +434,9 @@ function App() {
             eventType = null
           }
         }
+      }
+      if (!receivedResult) {
+        throw new Error('The connection to the server closed before the audit finished. Check the server logs and try again.')
       }
     } catch (err) {
       if (err.name === 'AbortError') return
@@ -410,18 +452,91 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <div className="app-content">
-        <div className="sidebar">
-          <div className="sidebar-header">
-            <h1 
-              onClick={handleReset}
-              style={{ cursor: 'pointer' }}
-              title="Click to reset"
+    <div className={`app ${isHome ? 'app--home' : ''}`}>
+      {isHome ? (
+        <main className="home">
+          <div className="home-center">
+            <h1 className="home-brand" onClick={handleReset}>actsense</h1>
+            <p className="home-tagline">Map a repository's GitHub Actions supply chain and audit every link.</p>
+            <div className="home-card">
+              <InputForm
+                ref={inputFormRef}
+                variant="hero"
+                onAudit={handleAudit}
+                loading={loading}
+                onOpenYAMLEditor={() => setShowYAMLEditor(true)}
+                defaults={formValuesRef.current}
+                onValuesChange={handleFormValues}
+              />
+            </div>
+            {error && (
+              <div className="error-message home-error" role="alert">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M8 4.75v3.75M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <div>
+                  <strong>Audit failed</strong>
+                  {error}
+                </div>
+                <button className="error-dismiss" onClick={() => setError(null)} aria-label="Dismiss error">×</button>
+              </div>
+            )}
+            <div className="home-examples">
+              <span className="home-examples-label">Try</span>
+              {['actions/checkout@v4', 'astral-sh/ruff', 'sigstore/cosign'].map(example => (
+                <button
+                  key={example}
+                  type="button"
+                  className="example-chip"
+                  onClick={() => {
+                    setFormInput(example)
+                    const token = formValuesRef.current.token || undefined
+                    handleAudit(example.includes('@')
+                      ? { action: example, github_token: token }
+                      : { repository: example, github_token: token })
+                  }}
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+          </div>
+          <footer className="home-footer">
+            <a
+              className="sidebar-doc-link home-link"
+              href="https://actsense.dev/vulnerabilities/"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              actsense
-            </h1>
-            <p>Analyze security issues in GitHub Actions and their dependencies</p>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <path
+                  d="M12 6c0-1.1-.9-2-2-2H4a2 2 0 0 0-2 2v12a.5.5 0 0 0 .8.4c.7-.52 1.56-.84 2.5-.84h4.7a2 2 0 0 1 2 2V6Zm0 0c0-1.1.9-2 2-2h6a2 2 0 0 1 2 2v12a.5.5 0 0 1-.8.4 4 4 0 0 0-2.5-.84H14a2 2 0 0 0-2 2V6Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>Docs</span>
+            </a>
+            <div className="home-history">
+              <AnalysisHistory onLoadAnalysis={handleLoadAnalysis} popover />
+            </div>
+          </footer>
+        </main>
+      ) : (
+      <div className="app-content">
+        <aside className="sidebar" aria-label="Audit controls">
+          <header className="sidebar-header">
+            <h1 onClick={handleReset} title="Start over">actsense</h1>
             <a
               className="sidebar-doc-link"
               href="https://actsense.dev/vulnerabilities/"
@@ -446,29 +561,51 @@ function App() {
               </svg>
               <span>Docs</span>
             </a>
+          </header>
+
+          <div className="sidebar-body">
+            <section className="sidebar-section" aria-labelledby="new-audit-heading">
+              <h2 id="new-audit-heading" className="sidebar-section-title">New audit</h2>
+              <InputForm
+                ref={inputFormRef}
+                onAudit={handleAudit}
+                loading={loading}
+                onOpenYAMLEditor={() => setShowYAMLEditor(true)}
+                defaults={formValuesRef.current}
+                onValuesChange={handleFormValues}
+              />
+              {error && (
+                <div className="error-message" role="alert">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M8 4.75v3.75M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <div>
+                    <strong>Audit failed</strong>
+                    {error}
+                  </div>
+                  <button className="error-dismiss" onClick={() => setError(null)} aria-label="Dismiss error">×</button>
+                </div>
+              )}
+            </section>
+
+            {statistics && (
+              <section className="sidebar-section sidebar-section-results" aria-label="Results">
+                <Statistics
+                  data={statistics}
+                  onFilterChange={setGraphFilter}
+                  onViewModeChange={setViewMode}
+                  currentViewMode={viewMode}
+                  currentFilter={graphFilter}
+                />
+              </section>
+            )}
           </div>
-          <InputForm 
-            ref={inputFormRef} 
-            onAudit={handleAudit} 
-            loading={loading}
-            onOpenYAMLEditor={() => setShowYAMLEditor(true)}
-          />
-          {statistics && (
-            <Statistics 
-              data={statistics} 
-              onFilterChange={setGraphFilter}
-              onViewModeChange={setViewMode}
-              currentViewMode={viewMode}
-              currentFilter={graphFilter}
-            />
-          )}
-          {error && (
-            <div className="error-message">
-              <strong>Error:</strong> {error}
-            </div>
-          )}
-          <AnalysisHistory onLoadAnalysis={handleLoadAnalysis} />
-        </div>
+
+          <footer className="sidebar-footer">
+            <AnalysisHistory onLoadAnalysis={handleLoadAnalysis} />
+          </footer>
+        </aside>
         
         {showSearchResults ? (
           <SearchResultsPage
@@ -483,7 +620,7 @@ function App() {
           />
         ) : (
           <div className="main-content">
-            {graphData && (
+            {graphData && viewMode === 'graph' && (
               <button
                 className="floating-search-button"
                 onClick={() => setShowSearchOverlay(true)}
@@ -502,27 +639,51 @@ function App() {
                     fill="currentColor"
                   />
                 </svg>
-                <span>Search</span>
-                <kbd>{navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘K' : 'Ctrl+K'}</kbd>
+                <span>Search issues and nodes</span>
+                <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
               </button>
             )}
-            {loading && !graphData && (
+            {loading && (
               <div className="audit-loading-overlay">
-                <div className="audit-loading-card">
-                  <div className="audit-loading-spinner" />
-                  <div className="audit-loading-stage">{loadingStage}</div>
+                <div className="audit-loading-card" role="status" aria-live="polite">
+                  <div className="audit-loading-head">
+                    <div className="audit-loading-spinner" />
+                    <div style={{ minWidth: 0 }}>
+                      <div className="audit-loading-title">Auditing {auditTarget || 'workflow'}</div>
+                      <div className="audit-loading-stage">{loadingStage || 'Working…'}</div>
+                    </div>
+                    <div className="audit-loading-meta">
+                      {elapsed}s · {loadingLogs.length} steps
+                    </div>
+                  </div>
                   <div className="audit-loading-bar-track">
                     <div className="audit-loading-bar-fill" />
                   </div>
-                  <button
-                    className="audit-loading-toggle"
-                    onClick={() => setShowLogs(prev => !prev)}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showLogs ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                    {showLogs ? 'Hide details' : 'Show details'}
-                  </button>
+                  <div className="audit-loading-actions">
+                    <button
+                      className="audit-loading-toggle"
+                      onClick={() => setShowLogs(prev => !prev)}
+                      aria-expanded={showLogs}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showLogs ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                      {showLogs ? 'Hide log' : 'Show log'}
+                    </button>
+                    {auditAbortRef.current && (
+                      <button
+                        className="audit-cancel"
+                        onClick={() => {
+                          auditAbortRef.current?.abort()
+                          setLoading(false)
+                          setLoadingStage('')
+                          setLoadingLogs([])
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                   {showLogs && (
                     <div className="audit-loading-logs">
                       {loadingLogs.map((log, i) => (
@@ -546,6 +707,7 @@ function App() {
                   onNodeSelect={setSelectedNode}
                   filter={graphFilter}
                   onClearFilter={() => setGraphFilter(null)}
+                  selectedNodeId={selectedNode?.id}
                 />
               ) : (
                 // Table view: show different tables based on filter
@@ -572,29 +734,41 @@ function App() {
               )
             ) : (
               <div className="empty-state">
-                <h1 
+                <h1
                   className="logo-text"
                   onClick={handleReset}
-                  style={{ cursor: 'pointer' }}
-                  title="Click to reset"
+                  title="Start over"
                 >
                   actsense
                 </h1>
                 <p>
-                  Enter a repository (e.g., <code>owner/repo</code>) or action reference to begin auditing.<br />
-                  We'll fetch its workflow graph, uncover risky actions, and surface mitigation steps.
+                  Enter a repository (<code>owner/repo</code>) or an action reference (<code>owner/repo@ref</code>).
+                  actsense maps every workflow, action, reusable workflow and image it depends on, then checks each one.
                 </p>
-                {graphData && (
-                  <div className="empty-state-hint">
-                    <p className="hint-text">Tip: Press <kbd>{navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘K' : 'Ctrl+K'}</kbd> to search issues and assets</p>
-                  </div>
-                )}
+                <div className="empty-state-examples">
+                  {['actions/checkout@v4', 'astral-sh/ruff', 'sigstore/cosign'].map(example => (
+                    <button
+                      key={example}
+                      className="example-chip"
+                      disabled={loading}
+                      onClick={() => {
+                        inputFormRef.current?.setRepository(example)
+                        handleAudit(example.includes('@')
+                          ? { action: example, github_token: inputFormRef.current?.getToken?.() || undefined }
+                          : { repository: example, github_token: inputFormRef.current?.getToken?.() || undefined })
+                      }}
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
         )}
       </div>
-      
+      )}
+
       {selectedNode && (
         <NodeDetailsPanel 
           node={selectedNode}

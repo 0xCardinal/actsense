@@ -3,7 +3,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--surface);
   border-radius: 8px;
   overflow: hidden;
   min-height: 0;
@@ -14,7 +14,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 
@@ -22,12 +22,12 @@
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #111827;
-  font-family: 'Inter', sans-serif;
+  color: var(--ink);
+  font-family: var(--font-sans);
 }
 
 .nodes-count {
-  color: #6b7280;
+  color: var(--ink-3);
   font-size: 0.875rem;
   font-weight: 500;
 }
@@ -37,7 +37,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #6b7280;
+  color: var(--ink-3);
   padding: 3rem;
 }
 
@@ -51,18 +51,18 @@
 
 .nodes-table-header-row {
   flex-shrink: 0;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--line);
 }
 
 .nodes-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .nodes-table thead {
-  background: #f9fafb;
+  background: var(--surface-sunken);
 }
 
 .nodes-table-body-wrapper {
@@ -77,19 +77,19 @@
   text-align: left;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--line);
 }
 
 .nodes-table tbody tr {
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--surface-hover);
   transition: background-color 0.15s ease;
 }
 
 .nodes-table tbody tr:hover {
-  background: #f9fafb;
+  background: var(--surface-sunken);
   cursor: pointer;
 }
 
@@ -100,7 +100,7 @@
 .nodes-table td {
   padding: 1rem;
   font-size: 0.875rem;
-  color: #111827;
+  color: var(--ink);
 }
 
 .node-type-badge {
@@ -109,8 +109,8 @@
   gap: 0.5rem;
   padding: 0.25rem 0.625rem;
   border-radius: 4px;
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--surface-hover);
+  color: var(--ink-2);
   font-size: 0.75rem;
   font-weight: 500;
   text-transform: capitalize;
@@ -122,15 +122,15 @@
 
 .node-label-cell {
   font-weight: 500;
-  color: #111827;
+  color: var(--ink);
 }
 
 .issue-count-badge {
   display: inline-block;
   padding: 0.25rem 0.625rem;
   border-radius: 4px;
-  background: #f3f4f6;
-  color: #111827;
+  background: var(--surface-hover);
+  color: var(--ink);
   font-size: 0.75rem;
   font-weight: 600;
   min-width: 24px;
@@ -149,6 +149,6 @@
 }
 
 .no-issues {
-  color: #9ca3af;
+  color: var(--ink-4);
 }
 

@@ -1,10 +1,19 @@
-import React, { useState, useImperativeHandle, forwardRef } from 'react'
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react'
 import './InputForm.css'
 
-const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor }, ref) => {
-  const [input, setInput] = useState('')
-  const [githubToken, setGithubToken] = useState('')
-  const [useClone, setUseClone] = useState(false)
+// The form is mounted in two places (home hero and workspace sidebar). The
+// parent keeps the values in `defaults` and receives every change through
+// `onValuesChange`, so switching layouts never loses what was typed.
+const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 'sidebar', defaults = {}, onValuesChange }, ref) => {
+  const [input, setInput] = useState(defaults.input || '')
+  const [githubToken, setGithubToken] = useState(defaults.token || '')
+  const [useClone, setUseClone] = useState(Boolean(defaults.useClone))
+  const [fieldError, setFieldError] = useState('')
+  const [optionsOpen, setOptionsOpen] = useState(false)
+
+  useEffect(() => {
+    onValuesChange && onValuesChange({ input, token: githubToken, useClone })
+  }, [input, githubToken, useClone, onValuesChange])
 
   // Detect if input is an action or repository
   const detectInputType = (value) => {
@@ -33,6 +42,7 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor }, ref) => {
   useImperativeHandle(ref, () => ({
     setRepository: (value) => {
       setInput(value)
+      setFieldError('')
     },
     getToken: () => githubToken
   }))
@@ -40,13 +50,18 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor }, ref) => {
   const handleSubmit = (e) => {
     e.preventDefault()
     
-    if (!input.trim()) {
-      alert('Please enter a repository or action reference')
-      return
-    }
-    
     const inputType = detectInputType(input)
     const trimmedInput = input.trim()
+
+    if (!trimmedInput) {
+      setFieldError('Enter a repository or an action reference.')
+      return
+    }
+    if (inputType === 'repository' && !/^https?:\/\//.test(trimmedInput) && !/^[\w.-]+\/[\w.-]+$/.test(trimmedInput)) {
+      setFieldError('Use owner/repo, a github.com URL, or owner/repo@ref for a single action.')
+      return
+    }
+    setFieldError('')
     
     const data = {
       github_token: githubToken || undefined,
@@ -66,85 +81,106 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor }, ref) => {
   const placeholder = inputType === 'action' 
     ? 'owner/repo@v1 or owner/repo@main' 
     : 'owner/repo or https://github.com/owner/repo'
-  const example = inputType === 'action'
-    ? 'Example: actions/checkout@v3'
-    : 'Example: actions/checkout or microsoft/vscode'
 
   return (
-    <form className="input-form" onSubmit={handleSubmit}>
+    <form className={`input-form input-form--${variant}`} onSubmit={handleSubmit} role={variant === 'hero' ? 'search' : undefined}>
       <div className="form-group">
-        <label htmlFor="input">Repository or Action</label>
+        <label htmlFor="input" className={variant === 'hero' ? 'visually-hidden' : ''}>
+          Repository or action
+          {input.trim() && (
+            <span className={`input-kind ${inputType}`}>{inputType === 'action' ? 'Action' : 'Repo'}</span>
+          )}
+        </label>
         <input
           id="input"
           type="text"
           placeholder={placeholder}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => { setInput(e.target.value); if (fieldError) setFieldError('') }}
           disabled={loading}
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={Boolean(fieldError)}
+          aria-describedby={fieldError ? 'input-help' : undefined}
+          className={`audit-input ${fieldError ? 'has-error' : ''}`}
+          autoFocus={variant === 'hero'}
         />
-        <small>{example}</small>
+        {variant === 'hero' && (
+          <button type="submit" disabled={loading} className="submit-button hero-submit">
+            Audit
+          </button>
+        )}
+        {fieldError && <small id="input-help" className="field-error">{fieldError}</small>}
       </div>
 
-      <div className="form-group">
-        <label htmlFor="token">GitHub Token (Recommended)</label>
-        <input
-          id="token"
-          type="password"
-          placeholder="ghp_..."
-          value={githubToken}
-          onChange={(e) => setGithubToken(e.target.value)}
-          disabled={loading}
-        />
-        <small>
-          Increases rate limit from 60/hour to 5000/hour. 
-          <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" style={{marginLeft: '4px'}}>
-            Create token
-          </a>
-        </small>
-      </div>
-
-      {inputType === 'repository' && (
-        <div className="form-group">
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+      <details className="form-options" open={optionsOpen} onToggle={(e) => setOptionsOpen(e.currentTarget.open)}>
+        <summary>
+          Options
+          {githubToken && <span className="options-dot" title="Token set" />}
+        </summary>
+        <div className="form-options-body">
+          <div className="form-group">
+            <label htmlFor="token">
+              GitHub token
+              <a
+                className="label-link"
+                href="https://github.com/settings/tokens"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Create
+              </a>
+            </label>
             <input
-              type="checkbox"
-              checked={useClone}
-              onChange={(e) => setUseClone(e.target.checked)}
+              id="token"
+              type="password"
+              placeholder="ghp_…"
+              value={githubToken}
+              onChange={(e) => setGithubToken(e.target.value)}
               disabled={loading}
             />
-            <span>Clone repository (for private repos or to avoid rate limits)</span>
-          </label>
-          <small>Clones the repository locally for analysis. Requires git to be installed.</small>
-        </div>
-      )}
-
-          <button type="submit" disabled={loading} className="submit-button">
-            {loading ? (
-              <span className="loading-container">
-                <span className="loading-dots">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </span>
-                <span className="loading-text">Auditing</span>
-              </span>
-            ) : (
-              'Audit'
-            )}
-          </button>
-          
-          <div className="form-divider">
-            <span>or</span>
+            <small>60 → 5,000 API requests/hour. Needed for deep graphs.</small>
           </div>
-          
-          <button 
-            type="button" 
-            className="yaml-editor-button"
-            onClick={onOpenYAMLEditor}
-            disabled={loading}
-          >
-            Create Secure Workflow
-          </button>
+
+          {inputType === 'repository' && (
+            <label className="toggle-row" title="For private repositories. Actions are still resolved through the API.">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={useClone}
+                onChange={(e) => setUseClone(e.target.checked)}
+                disabled={loading}
+              />
+              <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
+              <span>Read workflows from a git clone</span>
+            </label>
+          )}
+        </div>
+      </details>
+
+      {variant !== 'hero' && <button type="submit" disabled={loading} className="submit-button">
+        {loading ? (
+          <span className="loading-container">
+            <span className="loading-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+            <span className="loading-text">Auditing</span>
+          </span>
+        ) : (
+          'Run audit'
+        )}
+      </button>}
+
+      <button
+        type="button"
+        className="yaml-editor-button"
+        onClick={onOpenYAMLEditor}
+        disabled={loading}
+      >
+        or create a secure workflow
+      </button>
     </form>
   )
 })

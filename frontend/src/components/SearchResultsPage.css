@@ -1,11 +1,11 @@
 .search-results-page {
   flex: 1;
   position: relative;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -13,8 +13,8 @@
 }
 
 .search-results-header {
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
   padding: 1.5rem;
   flex-shrink: 0;
   z-index: 100;
@@ -29,23 +29,23 @@
 }
 
 .back-button {
-  background: #111827;
-  border: 1px solid #111827;
+  background: var(--ink);
+  border: 1px solid var(--ink);
   color: white;
   padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 500;
-  transition: all 0.15s ease;
-  font-family: 'Inter', sans-serif;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
+  font-family: var(--font-sans);
+  box-shadow: var(--shadow-xs);
 }
 
 .back-button:hover {
   background: #1f2937;
   border-color: #1f2937;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 .search-results-title {
@@ -56,26 +56,26 @@
   margin: 0 0 0.5rem 0;
   font-size: 1.5rem;
   font-weight: 600;
-  color: #111827;
-  font-family: 'Inter', sans-serif;
+  color: var(--ink);
+  font-family: var(--font-sans);
 }
 
 .search-query-display {
   margin: 0 0 0.25rem 0;
   font-size: 0.875rem;
-  color: #6b7280;
-  font-family: 'Inter', sans-serif;
+  color: var(--ink-3);
+  font-family: var(--font-sans);
 }
 
 .search-results-count {
   margin: 0;
   font-size: 0.875rem;
-  color: #9ca3af;
-  font-family: 'Inter', sans-serif;
+  color: var(--ink-4);
+  font-family: var(--font-sans);
 }
 
 .search-results-breakdown {
-  color: #6b7280;
+  color: var(--ink-3);
   font-weight: 500;
 }
 
@@ -83,7 +83,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 2rem 1.5rem;
-  background: #f8fafc;
+  background: var(--surface-sunken);
 }
 
 .search-results-content-inner {
@@ -99,11 +99,11 @@
 .results-section-title {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #111827;
+  color: var(--ink);
   margin: 0 0 1.5rem 0;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   padding-bottom: 0.75rem;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--line);
 }
 
 .severity-group {
@@ -117,8 +117,8 @@
   margin: 0 0 1.5rem 0;
   font-size: 1rem;
   font-weight: 600;
-  color: #111827;
-  font-family: 'Inter', sans-serif;
+  color: var(--ink);
+  font-family: var(--font-sans);
 }
 
 .asset-type-icon {
@@ -138,18 +138,18 @@
 }
 
 .result-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 1.25rem;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
   display: flex;
   flex-direction: column;
 }
 
 .result-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  border-color: #d1d5db;
+  box-shadow: var(--shadow-md);
+  border-color: var(--line-strong);
 }
 
 .result-card-header {
@@ -158,7 +158,7 @@
   gap: 0.75rem;
   margin-bottom: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--surface-hover);
 }
 
 .severity-badge {
@@ -168,15 +168,15 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   color: #ffffff;
 }
 
 .result-type {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #111827;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: var(--ink);
+  font-family: var(--font-mono);
 }
 
 .result-card-body {
@@ -186,10 +186,10 @@
 
 .result-message {
   font-size: 0.875rem;
-  color: #475569;
+  color: var(--ink-2);
   line-height: 1.6;
   margin-bottom: 1rem;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .result-message mark {
@@ -209,12 +209,12 @@
 }
 
 .result-node-label {
-  color: #111827;
+  color: var(--ink);
   font-weight: 500;
 }
 
 .result-node-type {
-  color: #6b7280;
+  color: var(--ink-3);
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -223,12 +223,12 @@
 .result-action {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--surface-hover);
 }
 
 .result-action code {
   font-size: 0.75rem;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-mono);
   color: #3b82f6;
   background: #eff6ff;
   padding: 0.25rem 0.5rem;
@@ -239,21 +239,21 @@
   display: flex;
   gap: 0.75rem;
   padding-top: 1rem;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--surface-hover);
 }
 
 .result-button {
   flex: 1;
-  background: #111827;
-  border: 1px solid #111827;
+  background: var(--ink);
+  border: 1px solid var(--ink);
   color: white;
   padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 500;
-  transition: all 0.15s ease;
-  font-family: 'Inter', sans-serif;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
+  font-family: var(--font-sans);
 }
 
 .result-button:hover {
@@ -262,8 +262,8 @@
 }
 
 .result-button.primary {
-  background: #111827;
-  border-color: #111827;
+  background: var(--ink);
+  border-color: var(--ink);
   color: white;
 }
 
@@ -279,17 +279,17 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-hover);
+  border: 1px solid var(--line);
   font-size: 1.125rem;
 }
 
 .result-issue-count {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--ink-3);
   margin-top: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #f3f4f6;
-  font-family: 'Inter', sans-serif;
+  border-top: 1px solid var(--surface-hover);
+  font-family: var(--font-sans);
 }
 
