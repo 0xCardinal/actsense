@@ -39,7 +39,7 @@ function IssuesTable({ graphData, filter, onNodeSelect, onIssueSelect }) {
     // about, so the graph is navigable. List those once: drop a finding on a
     // package or image node when the identical finding exists on its source
     // node. Identical findings on two workflows are distinct and both kept.
-    const MIRROR_TYPES = new Set(['package', 'container_image'])
+    const MIRROR_TYPES = new Set(['package', 'image', 'container_image', 'docker_image'])
     const keyOf = ({ nodeId, nodeLabel, nodeType, ...finding }) => JSON.stringify(finding)
     const sourceKeys = new Set(issues.filter(i => !MIRROR_TYPES.has(i.nodeType)).map(keyOf))
     const unique = issues.filter(i => !MIRROR_TYPES.has(i.nodeType) || !sourceKeys.has(keyOf(i)))

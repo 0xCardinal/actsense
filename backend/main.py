@@ -90,6 +90,34 @@ async def _close_client(client: Any) -> None:
         pass
 
 
+def _image_ref(ref: str) -> str:
+    return ref[len("docker://"):] if ref.startswith("docker://") else ref
+
+
+def _image_node_id(ref: str) -> str:
+    """One node per image, however it is used (step, job container, base...)."""
+    return f"image://{_image_ref(ref)}"
+
+
+def _add_image_node(graph: GraphBuilder, ref: str, role: str, **usage: Any) -> str:
+    """Add (or extend) the single node for an image and record how it is used.
+
+    ``metadata.roles`` lists the distinct roles ("Step image", "Job container",
+    "Service", "Action image", "Dockerfile base"); ``metadata.usages`` keeps
+    each use with its job / service / action for the details panel.
+    """
+    image = _image_ref(ref)
+    node_id = _image_node_id(ref)
+    graph.add_node(node_id, image, "image", {"image": image, "roles": [], "usages": []})
+    metadata = graph.nodes[node_id]["metadata"]
+    if role not in metadata.setdefault("roles", []):
+        metadata["roles"].append(role)
+    entry = {"role": role, **{k: v for k, v in usage.items() if v}}
+    if entry not in metadata.setdefault("usages", []):
+        metadata["usages"].append(entry)
+    return node_id
+
+
 def _is_reusable_workflow_path(subdir: Optional[str]) -> bool:
     return bool(subdir) and (".github/workflows" in subdir or subdir.endswith((".yml", ".yaml")))
 
@@ -115,11 +143,17 @@ async def _resolve_children(
     max_depth: int,
     log_fn: Optional[Callable[[str], None]],
     labels: Optional[Dict[str, str]] = None,
+    image_role: str = "Step image",
 ) -> None:
     """Add parent -> child edges and resolve all children concurrently."""
     labels = labels or {}
     for child in child_refs:
-        graph.add_edge(parent_id, child)
+        if child.startswith("docker://"):
+            # Record the role here, before de-duplication, so an image used in
+            # several places keeps every role on its single node.
+            graph.add_edge(parent_id, _add_image_node(graph, child, image_role, used_by=parent_id))
+        else:
+            graph.add_edge(parent_id, child)
     await asyncio.gather(*(
         resolve_action_dependencies(
             client, child, graph, visited, depth + 1, max_depth, log_fn,
@@ -155,12 +189,13 @@ async def resolve_action_dependencies(
     visited.add(action_ref)
     _log(f"Resolving {action_ref}")
 
-    # Handle docker images: add as a node but don't try to resolve further
+    # Images referenced as docker://...: audit the reference; the node itself
+    # (with its role) is created by the caller in _resolve_children.
     if action_ref.startswith("docker://"):
-        graph.add_node(action_ref, action_ref, "docker_image", {"image": action_ref})
-        issues = auditor.audit_action(action_ref, None, None, None)
-        if issues:
-            graph.add_issues_to_node(action_ref, issues)
+        node_id = _image_node_id(action_ref)
+        graph.add_node(node_id, _image_ref(action_ref), "image",
+                       {"image": _image_ref(action_ref), "roles": [], "usages": []})
+        graph.add_issues_to_node(node_id, auditor.audit_action(action_ref, None, None, None))
         return
 
     owner, repo, ref, subdir = client.parse_action_reference(action_ref)
@@ -290,12 +325,11 @@ async def resolve_action_dependencies(
     if using == "docker":
         image = runs.get("image", "")
         if isinstance(image, str) and image.startswith("docker://"):
-            await _resolve_children(client, action_ref, [image], graph, visited, depth, max_depth, log_fn)
+            await _resolve_children(client, action_ref, [image], graph, visited, depth, max_depth, log_fn,
+                                    image_role="Action image")
         elif dockerfile_content:
             for base_image in parser.extract_dockerfile_base_images(dockerfile_content):
-                image_id = f"container://{base_image}"
-                graph.add_node(image_id, base_image, "container_image",
-                               {"image": base_image, "source": "dockerfile", "action": action_ref})
+                image_id = _add_image_node(graph, base_image, "Dockerfile base", action=action_ref)
                 graph.add_edge(action_ref, image_id)
                 pinned = "@sha256:" in base_image
                 if not pinned:
@@ -330,13 +364,16 @@ def _add_workflow_container_image_nodes(
     workflow_node_id: str,
     workflow_issues: List[Dict[str, Any]],
 ) -> None:
-    """Add container_image nodes and copy unpinned-container issues onto them for UI clarity."""
+    """Add image nodes for job containers and services, and mirror their
+    unpinned-image findings onto them for UI clarity."""
     for img_info in parser.extract_container_images(workflow):
         img = img_info.get("image")
         if not img or img.startswith("${{"):
             continue
-        img_node_id = f"container://{img}"
-        graph.add_node(img_node_id, img, "container_image", img_info)
+        role = "Service" if img_info.get("source") == "service" else "Job container"
+        img_node_id = _add_image_node(
+            graph, img, role, job=img_info.get("job"), service=img_info.get("service_name"),
+        )
         graph.add_edge(workflow_node_id, img_node_id)
         related = [
             i
@@ -1250,9 +1287,7 @@ async def _audit_inline_workflow(request: AuditYAMLRequest, workflow: Dict[str, 
     actions = parser.extract_actions(workflow)
     visited = set()
 
-    for action_ref in actions:
-        graph.add_edge(workflow_node_id, action_ref)
-        await resolve_action_dependencies(client, action_ref, graph, visited)
+    await _resolve_children(client, workflow_node_id, actions, graph, visited, -1, DEFAULT_MAX_DEPTH, None)
 
     _add_workflow_container_image_nodes(graph, workflow, workflow_node_id, workflow_issues)
 

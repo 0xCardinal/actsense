@@ -12,7 +12,7 @@ import 'reactflow/dist/style.css'
 import dagre from 'dagre'
 import CustomNode, { NODE_WIDTH, NODE_HEIGHT } from './CustomNode'
 import { filterNodes } from '../utils/nodeFilters'
-import { getNodeTypeIcon } from '../utils/nodeIcons'
+import { getNodeTypeIcon, normalizeNodeType } from '../utils/nodeIcons'
 import './ActionGraph.css'
 
 const nodeTypes = {
@@ -35,8 +35,7 @@ const LEGEND_TYPES = [
   ['workflow', 'Workflow'],
   ['reusable_workflow', 'Reusable workflow'],
   ['action', 'Action'],
-  ['docker_image', 'Docker'],
-  ['container_image', 'Container'],
+  ['image', 'Image'],
   ['package', 'Package'],
 ]
 
@@ -175,6 +174,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
         nodeLabel: node.label,
         metadata: node.metadata || {},
         isLocal: Boolean(node.metadata?.local),
+        roles: Array.isArray(node.metadata?.roles) ? node.metadata.roles : [],
         nodeId: node.id,
         originalId: node.id,
         onNodeClick: handleNodeClick,
@@ -251,7 +251,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
   }, [selectedNodeId, onNodeSelect])
 
   const presentTypes = useMemo(
-    () => new Set((graphData?.nodes || []).map(n => n.type)),
+    () => new Set((graphData?.nodes || []).map(n => normalizeNodeType(n.type))),
     [graphData?.nodes]
   )
 

@@ -326,3 +326,19 @@
     display: none;
   }
 }
+
+.graph-node-roles {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--ink-3);
+}
+
+.graph-node-roles::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--ink-4);
+}

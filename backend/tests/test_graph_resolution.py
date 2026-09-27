@@ -175,11 +175,38 @@ async def test_docker_action_links_registry_image_and_dockerfile_base():
     await main.resolve_action_dependencies(client, "org/df@v1", graph, set())
 
     edges = {(e["source"], e["target"]) for e in graph.edges}
-    assert ("org/img@v1", "docker://ghcr.io/org/tool:1.2") in edges
-    assert ("org/df@v1", "container://golang:1.22") in edges
-    assert ("org/df@v1", "container://build") not in edges  # build stage, not an image
-    assert graph.nodes["container://golang:1.22"]["issues"]
-    assert not graph.nodes["container://alpine@sha256:" + "b" * 64]["issues"]
+    assert ("org/img@v1", "image://ghcr.io/org/tool:1.2") in edges
+    assert ("org/df@v1", "image://golang:1.22") in edges
+    assert ("org/df@v1", "image://build") not in edges  # build stage, not an image
+    assert graph.nodes["image://golang:1.22"]["issues"]
+    assert graph.nodes["image://golang:1.22"]["metadata"]["roles"] == ["Dockerfile base"]
+    assert graph.nodes["image://ghcr.io/org/tool:1.2"]["metadata"]["roles"] == ["Action image"]
+    assert not graph.nodes["image://alpine@sha256:" + "b" * 64]["issues"]
+
+
+@pytest.mark.asyncio
+async def test_same_image_in_two_roles_is_one_node():
+    workflow = """
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: alpine:3.20
+    services:
+      cache:
+        image: redis:7
+    steps:
+      - uses: docker://alpine:3.20
+"""
+    client = FakeGitHub({("o", "r", ".github/workflows/ci.yml", None): workflow})
+    graph = GraphBuilder()
+    await main.audit_repository(client, "o", "r", graph)
+
+    image_nodes = [n for n in graph.nodes.values() if n["type"] == "image"]
+    assert sorted(n["id"] for n in image_nodes) == ["image://alpine:3.20", "image://redis:7"]
+    assert sorted(graph.nodes["image://alpine:3.20"]["metadata"]["roles"]) == ["Job container", "Step image"]
+    assert graph.nodes["image://redis:7"]["metadata"]["roles"] == ["Service"]
+    assert not any(n["type"] in ("docker_image", "container_image") for n in graph.nodes.values())
 
 
 def test_direct_edges_are_kept_when_also_reachable_transitively():
@@ -205,3 +232,16 @@ def test_statistics_count_mirrored_issues_once():
     assert stats["total_issues"] == 1
     assert stats["severity_counts"] == {"high": 1}
     assert stats["nodes_with_issues"] == 2
+
+
+def test_inline_yaml_audit_records_step_image_role():
+    from fastapi.testclient import TestClient
+    yaml_text = (
+        "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    container: alpine:3.20\n"
+        "    steps:\n      - uses: docker://alpine:3.20\n"
+    )
+    body = TestClient(main.app).post("/api/audit/yaml", json={"yaml_content": yaml_text}).json()
+    nodes = {n["id"]: n for n in body["graph"]["nodes"]}
+    assert sorted(nodes["image://alpine:3.20"]["metadata"]["roles"]) == ["Job container", "Step image"]
+    # Every edge points at a real node.
+    assert all(e["target"] in nodes and e["source"] in nodes for e in body["graph"]["edges"])

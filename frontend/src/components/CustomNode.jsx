@@ -1,5 +1,6 @@
 import React, { memo } from 'react'
 import { Handle, Position } from 'reactflow'
+import { normalizeNodeType } from '../utils/nodeIcons'
 
 export const NODE_WIDTH = 248
 export const NODE_HEIGHT = 62
@@ -9,8 +10,7 @@ const TYPE_LABELS = {
   workflow: 'Workflow',
   reusable_workflow: 'Reusable workflow',
   action: 'Action',
-  docker_image: 'Docker image',
-  container_image: 'Container image',
+  image: 'Image',
   package: 'Package',
 }
 
@@ -44,15 +44,18 @@ function CustomNode({ data }) {
       onMouseLeave={() => data.onNodeUnhover && data.onNodeUnhover()}
       role="button"
       tabIndex={0}
-      aria-label={`${TYPE_LABELS[data.nodeType] || 'Node'} ${data.label}${data.hasIssues ? `, ${data.issueCount} findings` : ''}`}
+      aria-label={`${TYPE_LABELS[normalizeNodeType(data.nodeType)] || 'Node'} ${data.label}${data.hasIssues ? `, ${data.issueCount} findings` : ''}`}
       title={data.label}
     >
       <span className="graph-node-rail" aria-hidden="true" />
       <span className="graph-node-icon" aria-hidden="true">{data.icon}</span>
       <span className="graph-node-body">
         <span className="graph-node-type">
-          {TYPE_LABELS[data.nodeType] || data.nodeType}
+          {TYPE_LABELS[normalizeNodeType(data.nodeType)] || data.nodeType}
           {data.isLocal && <span className="graph-node-tag">local</span>}
+          {data.roles?.length > 0 && (
+            <span className="graph-node-roles">{data.roles.join(' · ')}</span>
+          )}
         </span>
         <span className="graph-node-label">{data.label}</span>
       </span>
