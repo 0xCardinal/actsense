@@ -1,0 +1,16 @@
+{{- $name := .Get "name" -}}
+{{- $logo := .Get "logo" -}}
+{{- $website := .Get "website" -}}
+{{- $description := .Get "description" | default "Supporting actsense" -}}
+
+<a class="supporter-card" href="{{ $website }}" target="_blank" rel="noopener noreferrer" aria-label="Visit {{ $name }}">
+  <span class="supporter-card__logo-wrap">
+    <img src="{{ $logo }}" alt="{{ $name }}" class="supporter-card__logo" loading="lazy">
+  </span>
+  <span class="supporter-card__body">
+    <span class="supporter-card__eyebrow">Project supporter</span>
+    <strong>{{ $name }}</strong>
+    <span>{{ $description }}</span>
+  </span>
+  <i class="fa-solid fa-arrow-up-right-from-square supporter-card__arrow" aria-hidden="true"></i>
+</a>
