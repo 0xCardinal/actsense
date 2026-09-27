@@ -253,8 +253,8 @@
 }
 
 .chain-node:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
+  border-color: var(--accent);
+  background: var(--accent-soft);
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }

@@ -43,8 +43,8 @@
 }
 
 .back-button:hover {
-  background: #1f2937;
-  border-color: #1f2937;
+  background: var(--inverse-hover);
+  border-color: var(--inverse-hover);
   box-shadow: var(--shadow-sm);
 }
 
@@ -193,8 +193,8 @@
 }
 
 .result-message mark {
-  background-color: #fef3c7;
-  color: #92400e;
+  background-color: var(--warn-bg);
+  color: var(--warn-ink);
   padding: 0.125rem 0.25rem;
   border-radius: 3px;
   font-weight: 600;
@@ -229,8 +229,8 @@
 .result-action code {
   font-size: 0.75rem;
   font-family: var(--font-mono);
-  color: #3b82f6;
-  background: #eff6ff;
+  color: var(--accent);
+  background: var(--accent-soft);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
 }
@@ -257,8 +257,8 @@
 }
 
 .result-button:hover {
-  background: #1f2937;
-  border-color: #1f2937;
+  background: var(--inverse-hover);
+  border-color: var(--inverse-hover);
 }
 
 .result-button.primary {
@@ -268,8 +268,8 @@
 }
 
 .result-button.primary:hover {
-  background: #1f2937;
-  border-color: #1f2937;
+  background: var(--inverse-hover);
+  border-color: var(--inverse-hover);
 }
 
 .asset-badge {

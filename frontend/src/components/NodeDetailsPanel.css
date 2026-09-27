@@ -24,8 +24,8 @@
   padding: 1rem 2rem;
   font-size: 1rem;
   font-weight: 600;
-  color: #ffffff;
-  background: #000000;
+  color: var(--on-inverse);
+  background: var(--inverse);
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -35,7 +35,7 @@
 }
 
 .share-backdrop-button:hover {
-  background: #1f2937;
+  background: var(--inverse-hover);
   transform: translateY(-2px);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
 }
@@ -212,15 +212,15 @@
 }
 
 .status-issues {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background: var(--danger-bg);
+  color: var(--danger-ink);
+  border: 1px solid var(--danger-border);
 }
 
 .status-safe {
-  background: #f0fdf4;
-  color: #16a34a;
-  border: 1px solid #bbf7d0;
+  background: var(--success-bg);
+  color: var(--sev-none);
+  border: 1px solid var(--success-border);
 }
 
 .issues-section {
@@ -291,7 +291,7 @@
 }
 
 .issue-icon-button:hover i {
-  color: #4b5563;
+  color: var(--ink-2);
 }
 
 .issue-severity {
@@ -333,11 +333,11 @@
 }
 
 .no-issues-message {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
   border-radius: 6px;
   padding: 1rem;
-  color: #16a34a;
+  color: var(--sev-none);
   text-align: center;
   font-weight: 500;
   font-family: var(--font-sans);
@@ -397,22 +397,22 @@
 }
 
 .chain-node-clickable:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
+  border-color: var(--accent);
+  background: var(--accent-soft);
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .chain-node:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
+  border-color: var(--accent);
+  background: var(--accent-soft);
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .chain-node-current {
-  background: #eff6ff;
-  border-color: #2563eb;
+  background: var(--accent-soft);
+  border-color: var(--accent);
   font-weight: 600;
 }
 
@@ -532,8 +532,8 @@
 }
 
 .node-details-panel .submit-button:hover:not(:disabled) {
-  background: #1f2937;
-  border-color: #1f2937;
+  background: var(--inverse-hover);
+  border-color: var(--inverse-hover);
   box-shadow: var(--shadow-sm);
 }
 

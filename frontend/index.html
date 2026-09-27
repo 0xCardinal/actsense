@@ -11,6 +11,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Stack+Sans+Notch:wght@200..700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script>
+      // Apply the saved theme before the first paint (see src/theme.js).
+      (function () {
+        var pref = 'system';
+        try { pref = localStorage.getItem('actsense-theme') || 'system'; } catch (e) {}
+        var dark = pref === 'dark' || (pref !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
     <style>
       html, body {
         margin: 0;
@@ -24,11 +33,16 @@
         height: 100%;
         background: #f4f5f7;
       }
+      html[data-theme="dark"] #root,
+      html[data-theme="dark"] .boot {
+        background: #0b0c0f !important;
+        color: #8b919c !important;
+      }
     </style>
   </head>
   <body>
     <div id="root">
-      <div style="padding: 2rem; color: #6b7280; background: #f4f5f7; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Inter', sans-serif; font-size: 14px;">
+      <div class="boot" style="padding: 2rem; color: #6b7280; background: #f4f5f7; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Inter', sans-serif; font-size: 14px;">
         Loading actsense…
       </div>
     </div>

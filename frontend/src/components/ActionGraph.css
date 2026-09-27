@@ -2,6 +2,7 @@
   width: 100%;
   height: 100%;
   position: relative;
+  container: graph / inline-size;
   background: var(--surface-sunken);
 }
 
@@ -50,7 +51,7 @@
 }
 
 .graph-node.is-highlighted {
-  border-color: #bfd0fb;
+  border-color: var(--accent-border);
 }
 
 .graph-node.is-selected {
@@ -157,7 +158,7 @@
   place-items: center;
   border-radius: 50%;
   color: var(--sev-none);
-  background: #ecfdf3;
+  background: var(--success-bg);
 }
 
 .graph-node-handle.react-flow__handle {
@@ -203,6 +204,7 @@
 
 .action-graph .react-flow__minimap {
   margin: 12px;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
@@ -228,11 +230,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
-  max-width: calc(100% - 260px);
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.92);
+  max-width: calc(100% - 256px);
+  height: 34px;
+  padding: 0 6px 0 12px;
+  background: var(--glass);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -249,7 +252,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .legend-item {
@@ -312,8 +315,8 @@
   height: 32px;
   padding: 0 14px;
   background: var(--ink);
-  color: #fff;
-  border: 1px solid #0b1220;
+  color: var(--on-inverse);
+  border: 1px solid var(--btn-border);
   border-radius: var(--radius-md);
   font-size: 0.8125rem;
   font-weight: 500;
@@ -321,8 +324,28 @@
   box-shadow: var(--shadow-sm), var(--bevel-dark);
 }
 
-@media (max-width: 900px) {
+/* The legend stays one row and sheds detail as the canvas narrows:
+   node types drop to icons, then severities go, leaving the Map toggle. */
+@container graph (max-width: 1080px) {
+  .legend-group--types {
+    gap: 8px;
+  }
+  .legend-group--types .legend-label {
+    display: none;
+  }
+}
+
+@container graph (max-width: 760px) {
+  .legend-group--types,
+  .legend-divider--types,
+  .legend-group--severity,
+  .legend-divider--toggle {
+    display: none;
+  }
   .graph-legend {
+    padding: 0 6px;
+  }
+  .graph-legend:not(:has(.legend-toggle)) {
     display: none;
   }
 }

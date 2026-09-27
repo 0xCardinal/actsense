@@ -44,12 +44,106 @@
   --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   --bevel-dark: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 
+  /* Status tints: background, border and text for callouts and badges. */
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-ink: #b91c1c;
+  --warn-bg: #fef3c7;
+  --warn-border: #fde68a;
+  --warn-ink: #92400e;
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --info-ink: #0369a1;
+  --accent-border: #c7d7fe;
+
+  /* Inverse surfaces: dark buttons and tooltips on the light theme, light
+     ones on the dark theme. */
+  --inverse: #1f2937;
+  --on-inverse: #ffffff;
+  --inverse-hover: #1f2937;
+  --btn-top: #1f2937;
+  --btn-bottom: #111827;
+  --btn-border: #0b1220;
+
+  /* Canvas details */
+  --home-bg: #f7f8fa;
+  --canvas-dot: #d9dce1;
+  --canvas-dot-soft: rgba(17, 24, 39, 0.07);
+  --edge: #c3c8d0;
+  --glass: rgba(255, 255, 255, 0.92);
+  --scrim-canvas: rgba(244, 245, 247, 0.72);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --selection: rgba(37, 99, 235, 0.16);
+
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --press: translateY(1px) scale(0.985);
 
   --z-panel: 20;
   --z-overlay: 40;
   --z-modal: 60;
+}
+
+/* Dark theme. main.jsx resolves the saved choice (light, dark or system)
+   to data-theme on <html> before the first paint. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #0b0c0f;
+  --surface: #15171c;
+  --surface-sunken: #101216;
+  --surface-hover: #1c1f26;
+
+  --ink: #eceef2;
+  --ink-2: #c4c8d0;
+  --ink-3: #8b919c;
+  --ink-4: #5f6570;
+
+  --line: #262a32;
+  --line-strong: #343944;
+
+  --accent: #5b9bf5;
+  --accent-soft: rgba(91, 155, 245, 0.14);
+  --focus-ring: 0 0 0 3px rgba(91, 155, 245, 0.4);
+
+  --sev-critical: #f05252;
+  --sev-high: #f97316;
+  --sev-medium: #eab308;
+  --sev-low: #8b919c;
+  --sev-none: #22c55e;
+
+  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 16px 40px -8px rgba(0, 0, 0, 0.6), 0 4px 10px -2px rgba(0, 0, 0, 0.35);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --bevel-dark: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+
+  --danger-bg: rgba(240, 82, 82, 0.12);
+  --danger-border: rgba(240, 82, 82, 0.32);
+  --danger-ink: #fca5a5;
+  --warn-bg: rgba(234, 179, 8, 0.12);
+  --warn-border: rgba(234, 179, 8, 0.32);
+  --warn-ink: #fcd34d;
+  --success-bg: rgba(34, 197, 94, 0.12);
+  --success-border: rgba(34, 197, 94, 0.3);
+  --info-ink: #7dd3fc;
+  --accent-border: rgba(91, 155, 245, 0.4);
+
+  --inverse: #eceef2;
+  --on-inverse: #111318;
+  --inverse-hover: #ffffff;
+  --btn-top: #ffffff;
+  --btn-bottom: #e4e6ea;
+  --btn-border: #c4c8d0;
+
+  --home-bg: #0b0c0f;
+  --canvas-dot: #262a32;
+  --canvas-dot-soft: rgba(255, 255, 255, 0.05);
+  --edge: #3a404b;
+  --glass: rgba(21, 23, 28, 0.9);
+  --scrim-canvas: rgba(11, 12, 15, 0.72);
+  --scrim: rgba(0, 0, 0, 0.65);
+  --selection: rgba(91, 155, 245, 0.3);
 }
 
 * {
@@ -131,7 +225,7 @@ button:not(:disabled):active,
 }
 
 ::selection {
-  background: rgba(37, 99, 235, 0.16);
+  background: var(--selection);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -89,7 +89,7 @@ const AccordionItem = ({
               })}
             </div>
           ) : (
-            <div style={{ padding: '1rem', color: '#6b7280' }}>
+            <div style={{ padding: '1rem', color: 'var(--ink-3)' }}>
               No path data available (path: {row.path ? 'exists but empty' : 'missing'})
             </div>
           )}

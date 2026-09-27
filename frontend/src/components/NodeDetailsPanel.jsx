@@ -694,7 +694,7 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
         {shareMode && (!graphData || (!dependencies.length && !dependents.length)) ? (
           <div className="detail-section dependency-section">
             <div className="detail-label">Dependency Chain</div>
-            <div className="detail-value" style={{ color: '#6b7280', fontStyle: 'italic', marginBottom: '1rem' }}>
+            <div className="detail-value" style={{ color: 'var(--ink-3)', fontStyle: 'italic', marginBottom: '1rem' }}>
               Dependency information is not available in share mode. Scan the repository to view full dependency chain.
             </div>
             {!repositoryAuditStatus?.isAudited && getScannedRepository() && (

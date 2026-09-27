@@ -13,6 +13,7 @@ import dagre from 'dagre'
 import CustomNode, { NODE_WIDTH, NODE_HEIGHT } from './CustomNode'
 import { filterNodes } from '../utils/nodeFilters'
 import { getNodeTypeIcon, normalizeNodeType } from '../utils/nodeIcons'
+import { useResolvedTheme } from '../theme'
 import './ActionGraph.css'
 
 const nodeTypes = {
@@ -27,8 +28,12 @@ const SEVERITY_VAR = {
   none: '#16a34a',
 }
 
-const EDGE_COLOR = '#c3c8d0'
-const EDGE_HIGHLIGHT = '#2563eb'
+// Graph colours that ReactFlow needs as literal values (it builds marker ids
+// from them), one set per theme. They mirror --edge, --accent and friends.
+const GRAPH_COLORS = {
+  light: { edge: '#c3c8d0', highlight: '#2563eb', dots: '#d9dce1', mask: 'rgba(244, 245, 247, 0.7)' },
+  dark: { edge: '#3a404b', highlight: '#5b9bf5', dots: '#262a32', mask: 'rgba(11, 12, 15, 0.7)' },
+}
 
 const LEGEND_TYPES = [
   ['repository', 'Repository'],
@@ -126,6 +131,7 @@ function lineageOf(nodeId, edges) {
 function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedNodeId }) {
   const [hoveredNodeId, setHoveredNodeId] = useState(null)
   const [showMiniMap, setShowMiniMap] = useState(true)
+  const colors = GRAPH_COLORS[useResolvedTheme()] || GRAPH_COLORS.light
 
   const handleNodeHover = useCallback((nodeId) => setHoveredNodeId(nodeId), [])
   const handleNodeUnhover = useCallback(() => setHoveredNodeId(null), [])
@@ -222,7 +228,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
   useEffect(() => {
     setEdges(renderedEdges.map(edge => {
       const active = lineage ? lineage.has(edge.source) && lineage.has(edge.target) : false
-      const color = active ? EDGE_HIGHLIGHT : EDGE_COLOR
+      const color = active ? colors.highlight : colors.edge
       return {
         ...edge,
         type: 'smoothstep',
@@ -238,7 +244,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
         markerEnd: { type: MarkerType.ArrowClosed, color, width: 14, height: 14 },
       }
     }))
-  }, [renderedEdges, lineage, setEdges])
+  }, [renderedEdges, lineage, setEdges, colors])
 
   useEffect(() => {
     const handleEscape = (event) => {
@@ -301,7 +307,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
         proOptions={{ hideAttribution: true }}
         key={`graph-${filter ? JSON.stringify(filter) : 'all'}-${laidOutNodes.length}-${renderedEdges.length}`}
       >
-        <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="#d9dce1" />
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1} color={colors.dots} />
         <Controls showInteractive={false} position="bottom-left" />
         {showMiniMap && laidOutNodes.length > 12 && (
           <MiniMap
@@ -311,23 +317,23 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
             nodeColor={(n) => SEVERITY_VAR[n.data?.hasIssues ? n.data.severity : 'none'] || '#9ca3af'}
             nodeStrokeWidth={0}
             nodeBorderRadius={4}
-            maskColor="rgba(244, 245, 247, 0.7)"
+            maskColor={colors.mask}
             ariaLabel="Graph overview"
           />
         )}
       </ReactFlow>
 
       <div className="graph-legend" aria-label="Legend">
-        <div className="legend-group">
+        <div className="legend-group legend-group--types">
           {LEGEND_TYPES.filter(([type]) => presentTypes.has(type)).map(([type, label]) => (
-            <span key={type} className="legend-item">
+            <span key={type} className="legend-item" title={label}>
               <span className="legend-icon">{getNodeTypeIcon(type)}</span>
-              {label}
+              <span className="legend-label">{label}</span>
             </span>
           ))}
         </div>
-        <span className="legend-divider" />
-        <div className="legend-group">
+        <span className="legend-divider legend-divider--types" />
+        <div className="legend-group legend-group--severity">
           {['critical', 'high', 'medium', 'low', 'none'].map(sev => (
             <span key={sev} className="legend-item">
               <span className="sev-dot" style={{ background: SEVERITY_VAR[sev] }} />
@@ -337,7 +343,7 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
         </div>
         {laidOutNodes.length > 12 && (
           <>
-            <span className="legend-divider" />
+            <span className="legend-divider legend-divider--toggle" />
             <button
               type="button"
               className="legend-toggle"

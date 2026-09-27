@@ -728,51 +728,26 @@ html.dark .content h2#how-actsense-detects-this::before {
   transform: translateY(1px) scale(0.99);
 }
 
-/* Home hero: the same grid-and-glow backdrop as the app's home page. */
+/* Home hero: an animated letter field (static/hero-letters.js) drawn edge
+   to edge behind the brand. It fades in under the nav and fades out fully
+   before the cards below, so the hero runs into the next section with no
+   edge. */
 .actsense-hero {
   position: relative;
   isolation: isolate;
 }
 
-.actsense-hero::before,
-.actsense-hero::after {
-  content: '';
+.as-hero-letters {
   position: absolute;
   z-index: -1;
+  top: -1rem;
+  bottom: -3rem;
+  left: calc(50% - 50vw);
+  width: 100vw;
+  height: calc(100% + 4rem);
   pointer-events: none;
-}
-
-.actsense-hero::before {
-  inset: -2rem -30vw 0;
-  background-image:
-    linear-gradient(to right, rgba(17, 24, 39, 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(17, 24, 39, 0.07) 1px, transparent 1px);
-  background-size: 56px 56px;
-  background-position: center top;
-  -webkit-mask-image: radial-gradient(ellipse 45% 70% at 50% 45%, #000 0%, rgba(0, 0, 0, 0.45) 50%, transparent 85%);
-  mask-image: radial-gradient(ellipse 45% 70% at 50% 45%, #000 0%, rgba(0, 0, 0, 0.45) 50%, transparent 85%);
-}
-
-.actsense-hero::after {
-  left: 50%;
-  top: 45%;
-  width: min(900px, 90vw);
-  height: 380px;
-  transform: translate(-50%, -50%);
-  background:
-    radial-gradient(closest-side at 38% 50%, rgba(99, 125, 255, 0.22), transparent),
-    radial-gradient(closest-side at 64% 46%, rgba(56, 189, 248, 0.16), transparent);
-  filter: blur(48px);
-}
-
-html.dark .actsense-hero::before {
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-}
-
-html.dark .actsense-hero::after {
-  opacity: 0.6;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 58%, transparent 90%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 58%, transparent 90%);
 }
 
 /* ---- Site font --------------------------------------------------------- */
@@ -1171,8 +1146,72 @@ html.dark .as-add { color: #86efac; }
   }
 }
 
-.as-home {
+/* Clip on the page rather than the wrapper so the horizon below can run
+   edge to edge without adding a horizontal scrollbar. */
+body:has(.as-home) {
   overflow-x: clip;
+}
+
+/* ---- Horizon ----------------------------------------------------------- */
+/* A tilted band of grainy light behind the product shot: deep blue burning
+   through orange to a pale core, rising toward the right. Full-bleed, so the
+   screenshot sits on it like a horizon. */
+.as-shot {
+  position: relative;
+  isolation: isolate;
+}
+
+/* The frosted panel behind the shot would cut a box out of the horizon. */
+.as-shot.platform-image-container::before,
+.as-shot.platform-image-container::after {
+  display: none;
+}
+
+.as-horizon {
+  position: absolute;
+  z-index: -2;
+  top: 18%;
+  bottom: -6%;
+  left: calc(50% - 50vw);
+  width: 100vw;
+  pointer-events: none;
+  transform: skewY(-5deg);
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(13, 59, 110, 0.55) 22%,
+    rgba(20, 78, 140, 0.9) 36%,
+    #e8491d 54%,
+    #ff7a2e 62%,
+    #ffd29a 70%,
+    rgba(255, 236, 214, 0.9) 74%,
+    transparent 92%);
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.35) 0%, #000 55%, #000 100%);
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.35) 0%, #000 55%, #000 100%);
+}
+
+/* Grain rides on top of the colour only. */
+.as-horizon::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.75;
+  mix-blend-mode: soft-light;
+  -webkit-mask-image: linear-gradient(180deg, transparent 12%, #000 36%, #000 72%, transparent 90%);
+  mask-image: linear-gradient(180deg, transparent 12%, #000 36%, #000 72%, transparent 90%);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* On the light theme the band reads from the page colour down: cream and
+   orange first, blue underneath, like the light breaking over a horizon. */
+html:not(.dark) .as-horizon {
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(255, 226, 190, 0.7) 20%,
+    #ffb070 34%,
+    #f0561f 48%,
+    #1e5a96 66%,
+    rgba(13, 59, 110, 0.7) 76%,
+    transparent 94%);
 }
 
 .content .hero-command-card code.hero-command-text {
@@ -1520,6 +1559,67 @@ footer.hextra-footer > div:nth-child(2) {
 .is-supported .as-platform-status { color: #15803d; background: #f0fdf4; border-color: #bbf7d0; }
 .is-planned .as-platform-status { color: var(--as-ink-3); background: transparent; border-color: var(--as-line-strong); }
 html.dark .is-supported .as-platform-status { color: #86efac; background: rgba(22, 163, 74, 0.12); border-color: rgba(22, 163, 74, 0.35); }
+
+.as-platform-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.as-platform-col-label {
+  font-size: 0.8125rem !important;
+  line-height: 1.25rem;
+  color: var(--as-ink-3) !important;
+  margin: 0 !important;
+}
+
+.as-platform-card.is-supported {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  flex: 1;
+}
+
+.as-platform-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.as-platform-link {
+  margin-top: auto;
+  padding-top: 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--as-ink) !important;
+  text-decoration: none !important;
+}
+
+.as-platform-link:hover {
+  text-decoration: underline !important;
+}
+
+.as-platform-card--row {
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  padding: 0.65rem 0.9rem;
+  gap: 0.75rem;
+}
+
+.as-platform-card--row .as-platform-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.as-platform-card--row h3 {
+  margin: 0 !important;
+  font-size: 0.9375rem !important;
+  font-weight: 600 !important;
+}
 
 @media (max-width: 800px) {
   .as-platform-grid {

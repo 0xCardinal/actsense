@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--scrim);
   backdrop-filter: blur(8px);
   z-index: 10000;
   display: flex;
@@ -114,7 +114,7 @@ kbd {
 
 .search-result-item:hover {
   background: var(--surface-sunken);
-  border-left-color: #3b82f6;
+  border-left-color: var(--accent);
 }
 
 .search-result-left {
@@ -160,8 +160,8 @@ kbd {
 }
 
 .search-result-message mark {
-  background-color: #fef3c7;
-  color: #92400e;
+  background-color: var(--warn-bg);
+  color: var(--warn-ink);
   padding: 0.125rem 0.25rem;
   border-radius: 3px;
   font-weight: 600;
@@ -200,18 +200,18 @@ kbd {
 }
 
 .asset-badge-repository {
-  background: #eff6ff;
-  border-color: #bfdbfe;
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
 }
 
 .asset-badge-workflow {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
+  background: var(--success-bg);
+  border-color: var(--success-border);
 }
 
 .asset-badge-action {
-  background: #fef3c7;
-  border-color: #fde68a;
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
 }
 
 .search-result-asset-type {
@@ -250,12 +250,12 @@ kbd {
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
   font-weight: 500;
-  color: #3b82f6;
+  color: var(--accent);
 }
 
 .search-view-all:hover {
   background: var(--surface-hover);
-  color: #2563eb;
+  color: var(--accent);
 }
 
 .search-empty {
