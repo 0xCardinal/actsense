@@ -1,0 +1,65 @@
+{{ define "main" }}
+{{- $data := site.Data.checks -}}
+<div class="ck-page">
+  {{- /* Keeps Hextra's mobile navigation menu; hidden on desktop. */ -}}
+  {{ partial "sidebar.html" (dict "context" . "disableSidebar" true "displayPlaceholder" false) }}
+
+  <div class="ck-shell" data-checks-root data-sync-url>
+    <header class="ck-hero">
+      <p class="ck-eyebrow"><a href="/">actsense</a> <span aria-hidden="true">/</span> Security checks</p>
+      <h1>Security checks</h1>
+      <p class="ck-lede">
+        Every issue actsense looks for, what it means, and how to fix it.
+        {{ $data.total }} checks across {{ len $data.categories }} categories, run against your workflows and every dependency they pull in.
+      </p>
+      <div class="ck-totals" aria-label="Checks by highest severity">
+        {{- range $sev := slice "critical" "high" "medium" "low" }}
+        <span class="ck-total ck-sev-{{ $sev }}"><span class="ck-dot" aria-hidden="true"></span><strong>{{ index $data.totals $sev }}</strong> {{ $sev }}</span>
+        {{- end }}
+      </div>
+    </header>
+
+    <div class="ck-layout">
+      <aside class="ck-aside" aria-label="Filters">
+        <div class="ck-aside-inner">
+          {{ partial "checks/filters.html" (dict "data" $data "categories" true) }}
+        </div>
+      </aside>
+
+      <section class="ck-results" aria-label="Checks">
+        <div class="ck-results-bar">
+          <p class="ck-result-count" aria-live="polite"><strong data-check-count>{{ $data.total }}</strong> of {{ $data.total }} checks</p>
+          <p class="ck-legend">Severity shown is the highest a check can report.</p>
+        </div>
+
+        {{- range $data.categories }}
+        <section class="ck-category" id="{{ .id }}" data-check-group>
+          <h2>{{ .name }} <span class="ck-count" data-group-count>{{ len .checks }}</span></h2>
+          <div class="ck-grid">
+            {{- $cat := . }}
+            {{- range .checks }}
+            <a class="ck-card ck-sev-{{ .severity }}" href="/vulnerabilities/{{ .slug }}/"
+               data-check data-severity="{{ .severity }}" data-category="{{ $cat.id }}"
+               data-text="{{ lower (printf "%s %s %s %s" .title .slug .summary $cat.name) }}">
+              <span class="ck-card-top">
+                <span class="ck-pill">{{ humanize .severity }}{{ if gt (len .severities) 1 }}<span class="ck-pill-range"> – {{ humanize (index .severities (sub (len .severities) 1)) }}</span>{{ end }}</span>
+                <code class="ck-slug">{{ .slug }}</code>
+              </span>
+              <span class="ck-card-title">{{ .title }}</span>
+              <span class="ck-card-summary">{{ .summary }}</span>
+            </a>
+            {{- end }}
+          </div>
+        </section>
+        {{- end }}
+
+        <div class="ck-empty" data-check-empty hidden>
+          <p><strong>No checks match these filters.</strong></p>
+          <button type="button" class="ck-clear" data-filter-clear>Clear filters</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<script src="{{ "js/checks.js" | relURL }}" defer></script>
+{{ end }}

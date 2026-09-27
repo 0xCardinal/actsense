@@ -52,7 +52,14 @@ jobs:
 
 If the upstream `CI` workflow is compromised, it can finish with `completed` and automatically trigger this deployment job.
 
-### Mitigation Strategies
+### How actsense detects this
+
+- `pull_request_target` → **high**, unless the workflow also checks out the PR's code, in which case the more specific [insecure pull_request_target](/vulnerabilities/insecure_pull_request_target/) finding (critical) is reported instead.
+- `workflow_run` → **medium**.
+
+Both short (`on: pull_request_target`) and long (`on: {pull_request_target: ...}`) trigger forms are recognised.
+
+## Mitigation Strategies
 
 1. **Prefer `workflow_call`**  
    Convert reusable logic to callable workflows requiring explicit invocation.

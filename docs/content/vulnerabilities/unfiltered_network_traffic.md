@@ -23,6 +23,10 @@ jobs:
           # No filtering - can exfiltrate secrets
 ```
 
+## How actsense detects this
+
+Reported as **low** (informational) for `run:` steps that make outbound connections with `curl`/`wget` to a URL, `nc`/`ncat` to a host and port, or `ssh` to `user@host`. The finding means "nothing restricts egress here", not "this command is malicious"; pair it with an egress policy such as `step-security/harden-runner`.
+
 ## Mitigation Strategies
 
 1. **Restrict outbound network access**  

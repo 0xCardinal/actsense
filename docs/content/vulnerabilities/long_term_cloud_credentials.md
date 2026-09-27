@@ -54,6 +54,15 @@ jobs:
       - run: gcloud auth activate-service-account --key-file=$HOME/gcp-key.json
 ```
 
+## How actsense detects this
+
+actsense reports static cloud keys wherever they are supplied:
+
+- Workflow, job, or step `env:` containing `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, `AZURE_CLIENT_SECRET` / `AZURE_CREDENTIALS`, or `GCP_SA_KEY` / `GOOGLE_CREDENTIALS` / `GOOGLE_APPLICATION_CREDENTIALS`.
+- Static-key inputs of the official actions: `aws-access-key-id` on `aws-actions/configure-aws-credentials`, `creds` / `client-secret` on `azure/login`, and `credentials_json` on `google-github-actions/auth`.
+
+`AZURE_CLIENT_ID` and `AZURE_TENANT_ID` on their own are **not** reported, because `azure/login` uses them with OIDC too. Findings appear as `long_term_aws_credentials`, `long_term_azure_credentials` or `long_term_gcp_credentials`, all **high**.
+
 ## Mitigation Strategies
 
 ### General Principles

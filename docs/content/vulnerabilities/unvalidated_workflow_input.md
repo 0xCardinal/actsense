@@ -27,6 +27,10 @@ jobs:
           deploy.sh ${{ inputs.environment }}  # Dangerous - unvalidated
 ```
 
+## How actsense detects this
+
+Reported as **medium** when an optional, free-form (`type: string`) input of `workflow_dispatch` or `workflow_call` is interpolated into a `run:` command. Inputs that are only used in `if:`, `with:` or `env:` are not reported.
+
 ## Mitigation Strategies
 
 1. **Make inputs required when necessary**  

@@ -21,7 +21,18 @@ jobs:
         # persist-credentials defaults to true — GITHUB_TOKEN is stored in .git/config
       - uses: some-third-party/code-analysis@v2  # this action can now read the token
       - run: npm test
+      - uses: actions/upload-artifact@v4          # workspace uploads can carry .git/config
+        with:
+          name: workspace
+          path: .
 ```
+
+## How actsense detects this
+
+- `persist-credentials: true` set explicitly → **high**.
+- `persist-credentials` left at its default (`true`) **and** the same job uploads artifacts → **medium**. Artifact uploads are the most common way the token in `.git/config` leaks.
+
+A checkout that leaves the default but never uploads artifacts is not reported, to keep noise down; setting `persist-credentials: false` everywhere is still the recommended baseline.
 
 ## Mitigation Strategies
 

@@ -4,7 +4,7 @@ This document provides comprehensive information for AI agents working with the 
 
 ## Project Overview
 
-**actsense** is a security auditing tool for GitHub Actions that:
+**actsense** is a Workflow Security Auditor. It currently supports GitHub Actions and is structured so other CI workflow platforms can be added. For GitHub Actions it:
 - Analyzes GitHub Actions workflows and their dependencies
 - Detects 65+ security vulnerabilities and best practice violations
 - Visualizes action dependencies in an interactive graph
@@ -180,6 +180,21 @@ docs/
 - Links to actsense.dev documentation
 - Custom display sections for specific issue types
 
+## Dependency Graph Resolution
+
+`resolve_action_dependencies()` in `main.py` builds the graph. Keep these invariants:
+
+- **Fetch at the pinned ref.** `action.yml`, reusable workflows and Dockerfiles are read at the ref the workflow pins (`get_file_content(..., ref=ref)`), never the default branch.
+- **Local references are followed.** `./.github/actions/x` and `./.github/workflows/y.yml` in the audited repo resolve at its default branch; nested local reusable workflows resolve in the called workflow's repo and ref. `./` inside a composite action refers to the caller's workspace and is not followed.
+- **API errors are not "missing".** Only a confirmed 404 produces `missing_action_repository`; rate limits and network errors continue resolution.
+- **Direct edges are kept.** `GraphBuilder.get_graph_data()` does not apply transitive reduction; an edge means "A directly references B".
+- **One `GitHubClient` per audit** memoizes GET responses and pools connections; close it with `_close_client()`.
+- Depth limit: `DEFAULT_MAX_DEPTH` (10, matching GitHub's reusable-workflow nesting cap).
+
+## Auto-fix Pinning (pin.actsense.dev)
+
+`/api/audit/fix` resolves tags to commit SHAs and images to digests through `pin_client.py` (`GET https://pin.actsense.dev/api/resolve?q=...`), falling back to the GitHub API. Unresolvable pins are emitted with `"manual": true` and a `<SHA>`/`<digest>` placeholder, and the editor's Apply All skips them. Set `PIN_API_URL=""` to disable the service.
+
 ## Security Checks Reference
 
 ### Severity Levels
@@ -205,13 +220,13 @@ docs/
 - `github_token_write_all` (high) - GITHUB_TOKEN write-all permissions
 - `github_token_write_permissions` (medium) - GITHUB_TOKEN write permissions
 - `excessive_write_permissions` (medium) - Excessive write permissions on read-only workflows
-- `self_hosted_runner` (medium) - Self-hosted runners
+- `self_hosted_runner` (low) - Self-hosted runners
 - `branch_protection_bypass` (high) - Branch protection bypass
 
 #### Secrets & Credentials
 - `potential_hardcoded_secret` (critical) - Hardcoded secrets detected
 - `potential_hardcoded_cloud_credentials` (critical) - Hardcoded cloud credentials
-- `optional_secret_input` (medium) - Optional secret inputs
+- `optional_secret_input` (low) - Optional secret inputs without a safe default
 - `long_term_aws_credentials` (high) - AWS credentials instead of OIDC
 - `long_term_azure_credentials` (high) - Azure credentials instead of OIDC
 - `long_term_gcp_credentials` (high) - GCP credentials instead of OIDC
@@ -221,15 +236,15 @@ docs/
 #### Workflow Security
 - `dangerous_event` (high) - pull_request_target, workflow_run events
 - `insecure_pull_request_target` (critical) - Insecure pull_request_target usage
-- `unsafe_checkout` (high) - Checkout with persist-credentials
+- `unsafe_checkout` (high; medium when left at the default in a job that uploads artifacts) - Checkout with persisted credentials
 - `unsafe_checkout_ref` (medium) - Potentially unsafe checkout ref
 - `checkout_full_history` (low) - Fetches full git history
 - `potential_script_injection` (high) - Script injection risk
-- `script_injection` (high) - Script injection vulnerability
-- `shell_injection` (high) - Shell injection vulnerability
+- `script_injection` (critical) - Injection into github-script or PowerShell
+- `shell_injection` (high/critical) - Shell injection vulnerability
 - `code_injection_via_input` (high) - Code injection via workflow inputs
 - `unvalidated_workflow_input` (medium) - Unvalidated workflow dispatch inputs
-- `unsafe_shell` (medium) - Bash without -e flag
+- `unsafe_shell` (medium) - Custom bash shell template (`bash {0}`) without -e; `shell: bash` is already safe
 - `malicious_curl_pipe_bash` (critical) - Curl/wget piped to bash
 - `malicious_base64_decode` (critical) - Base64 decode execution
 - `obfuscation_detection` (high) - Code obfuscation patterns
@@ -239,14 +254,14 @@ docs/
 - `untrusted_action_unpinned` (high) - Untrusted action not pinned
 - `untrusted_action_source` (medium) - Action from untrusted source
 - `typosquatting_action` (high) - Potential typosquatting in action names
-- `deprecated_action` (medium) - Usage of deprecated actions
+- `deprecated_action` (medium) - Retired action majors, archived repositories, node12/node16 runtimes
 - `missing_action_repository` (critical) - Action repository doesn't exist
 - `unpinned_dockerfile_dependencies` (medium) - Dockerfile installs unpinned packages
 - `unpinned_dockerfile_resources` (medium) - Dockerfile downloads without checksums
 - `unpinned_npm_packages` (medium) - NPM packages without version locking
 - `unpinned_python_packages` (medium) - Python packages without version pinning
 - `unpinned_external_resources` (medium) - External resources without checksums
-- `unfiltered_network_traffic` (high) - Network operations without filtering
+- `unfiltered_network_traffic` (low) - Network operations without egress filtering (informational)
 - `no_file_tampering_protection` (medium) - File modifications without protection
 
 #### Self-Hosted Runner Security
@@ -259,8 +274,7 @@ docs/
 - `self_hosted_runner_network_risk` (medium) - Network access risks
 
 #### Best Practices
-- `artifact_retention` (low) - Artifact retention > 90 days
-- `long_artifact_retention` (low) - Long artifact retention
+- `long_artifact_retention` (low) - Artifact retention > 90 days
 - `secrets_in_matrix` (high) - Secrets used in matrix strategy
 - `large_matrix` (low) - Matrix with > 100 combinations
 - `insufficient_audit_logging` (medium) - Missing audit logs
@@ -493,6 +507,16 @@ jobs:
 - Include vulnerable and secure examples
 - Include impact assessment table
 - Include references to authoritative sources
+
+#### Step 5b: Add it to the checks explorer
+
+Add a `- [Title](/vulnerabilities/your_vulnerability_type/)` line under the right `###` category in `docs/content/vulnerabilities/_index.md`, then regenerate the data behind the explorer and the check-page rail:
+
+```bash
+python3 docs/scripts/build_checks_data.py
+```
+
+It reads categories from `_index.md`, titles and summaries from each check page, and severities from the backend rules, and writes `docs/data/checks.json`. If a rule's severity is computed at runtime, add it to `DYNAMIC_SEVERITIES` in the script (it fails loudly otherwise).
 
 #### Step 6: Build Documentation
 

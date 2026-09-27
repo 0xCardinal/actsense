@@ -1,7 +1,7 @@
 baseURL: "https://actsense.dev"
 languageCode: "en-us"
-title: "actsense - GitHub Actions Security Auditor"
-description: "Comprehensive security documentation for GitHub Actions vulnerabilities"
+title: "actsense - Workflow Security Auditor"
+description: "actsense is an open-source workflow security auditor. It maps every dependency a CI workflow runs and explains what each one exposes. GitHub Actions is supported today."
 
 # Enable Git info for last modified dates
 enableGitInfo: true
@@ -55,7 +55,7 @@ menu:
 # Theme parameters
 params:
   # Site metadata
-  description: "Comprehensive security documentation for GitHub Actions vulnerabilities"
+  description: "actsense is an open-source workflow security auditor. It maps every dependency a CI workflow runs and explains what each one exposes. GitHub Actions is supported today."
   author: "actsense"
   
   # Navbar

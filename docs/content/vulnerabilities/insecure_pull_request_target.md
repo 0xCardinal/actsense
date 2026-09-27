@@ -25,6 +25,15 @@ jobs:
       - run: npm test
 ```
 
+## How actsense detects this
+
+actsense reports this when a workflow triggered by `pull_request_target` or `workflow_run` runs `actions/checkout` with a `ref` or `repository` that points at the pull request's code: `github.event.pull_request.head.*`, `github.head_ref`, `refs/pull/<n>/merge`, the PR number, or `github.event.workflow_run.head_*`.
+
+- `pull_request_target` + PR checkout → **critical**.
+- `workflow_run` + head checkout → **high**. It is only exploitable if the *triggering* workflow runs for fork pull requests, which cannot be seen from this file alone.
+
+A bare `actions/checkout` under `pull_request_target` is **not** reported here: it checks out the base branch, which is the safe pattern. The trigger itself is still noted as a [dangerous event](/vulnerabilities/dangerous_event/).
+
 ## Mitigation Strategies
 
 1. **Use `pull_request` for untrusted code**  

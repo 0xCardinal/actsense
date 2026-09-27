@@ -1,0 +1,40 @@
+{{- /* Shared filter controls for the checks explorer and the check-page rail.
+       Context: dict "data" (site.Data.checks) "categories" (bool) */ -}}
+{{- $data := .data -}}
+<div class="ck-filters" data-check-filters>
+  <label class="ck-search">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input type="search" placeholder="Search checks" aria-label="Search checks" data-filter-search autocomplete="off" spellcheck="false" />
+  </label>
+
+  <fieldset class="ck-group">
+    <legend>Severity</legend>
+    <div class="ck-sev-toggles">
+      {{- range $sev := slice "critical" "high" "medium" "low" }}
+      <label class="ck-sev-toggle ck-sev-{{ $sev }}">
+        <input type="checkbox" value="{{ $sev }}" data-filter-sev />
+        <span class="ck-dot" aria-hidden="true"></span>
+        <span class="ck-sev-name">{{ humanize $sev }}</span>
+        <span class="ck-count">{{ index $data.totals $sev }}</span>
+      </label>
+      {{- end }}
+    </div>
+  </fieldset>
+
+  {{- if .categories }}
+  <fieldset class="ck-group">
+    <legend>Category</legend>
+    <div class="ck-cat-list">
+      {{- range $data.categories }}
+      <label class="ck-cat">
+        <input type="checkbox" value="{{ .id }}" data-filter-cat />
+        <span class="ck-cat-name">{{ .name }}</span>
+        <span class="ck-count">{{ len .checks }}</span>
+      </label>
+      {{- end }}
+    </div>
+  </fieldset>
+  {{- end }}
+
+  <button type="button" class="ck-clear" data-filter-clear hidden>Clear filters</button>
+</div>

@@ -1,5 +1,34 @@
-<!-- Custom footer section for actsense -->
-<div class="hextra-custom-footer" style="text-align: center; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--tw-prose-hr); color: var(--tw-prose-captions);">
-  <p>© {{ now.Format "2006" }} actsense | <a href="https://github.com/0xCardinal/actsense" style="color: #667eea; text-decoration: none;">GitHub Repository</a></p>
+<!-- actsense site footer -->
+<div class="as-footer">
+  <div class="as-footer-main">
+    <div class="as-footer-brand">
+      <a href="/" class="as-footer-logo">actsense</a>
+      <p>Workflow Security Auditor. Maps every dependency your CI workflows run and explains what each one exposes. GitHub Actions supported today.</p>
+    </div>
+    <nav class="as-footer-cols" aria-label="Footer">
+      <div>
+        <h4>Product</h4>
+        <a href="/getting-started/">Getting started</a>
+        <a href="/installation/">Installation</a>
+        <a href="/usage/">Usage</a>
+        <a href="/api-reference/">API reference</a>
+      </div>
+      <div>
+        <h4>Security</h4>
+        <a href="/vulnerabilities/">All checks</a>
+        <a href="https://pin.actsense.dev">pin. by actsense</a>
+        <a href="https://github.com/0xCardinal/actsense/security/policy">Report a vulnerability</a>
+      </div>
+      <div>
+        <h4>Project</h4>
+        <a href="https://github.com/0xCardinal/actsense">GitHub</a>
+        <a href="https://github.com/0xCardinal/actsense/releases">Releases</a>
+        <a href="/contributors/">Contributors</a>
+      </div>
+    </nav>
+  </div>
+  <div class="as-footer-bottom">
+    <span>© {{ now.Format "2006" }} actsense</span>
+    <a href="https://github.com/0xCardinal/actsense/blob/main/LICENSE">GPL-3.0 license</a>
+  </div>
 </div>
-
