@@ -656,11 +656,18 @@ html.dark {
   text-align: left;
 }
 
+/* Hextra zeroes the outer cells' side padding; keep every cell inset. */
 .content table th,
-.content table td {
+.content table td,
+.content table th:first-child,
+.content table td:first-child,
+.content table th:last-child,
+.content table td:last-child {
   border: none;
   border-bottom: 1px solid var(--as-line);
-  padding: 0.6rem 0.85rem;
+  padding: 0.75rem 1rem;
+  vertical-align: top;
+  line-height: 1.55;
 }
 
 .content table tr:last-child td {
@@ -2729,5 +2736,234 @@ html.dark .ck-rail .ck-filters {
   .supporter-card,
   .supporter-card__arrow {
     transition: none;
+  }
+}
+
+/* ---- Usage page ----------------------------------------------------------- */
+
+.as-usage-lede {
+  max-width: 46rem;
+  margin-top: 1rem !important;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+
+/* Screenshots: one frame, the capture that matches the docs theme. */
+.as-shot-fig {
+  margin: 1.5rem 0 2rem;
+}
+
+.as-shot-frame {
+  overflow: hidden;
+  border: 1px solid var(--as-line);
+  border-radius: 12px;
+  background: var(--as-sunken);
+  box-shadow: var(--as-shadow-md);
+}
+
+.as-shot-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 !important;
+}
+
+.as-shot-dark,
+html.dark .as-shot-light {
+  display: none !important;
+}
+
+html.dark .as-shot-dark {
+  display: block !important;
+}
+
+.as-shot-fig figcaption {
+  margin-top: 0.7rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--as-ink-3);
+}
+
+.as-shot-fig--small {
+  max-width: 18rem;
+  margin: 0;
+}
+
+/* Section jump list under the lede. */
+.content .as-tour {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.content .as-tour a {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--as-ink);
+  text-decoration: none;
+  background: var(--as-surface);
+  border: 1px solid var(--as-line);
+  border-radius: 10px;
+  box-shadow: var(--as-shadow-sm), var(--as-bevel);
+  transition: border-color 0.15s ease;
+}
+
+.content .as-tour a:hover {
+  border-color: var(--as-line-strong);
+  text-decoration: none;
+}
+
+.as-tour span {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-family: var(--as-mono);
+  font-size: 0.75rem;
+  color: var(--as-ink-3);
+  background: var(--as-sunken);
+  border: 1px solid var(--as-line);
+  border-radius: 6px;
+}
+
+/* Labelled controls, two to a row. */
+.as-ui-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+.as-ui-list > div {
+  padding: 1rem 1.1rem;
+  background: var(--as-surface);
+  border: 1px solid var(--as-line);
+  border-radius: 10px;
+}
+
+.as-ui-list > div > strong {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--as-ink);
+}
+
+.as-ui-list p {
+  margin: 0 !important;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--as-ink-3) !important;
+}
+
+/* Screenshot beside its explanation. */
+.as-split {
+  display: grid;
+  grid-template-columns: 18rem minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+  margin: 1.5rem 0 2rem;
+}
+
+.as-defs {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 0;
+  margin: 0;
+}
+
+.as-defs dt,
+.as-defs dd {
+  margin: 0;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--as-line);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.as-defs dt:first-of-type,
+.as-defs dt:first-of-type + dd {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.as-defs dt {
+  font-weight: 600;
+  color: var(--as-ink);
+}
+
+.as-defs dd {
+  color: var(--as-ink-2);
+}
+
+/* Severity chips the home page doesn't use. */
+.as-sev-high { color: #c2410c; background: #fff7ed; border-color: #fed7aa; }
+.as-sev-low { color: #4b5563; background: #f3f4f6; border-color: #e5e7eb; }
+html.dark .as-sev-high { color: #fdba74; background: rgba(234, 88, 12, 0.12); border-color: rgba(234, 88, 12, 0.35); }
+html.dark .as-sev-low { color: #d1d5db; background: rgba(156, 163, 175, 0.1); border-color: rgba(156, 163, 175, 0.3); }
+
+.content table .as-sev {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* Editor steps as a 2x2 grid. */
+.content .as-steps--stack {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 1.5rem 0 !important;
+}
+
+.content kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 0.05em 0.4em;
+  font-size: 0.8em;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--as-ink);
+  background: var(--as-surface);
+  border: 1px solid var(--as-line-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+}
+
+@media (max-width: 640px) {
+  /* Let wide tables scroll inside their frame instead of the page. */
+  .content table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .content .as-tour {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .as-ui-list,
+  .as-split,
+  .content .as-steps--stack {
+    grid-template-columns: 1fr;
+  }
+
+  .as-shot-fig--small {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .as-defs {
+    grid-template-columns: 1fr;
+  }
+
+  .as-defs dd {
+    border-top: 0;
+    padding-top: 0;
   }
 }
