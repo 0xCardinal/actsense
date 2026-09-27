@@ -1,258 +1,225 @@
 ---
 title: "Usage"
-description: "Learn how to use actsense to audit GitHub Actions workflows and identify security vulnerabilities"
+description: "A tour of the actsense app: start an audit, read the dependency graph, inspect findings, search, and fix a workflow."
 ---
 
-## Platform Overview
+<p class="as-usage-lede">
+actsense audits a repository, a single action, or a workflow you paste in. It maps everything that workflow runs, audits each piece at the version it runs, and puts every finding on the node and line it came from. This page follows one audit from start to finish.
+</p>
+
+{{< shot name="platform" alt="actsense showing the dependency graph of step-security/github-actions-goat, with the results panel on the left" >}}
+An audit of `step-security/github-actions-goat`: 41 nodes, 97 edges and 209 findings. The screenshots below use this audit and follow your light or dark theme.
+{{< /shot >}}
+
+<nav class="as-tour" aria-label="On this page">
+  <a href="#start-an-audit"><span>1</span>Start an audit</a>
+  <a href="#read-the-results"><span>2</span>Read the results</a>
+  <a href="#explore-the-graph"><span>3</span>Explore the graph</a>
+  <a href="#inspect-a-node"><span>4</span>Inspect a node</a>
+  <a href="#search-and-tables"><span>5</span>Search and tables</a>
+  <a href="#fix-a-workflow"><span>6</span>Fix a workflow</a>
+</nav>
+
+## Start an audit
+
+Open actsense (`http://localhost:8000` with Docker, `http://localhost:5173` in development) and type what you want audited.
+
+{{< shot name="home" alt="The actsense start screen with the audit input, token and clone options, and example audits" >}}
+The start screen. The **Try** chips run example audits.
+{{< /shot >}}
+
+| You enter | actsense audits |
+| --- | --- |
+| `owner/repo`<br>`https://github.com/owner/repo` | Every workflow in `.github/workflows`, plus the actions, reusable workflows and images they use |
+| `owner/repo@ref`<br>`actions/checkout@v4` | That one action at that ref, plus its own dependencies |
+| **Secure workflow** | A workflow you paste in. See [Fix a workflow](#fix-a-workflow) |
 
-actsense is a comprehensive security auditing platform for GitHub Actions that helps you identify vulnerabilities, analyze dependencies, and secure your CI/CD pipelines.
+The two options below the input:
 
-![actsense Platform](/images/platform.png)
+<div class="as-ui-list">
+  <div>
+    <strong>Add token</strong>
+    <p>Raises the GitHub API limit from 60 to 5,000 requests an hour, which deep graphs need. A token with no scopes is enough for public repositories. It is sent with the audit and never saved.</p>
+  </div>
+  <div>
+    <strong>Clone repo</strong>
+    <p>Reads workflows from a git clone instead of the API. Use it for private repositories or to spend fewer API calls. Available for repositories, not single actions.</p>
+  </div>
+</div>
 
-*The actsense platform provides a comprehensive view of your GitHub Actions security posture with interactive visualizations and detailed analysis.*
+Each audit is saved. Open **Previous analyses** at the bottom of the screen and choose **Load** to reopen one without running it again.
 
-## What actsense Does
+## Read the results
 
-actsense provides a powerful, interactive platform for analyzing GitHub Actions workflows and their dependencies. Here's what it does:
+When the audit finishes, the sidebar shows a summary. Every part of it is also a filter.
 
-### Comprehensive Security Auditing
+<div class="as-split">
+  <div class="as-split-media">
 
-actsense performs deep security analysis of your GitHub Actions workflows, detecting **~70 types of security vulnerabilities and exposures** including:
+{{< shot name="stats" alt="The results panel: node, edge and finding counts, a graph/table toggle and a severity breakdown" width="290" height="340" size="small" >}}{{< /shot >}}
 
-- **Action Security**: Unpinned versions, outdated actions, unpinnable actions (Docker, composite, JavaScript)
-- **Access Control**: Overly permissive permissions, token security, branch protection bypass
-- **Secrets & Credentials**: Hardcoded secrets, long-term credentials, environment security
-- **Workflow Security**: Dangerous events, code injection, script injection, input validation
-- **Runner Security**: Self-hosted runner risks, network isolation, exposure prevention
-- **Supply Chain**: Untrusted actions, typosquatting, deprecated actions, missing repositories
+  </div>
+  <div class="as-split-copy">
+    <dl class="as-defs">
+      <dt>Nodes</dt>
+      <dd>The full graph. Select it to clear any other filter.</dd>
+      <dt>Edges</dt>
+      <dd>Every dependency path from the repository, as a table.</dd>
+      <dt>Findings</dt>
+      <dd>Every finding, sorted by severity, as a table.</dd>
+      <dt>Graph / Table</dt>
+      <dd>Switches the current view between the graph and a list of nodes.</dd>
+      <dt>By severity</dt>
+      <dd>Select a row to show only nodes with findings at that severity. Select it again, or <strong>Clear filter</strong>, to go back.</dd>
+      <dt>Levels</dt>
+      <dd>How deep the graph goes. Resolution stops at 10 levels, the same nesting limit GitHub puts on reusable workflows.</dd>
+    </dl>
+  </div>
+</div>
 
-### Interactive Graph Visualization
+Severities tell you what to fix first:
 
-Visualize your workflow dependencies in an interactive graph that shows:
+| Severity | Meaning |
+| --- | --- |
+| <span class="as-sev as-sev-critical">Critical</span> | Exploitable now, for example a `pull_request_target` workflow that runs a fork's code with your secrets. |
+| <span class="as-sev as-sev-high">High</span> | A serious weakness an attacker can build on, such as a write-all token or an unpinned third-party action. |
+| <span class="as-sev as-sev-medium">Medium</span> | Hardening you should schedule, such as tag pins instead of commit SHAs. |
+| <span class="as-sev as-sev-low">Low</span> | Best practice and hygiene. |
 
-- **Repository nodes**: Your GitHub repositories
-- **Workflow nodes**: Individual workflow files
-- **Action nodes**: All actions used in your workflows
-- **Dependency edges**: Relationships between components
-- **Security indicators**: Color-coded severity levels (critical, high, medium, low)
+## Explore the graph
 
-![Interactive Graph Visualization](/images/graph.png)
+The graph reads left to right: the repository, its workflows, then the actions, reusable workflows and container images each one uses, down to their own dependencies. An edge means the left node directly references the right one, at the ref the workflow pins.
 
-*The dependency graph provides a visual representation of your workflow structure, making it easy to understand relationships and identify security issues at a glance. Nodes are color-coded by severity level, helping you quickly spot critical issues.*
+{{< shot name="graph" alt="The dependency graph zoomed in, with the path through actions/checkout@v4 highlighted in blue" >}}
+Hovering `actions/checkout@v4` highlights every workflow that uses it.
+{{< /shot >}}
 
-![Dependency Map](/images/dependency-map.png)
+- **Nodes** show their type, name and finding count. The badge colour is the node's highest severity. A green check means no findings.
+- **Hover** a node to highlight its lineage: everything it depends on and everything that depends on it.
+- **The legend** at the top names the node types and severity colours. **Map** turns the minimap on or off.
+- **Zoom** with the controls at the bottom left. The last control fits the whole graph back on screen.
 
-*The dependency map shows the complete relationship between repositories, workflows, and actions, helping you understand your CI/CD supply chain.*
+{{< shot name="dependency-map" alt="The full dependency graph of the goat repository fitted on screen, with the minimap in the corner" >}}
+The same audit fitted to the screen. Workflows form the long column and shared actions sit to their right.
+{{< /shot >}}
 
-Click on any node to see detailed security issues, evidence, and mitigation strategies.
+## Inspect a node
 
-### Statistics Dashboard
+Click a node to open its details panel.
 
-Get an instant overview of your security posture with comprehensive statistics and metrics.
+{{< shot name="node-details" alt="The node details panel for PRTargetWorkflow.yml showing its type, ID, GitHub link and dependency chain" >}}
+Details for `PRTargetWorkflow.yml`.
+{{< /shot >}}
 
-![Statistics Dashboard](/images/stats.png)
+The panel shows:
 
-*The statistics dashboard provides key metrics at a glance: total nodes, dependencies, and security issues. The severity breakdown helps you prioritize fixes, with color-coded indicators for critical, high, medium, and low severity issues. Click on any metric to filter and explore specific areas.*
+- **Name, type and node ID**, plus the repository that was scanned.
+- **Open on GitHub**, linking to the file at the audited ref.
+- **Dependency chain**: what depends on this node, and what this node depends on. Click any chip to jump to that node.
+- **Security issues**: every finding on this node. Click one to open it.
 
-The dashboard shows:
-- **Total Nodes**: All repositories, workflows, and actions in your analysis
-- **Total Dependencies**: Number of dependency relationships
-- **Total Security Issues**: Count of all detected vulnerabilities
-- **Severity Breakdown**: Issues categorized by severity level (critical, high, medium, low)
-- **View Mode Toggle**: Switch between graph and table views
+### Finding details
 
-### Powerful Search & Filtering
+{{< shot name="issue-details" alt="The details of a dangerous_event finding: description, mitigation, the triggering event as evidence, and a link to the docs" >}}
+A `dangerous_event` finding with the event that triggered it.
+{{< /shot >}}
 
-Search across all nodes, issues, and dependencies with natural language queries.
+Each finding explains the risk, gives a mitigation, and shows the **evidence** it was raised on: the event, step, line or value in the workflow. The link at the bottom opens that check's page in the [check reference](/vulnerabilities/).
 
-![Search Functionality](/images/search.png)
+### Share a node
 
-*Press Cmd+K (Mac) or Ctrl+K (Windows/Linux) to open the powerful search interface. Search for specific issues, nodes, or actions to quickly find what you're looking for.*
+**Share** in the panel header creates a link to that node and its findings.
 
-- **Natural language search**: Use Cmd+K (Mac) or Ctrl+K (Windows/Linux) to search for issues and assets
-- **Filter by severity**: Focus on critical or high-severity issues
-- **Table views**: View nodes and dependencies in organized table formats
-- **Transitive dependency analysis**: Automatically resolves and audits all action dependencies
+{{< shot name="share" alt="The Share Node Details dialog with a shareable link and a Copy button" >}}{{< /shot >}}
 
-![Search Results Page](/images/search-result-page.png)
+The node and its findings are encoded in the link itself, so nothing is stored on a server. Whoever opens it sees the same panel and can run the full audit from there.
 
-*The search results page provides a comprehensive view of all matching results, organized by type. Click on any result to view detailed information.*
+## Search and tables
 
-### Table Views
+### Search
 
-View your data in organized table formats for detailed analysis and reporting.
+Press <kbd>⌘</kbd> <kbd>K</kbd> (<kbd>Ctrl</kbd> <kbd>K</kbd> on Windows and Linux), or click the search box above the graph. Search matches finding types, messages, node names, owners and paths.
 
-![Nodes Table View](/images/table-view-nodes.png)
+{{< shot name="search" alt="The search overlay with results for 'secret', each showing severity, finding type, message and node" >}}
+Searching for `secret`. Press <kbd>Enter</kbd> to open the top result.
+{{< /shot >}}
 
-*The nodes table provides a structured view of all components (repositories, workflows, and actions) with their associated security issues. Sort and filter to focus on specific areas of concern.*
+When there are more than eight matches, **View all** opens a results page grouped by severity. From there, **View Details** opens the finding and **Go to Node** shows it in the graph.
 
-![Security Issues Table](/images/security-issue-table.png)
+{{< shot name="search-result-page" alt="The search results page listing 37 results for 'secret', grouped by severity" >}}{{< /shot >}}
 
-*The security issues table gives you a comprehensive inventory of all detected vulnerabilities. Filter by severity, sort by type, and click to view detailed information about each issue.*
+### Findings table
 
-Table views provide:
-- **Organized data**: Sortable and filterable columns
-- **Quick scanning**: See all issues or nodes at once
-- **Detailed information**: Access full details with a single click
-- **Export-ready**: Perfect for reporting and documentation
+Select **Findings** in the sidebar to list every finding across the audit, critical first, with its node and message. Click a row to open the finding.
 
-### Node Details Panel
+{{< shot name="security-issue-table" alt="The security issues table with severity, type, node, message and action columns" >}}{{< /shot >}}
 
-Drill down into specific components to see detailed information and security issues.
+### Dependency paths
 
-![Node Details Panel](/images/node-details.png)
+Select **Edges** to list every path from the repository to each dependency, with its depth and the number of findings along it. Expand a row to see each step of the chain.
 
-*Click on any node in the graph to open the details panel. View all security issues associated with that component, see its dependencies and dependents, and access GitHub links for further investigation.*
+{{< shot name="dependencies-table" alt="The transitive dependencies table listing paths from the repository to alpine:3.10, tj-actions/glob and actions/checkout" >}}{{< /shot >}}
 
-The node details panel shows:
-- **Component information**: Type, name, and metadata
-- **Security issues**: All vulnerabilities found in this component
-- **Dependencies**: What this component depends on
-- **Dependents**: What depends on this component
-- **GitHub links**: Direct links to source code
-- **Share functionality**: Share specific nodes with your team
+### Nodes table
 
-### Issue Details Modal
+Switch to **Table** to list every node with its type, finding count and highest severity.
 
-Get comprehensive information about each security vulnerability with actionable remediation guidance.
+{{< shot name="table-view-nodes" alt="The nodes table listing the repository, workflows and actions with their finding counts and severities" >}}{{< /shot >}}
 
-![Issue Details Modal](/images/issue-details.png)
+## Fix a workflow
 
-*Click on any security issue to view detailed information including evidence, recommendations, and links to comprehensive documentation. Each issue includes step-by-step mitigation strategies to help you fix the problem.*
+The secure workflow editor audits YAML you paste in, suggests line-level fixes, and applies them for you. Open it with **Secure workflow** on the start screen or **Create a secure workflow** in the sidebar.
 
-Each issue includes:
-- **Issue description**: Clear explanation of the vulnerability
-- **Evidence**: Specific details about where and how the issue was found
-- **Line numbers**: Exact locations in workflow files (when available)
-- **Recommendations**: Step-by-step guidance on how to fix the issue
-- **Documentation links**: Deep links to comprehensive vulnerability documentation on actsense.dev
-- **Other instances**: See if the same issue appears elsewhere
+{{< shot name="secure-workflow-editor" alt="The Secure Workflow Creator with a pasted workflow on the left and suggested fixes with diffs on the right" >}}
+Findings on a `pull_request_target` workflow, each with a fix you can apply.
+{{< /shot >}}
 
-### Share Functionality
+<ol class="as-steps as-steps--stack">
+  <li>
+    <span class="as-step-num">1</span>
+    <h3>Paste a workflow</h3>
+    <p>The YAML is validated first. Syntax errors and mixed tabs and spaces are reported with a line number.</p>
+  </li>
+  <li>
+    <span class="as-step-num">2</span>
+    <h3>Secure Workflow</h3>
+    <p>Lists every finding with its line and, where one exists, a fix shown as a diff.</p>
+  </li>
+  <li>
+    <span class="as-step-num">3</span>
+    <h3>Apply fixes</h3>
+    <p><strong>Apply Fix</strong> changes one line. <strong>Apply All Fixes</strong> applies every automatic fix at once. Then run Secure Workflow again to check the result.</p>
+  </li>
+  <li>
+    <span class="as-step-num">4</span>
+    <h3>Analyze &amp; View Graph</h3>
+    <p>Runs the full audit on the edited workflow and opens its dependency graph.</p>
+  </li>
+</ol>
 
-Share analysis results with your team for collaboration and reporting.
+Pinning fixes replace tags with commit SHAs and image tags with digests. They are resolved through [pin.](https://pin.actsense.dev), with the GitHub API as a fallback, so pinning works without a token. When a pin can't be resolved, the fix is marked **manual** and contains a `<SHA>` or `<digest>` placeholder for you to fill in. **Apply All Fixes** skips these.
 
-![Share Functionality](/images/share.png)
+## Good to know
 
-*Generate shareable links for specific nodes or entire analyses. Share security findings with your team, stakeholders, or include in reports and documentation.*
-
-### Multiple Analysis Methods
-
-Choose how you want to analyze repositories:
-
-- **GitHub API**: Fast analysis using GitHub's API (requires token for private repos)
-- **Repository Cloning**: Deep analysis by cloning repositories locally (more thorough)
-- **Secure Workflow Editor**: Paste, analyze, and harden workflow YAML directly without a repository
-
-### Secure Workflow Editor
-
-Analyze workflow YAML files directly without needing a GitHub repository. Use the secure editor flow to test workflow changes before committing and iterate quickly on remediation.
-
-![Secure Workflow Editor](/images/secure-workflow-editor.png)
-
-*The Secure Workflow Editor lets you paste workflow content, run instant security analysis, apply fixes, and re-analyze in a tight loop.*
-
-**Features:**
-- **Direct YAML Input**: Paste any GitHub Actions workflow YAML
-- **Real-time Validation**: YAML syntax validation before analysis
-- **Line Numbers**: IDE-like editor with line numbers for easy navigation
-- **Edit & Re-analyze**: Save workflow state and iterate on security fixes
-- **Same Analysis**: Full security audit with dependency resolution, just like repository analysis
-- **Error Display**: Clear error messages for validation and analysis issues
-
-**How to use:**
-1. Click the secure workflow editor entry in the sidebar
-2. Paste your workflow YAML content
-3. Click "Analyze Workflow" to run security analysis
-4. View results in the same graph visualization as repository audits
-5. Edit the YAML and re-analyze to iterate on fixes
-
-The editor validates YAML syntax before analysis and displays clear error messages if validation fails. After successful analysis, the workflow content is saved so you can easily edit and re-analyze.
-
-### Analysis History
-
-- **Save analyses**: Store audit results for later review
-- **Load previous analyses**: Access your audit history
-- **Compare results**: Track security improvements over time
-
-### Detailed Documentation
-
-Each security issue includes:
-
-- **Clear descriptions**: Understand what the vulnerability is
-- **Evidence**: See exactly where and how the issue was found
-- **Mitigation strategies**: Step-by-step guidance on how to fix issues
-- **External references**: Links to comprehensive documentation on actsense.dev
-
-### Modern User Interface
-
-actsense features a clean, professional interface built with React that provides:
-
-- **Intuitive navigation**: Easy-to-use interface for exploring results
-- **Responsive design**: Works on desktop and mobile devices
-- **Dark mode support**: Comfortable viewing in any lighting condition
-- **Interactive controls**: Zoom, pan, and filter the dependency graph
-
-## Key Features
-
-### Real-Time Analysis
-
-Get instant security analysis results as you audit repositories and actions. The platform processes workflows in real-time and provides immediate feedback on security issues.
-
-### Dependency Resolution
-
-actsense automatically resolves transitive dependencies, meaning it:
-
-1. Analyzes your workflows
-2. Identifies all actions used
-3. Recursively analyzes each action's dependencies
-4. Builds a complete dependency graph
-5. Audits everything for security issues
-
-### Severity-Based Prioritization
-
-Issues are categorized by severity to help you prioritize fixes:
-
-- **Critical**: Immediate security risks requiring urgent attention
-- **High**: Significant security concerns that should be addressed soon
-- **Medium**: Moderate security issues to address in regular maintenance
-- **Low**: Minor security concerns and best practice recommendations
-
-### Evidence & Recommendations
-
-Every security issue includes:
-
-- **Evidence**: Specific details about where the issue was found
-- **Line numbers**: Exact locations in workflow files (when available)
-- **Recommendations**: Actionable steps to fix the issue
-- **Documentation links**: Deep links to comprehensive vulnerability documentation
-
-## Use Cases
-
-### Security Auditing
-
-Regularly audit your GitHub Actions workflows to identify and fix security vulnerabilities before they can be exploited.
-
-### CI/CD Pipeline Security
-
-Ensure your CI/CD pipelines are secure by analyzing all workflows and their dependencies for potential security risks.
-
-### Compliance & Best Practices
-
-Maintain compliance with security best practices by identifying deviations from recommended configurations.
-
-### Supply Chain Security
-
-Protect against supply chain attacks by identifying untrusted actions, outdated dependencies, and potential typosquatting.
-
-### Onboarding & Training
-
-Use actsense to educate team members about GitHub Actions security by showing real examples of vulnerabilities in their workflows.
-
-## Getting Started
-
-Ready to start using actsense? Check out our [Getting Started guide](/getting-started/) for installation and setup instructions.
+<div class="as-ui-list">
+  <div>
+    <strong>Light and dark</strong>
+    <p>The button next to <strong>Docs</strong> cycles between system, light and dark themes. Your choice is remembered in the browser.</p>
+  </div>
+  <div>
+    <strong>Your data stays local</strong>
+    <p>actsense runs as one self-hosted container. Saved analyses live in its <code>data</code> directory, and tokens are never written to disk.</p>
+  </div>
+  <div>
+    <strong>Automate it</strong>
+    <p>Everything the app does goes through the HTTP API. See the <a href="/api-reference/">API reference</a> to run audits from scripts or CI.</p>
+  </div>
+  <div>
+    <strong>Every check is documented</strong>
+    <p>Each finding type has a page explaining the risk, a vulnerable example and a fix. <a href="/vulnerabilities/">Browse the checks</a>.</p>
+  </div>
+</div>
 
 {{< callout type="info" >}}
-**New to actsense?** Start with our [Getting Started guide](/getting-started/) to learn how to run your first security audit.
+**Haven't installed actsense yet?** The [Getting Started guide](/getting-started/) takes you from `docker run` to your first audit.
 {{< /callout >}}

@@ -1,0 +1,24 @@
+{{- /*
+  An app screenshot that follows the docs theme: the light capture shows on
+  the light theme, the dark capture on the dark one.
+
+    {{< shot name="graph" alt="..." >}}Optional caption, in Markdown.{{< /shot >}}
+
+  Reads assets/images/usage/<name>.webp and <name>-dark.webp.
+  size="small" keeps a narrow capture at its own width.
+*/ -}}
+{{- $name := .Get "name" -}}
+{{- $alt := .Get "alt" -}}
+{{- $light := resources.Get (printf "images/usage/%s.webp" $name) -}}
+{{- $dark := resources.Get (printf "images/usage/%s-dark.webp" $name) -}}
+{{- if not (and $light $dark) }}{{ errorf "shot: missing images/usage/%s[-dark].webp (%s)" $name .Position }}{{ end -}}
+{{- $caption := trim .Inner "\n " -}}
+<figure class="as-shot-fig{{ with .Get "size" }} as-shot-fig--{{ . }}{{ end }}">
+  <div class="as-shot-frame">
+    <img class="as-shot-light" src="{{ $light.RelPermalink }}" alt="{{ $alt }}" width="{{ $light.Width }}" height="{{ $light.Height }}" loading="lazy" decoding="async">
+    <img class="as-shot-dark" src="{{ $dark.RelPermalink }}" alt="{{ $alt }}" width="{{ $dark.Width }}" height="{{ $dark.Height }}" loading="lazy" decoding="async">
+  </div>
+  {{- with $caption }}
+  <figcaption>{{ . | markdownify }}</figcaption>
+  {{- end }}
+</figure>
