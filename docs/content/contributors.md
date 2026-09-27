@@ -1,40 +1,77 @@
 ---
 title: "Contributors"
-description: "Thank you to all contributors who help make actsense better"
+description: "Meet the people and organizations building and supporting actsense"
 toc: false
 ---
 
-## Contributors
+<div class="contributors-intro">
+  <p class="contributors-intro__eyebrow">Built in the open</p>
+  <p class="contributors-intro__lead">The people behind the rules, research, dependency graph, pinning service, and product experience.</p>
+</div>
 
-<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem; margin: 2rem 0;">
-  {{< contributor 
+## People shaping actsense
+
+<div class="contributors-grid">
+  {{< contributor
     name="Kumar Ashwin"
+    role="Creator & maintainer"
     image="/kumar-ashwin.jpeg"
     linkedin="https://www.linkedin.com/in/0xCardinal"
     twitter="https://x.com/0xCardinal"
     github="https://github.com/0xCardinal"
-    contributions="Built this tool to find security issues before they find me. Still debugging my own workflows."
+    contributions="Created actsense and leads its security rules, dependency graph, and product direction."
+    focus="Security engine, Dependency graph, Product"
+    featured="true"
   >}}
-  
-  {{< contributor 
+
+  {{< contributor
     name="Shashank Mirji"
+    role="Security contributor"
     image="/shashank.jpeg"
     linkedin="https://www.linkedin.com/in/smirji/"
     github="https://github.com/shashank18"
-    contributions="Contributed to vulnerability research and refinement, identifying and validating security patterns that matter most in an enterprise."
+    contributions="Contributed vulnerability research and refinement, identifying and validating security patterns that matter in enterprise workflows."
+    focus="Vulnerability research, Rule validation"
+  >}}
+
+  {{< contributor
+    name="Yash Dave"
+    role="Software engineer & open-source contributor"
+    image="/yash-dave.jpg"
+    website="https://amorpheuz.dev/about/"
+    contributions="Built pin.actsense.dev and its integration into the editor, including full workflow-file support, multi-action resolution, and focused UI/UX improvements."
+    focus="pin.actsense.dev, Workflow files, Multi-action support, UI/UX"
   >}}
 </div>
 
-## Supporters
+## Project supporters
 
-<div style="display: flex; justify-content: center; align-items: center; margin: 1.5rem 0 2rem;">
-  <a href="https://redhuntlabs.com" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.9rem 1.1rem; border-radius: 0.9rem; border: 1px solid hsl(var(--border) / 0.7); background: hsl(var(--background) / 0.58); text-decoration: none; color: hsl(var(--foreground)); font-weight: 600; box-shadow: 0 10px 30px -24px rgba(0, 0, 0, 0.55); backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);">
-    <img class="redhunt-sponsor-logo-light" src="https://redhuntlabs.com/wp-content/uploads/2023/12/cropped-logo.png" alt="RedHunt Labs" />
-    <img class="redhunt-sponsor-logo-dark" src="https://redhuntlabs.com/wp-content/uploads/2023/03/Website-Horizontal-Dark-background-400-x-100-px-05-1.webp" alt="RedHunt Labs" />
-  </a>
+<p class="supporters-intro">Organizations helping actsense grow as an open-source workflow security project.</p>
+
+<div class="supporters-grid">
+  {{< supporter
+    name="RedHunt Labs"
+    logo="https://redhuntlabs.com/wp-content/uploads/2023/03/Website-Horizontal-Dark-background-400-x-100-px-05-1.webp"
+    website="https://redhuntlabs.com"
+    description="Security research and attack-surface expertise."
+  >}}
+
+  {{< supporter
+    name="Cyfinoid Research"
+    logo="/cyfinoid.png"
+    website="https://cyfinoid.com/"
+    description="Cybersecurity research and hands-on training across software supply chain, cloud, and AI security."
+  >}}
 </div>
 
-## How to Contribute
-
-See [CONTRIBUTING.md](https://github.com/0xCardinal/actsense/blob/main/CONTRIBUTING.md) on GitHub to learn how to contribute. Issues are listed with ways you can contribute. If you have something new in mind, [open an issue](https://github.com/0xCardinal/actsense/issues).
-
+<section class="contribute-callout" aria-labelledby="contribute-title">
+  <div>
+    <p class="contribute-callout__eyebrow">Your name could be here</p>
+    <h2 id="contribute-title">Help make workflow security easier to understand.</h2>
+    <p>Improve a rule, validate a finding, polish the interface, or bring a new CI platform into the graph.</p>
+  </div>
+  <div class="contribute-callout__actions">
+    <a class="actsense-cta" href="https://github.com/0xCardinal/actsense/blob/main/CONTRIBUTING.md">Read the contribution guide</a>
+    <a class="contribute-callout__link" href="https://github.com/0xCardinal/actsense/issues">Browse open issues <span aria-hidden="true">&rarr;</span></a>
+  </div>
+</section>
