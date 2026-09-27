@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--scrim);
   z-index: 9998;
   animation: fadeIn 0.3s ease-out;
   backdrop-filter: blur(3px);
@@ -98,11 +98,11 @@
 }
 
 .yaml-editor-error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
   border-radius: 6px;
   padding: 0.75rem 1rem;
-  color: #dc2626;
+  color: var(--danger-ink);
   font-size: 0.8125rem;
   flex-shrink: 0;
 }
@@ -113,11 +113,11 @@
 }
 
 .yaml-editor-validation-error {
-  background: #fef3c7;
-  border: 1px solid #fbbf24;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
   border-radius: 6px;
   padding: 0.75rem 1rem;
-  color: #92400e;
+  color: var(--warn-ink);
   font-size: 0.8125rem;
   flex-shrink: 0;
 }
@@ -152,7 +152,7 @@
   min-height: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fafafa;
+  background: var(--surface-sunken);
   overflow: hidden;
 }
 
@@ -247,8 +247,8 @@
 
 .yaml-fix-rate-warning {
   font-size: 0.6875rem;
-  color: #b45309;
-  background: #fef3c7;
+  color: var(--warn-ink);
+  background: var(--warn-bg);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   white-space: nowrap;
@@ -259,7 +259,7 @@
   font-size: 0.75rem;
   font-weight: 500;
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-inverse);
   border: none;
   border-radius: 5px;
   cursor: pointer;
@@ -267,7 +267,7 @@
 }
 
 .yaml-fix-apply-all:hover {
-  background: #1f2937;
+  background: var(--inverse-hover);
 }
 
 .yaml-editor-fixes-list {
@@ -289,8 +289,8 @@
 }
 
 .yaml-fix-card.yaml-fix-applied {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
+  background: var(--success-bg);
+  border-color: var(--success-border);
 }
 
 .yaml-fix-card.yaml-issue-only {
@@ -363,7 +363,7 @@
   font-size: 0.75rem;
   font-weight: 500;
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-inverse);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -371,7 +371,7 @@
 }
 
 .yaml-fix-apply:hover {
-  background: #1f2937;
+  background: var(--inverse-hover);
 }
 
 .yaml-fix-applied-label {
@@ -380,7 +380,7 @@
   gap: 0.25rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: #16a34a;
+  color: var(--sev-none);
 }
 
 /* Footer */
@@ -403,7 +403,7 @@
   gap: 0.5rem;
   padding: 0.625rem 1.25rem;
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-inverse);
   border: 1px solid var(--ink);
   border-radius: 6px;
   font-size: 0.875rem;
@@ -416,7 +416,7 @@
 }
 
 .yaml-editor-secure-button:hover:not(:disabled) {
-  background: #1f2937;
+  background: var(--inverse-hover);
 }
 
 .yaml-editor-secure-button:disabled {
@@ -537,7 +537,7 @@
 }
 
 .yaml-fix-manual {
-  color: #92400e;
-  background: #fffbeb;
-  border-color: #fde68a;
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
 }

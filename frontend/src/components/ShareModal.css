@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--scrim);
   z-index: 10004;
   animation: fadeIn 0.2s ease-out;
   backdrop-filter: blur(4px);
@@ -141,7 +141,7 @@
 
 .share-link-input:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: var(--accent);
   background: var(--surface);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
@@ -149,7 +149,7 @@
 .share-copy-button {
   padding: 0.75rem 1.5rem;
   background: var(--ink);
-  color: #ffffff;
+  color: var(--on-inverse);
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -161,7 +161,7 @@
 }
 
 .share-copy-button:hover {
-  background: #1f2937;
+  background: var(--inverse-hover);
 }
 
 .share-copy-button:active {

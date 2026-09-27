@@ -1,14 +1,12 @@
 import React from 'react'
 import './HomeBackdrop.css'
 
-// Home page backdrop: a grainy blue-to-orange bloom rising from the bottom
-// edge, echoed by a faint wash of the same colours behind the brand.
+// Home page backdrop: the docs homepage's grainy horizon band, running
+// behind the search card and fading out before the footer.
 function HomeBackdrop() {
   return (
     <div className="home-backdrop" aria-hidden="true">
-      <div className="home-halo" />
-      <div className="home-bloom" />
-      <div className="home-bloom-grain" />
+      <div className="home-horizon" />
       <div className="home-grain" />
     </div>
   )

@@ -51,7 +51,7 @@
 }
 
 .graph-node.is-highlighted {
-  border-color: #bfd0fb;
+  border-color: var(--accent-border);
 }
 
 .graph-node.is-selected {
@@ -158,7 +158,7 @@
   place-items: center;
   border-radius: 50%;
   color: var(--sev-none);
-  background: #ecfdf3;
+  background: var(--success-bg);
 }
 
 .graph-node-handle.react-flow__handle {
@@ -204,6 +204,7 @@
 
 .action-graph .react-flow__minimap {
   margin: 12px;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
@@ -234,7 +235,7 @@
   max-width: calc(100% - 256px);
   height: 34px;
   padding: 0 6px 0 12px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--glass);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -314,8 +315,8 @@
   height: 32px;
   padding: 0 14px;
   background: var(--ink);
-  color: #fff;
-  border: 1px solid #0b1220;
+  color: var(--on-inverse);
+  border: 1px solid var(--btn-border);
   border-radius: var(--radius-md);
   font-size: 0.8125rem;
   font-weight: 500;

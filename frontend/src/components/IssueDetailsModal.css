@@ -4,7 +4,7 @@
   right: 0.75rem;
   width: 700px;
   height: calc(100vh - 1.5rem);
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--scrim);
   z-index: 10002;
   animation: fadeIn 0.2s ease-out;
   backdrop-filter: blur(4px);
@@ -70,15 +70,15 @@
 }
 
 .verification-pill.verified {
-  background-color: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background-color: var(--danger-bg);
+  color: var(--danger-ink);
+  border: 1px solid var(--danger-border);
 }
 
 .verification-pill.unverified {
-  background-color: #fef3c7;
-  color: #d97706;
-  border: 1px solid #fde68a;
+  background-color: var(--warn-bg);
+  color: var(--warn-ink);
+  border: 1px solid var(--warn-border);
 }
 
 .issue-modal-header h3 {
@@ -254,18 +254,18 @@
   line-height: 1.6;
   font-family: var(--font-sans);
   white-space: pre-line;
-  background: #f0f9ff;
+  background: var(--accent-soft);
   padding: 1rem;
   border-radius: 6px;
-  border: 1px solid #bae6fd;
+  border: 1px solid var(--accent-border);
 }
 
 .mitigation-message {
   padding: 1rem;
-  background: #fef3c7;
-  border: 1px solid #fbbf24;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
   border-radius: 6px;
-  color: #92400e;
+  color: var(--warn-ink);
   font-size: 0.9375rem;
   line-height: 1.6;
   font-family: var(--font-sans);
@@ -325,29 +325,29 @@
 
 .actsense-reference {
   padding: 1rem;
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
   border-radius: 6px;
   margin-top: 1rem;
 }
 
 .actsense-reference-text {
   margin: 0;
-  color: #0c4a6e;
+  color: var(--info-ink);
   font-size: 0.9375rem;
   line-height: 1.6;
   font-family: var(--font-sans);
 }
 
 .actsense-link {
-  color: #0284c7;
+  color: var(--info-ink);
   text-decoration: underline;
   font-weight: 500;
   transition: color 0.15s ease;
 }
 
 .actsense-link:hover {
-  color: #0369a1;
+  color: var(--info-ink);
   text-decoration: underline;
 }
 

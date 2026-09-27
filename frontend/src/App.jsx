@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import InputForm from './components/InputForm'
+import ThemeToggle from './components/ThemeToggle'
 import ActionGraph from './components/ActionGraph'
 import Statistics from './components/Statistics'
 import NodeDetailsPanel from './components/NodeDetailsPanel'
@@ -534,6 +535,7 @@ function App() {
               </svg>
               <span>Docs</span>
             </a>
+            <ThemeToggle className="theme-toggle--quiet" />
             <div className="home-history">
               <AnalysisHistory onLoadAnalysis={handleLoadAnalysis} popover />
             </div>
@@ -544,30 +546,33 @@ function App() {
         <aside className="sidebar" aria-label="Audit controls">
           <header className="sidebar-header">
             <h1 onClick={handleReset} title="Start over">actsense</h1>
-            <a
-              className="sidebar-doc-link"
-              href="https://actsense.dev/vulnerabilities/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
+            <div className="sidebar-header-actions">
+              <a
+                className="sidebar-doc-link"
+                href="https://actsense.dev/vulnerabilities/"
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                <path
-                  d="M12 6c0-1.1-.9-2-2-2H4a2 2 0 0 0-2 2v12a.5.5 0 0 0 .8.4c.7-.52 1.56-.84 2.5-.84h4.7a2 2 0 0 1 2 2V6Zm0 0c0-1.1.9-2 2-2h6a2 2 0 0 1 2 2v12a.5.5 0 0 1-.8.4 4 4 0 0 0-2.5-.84H14a2 2 0 0 0-2 2V6Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span>Docs</span>
-            </a>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M12 6c0-1.1-.9-2-2-2H4a2 2 0 0 0-2 2v12a.5.5 0 0 0 .8.4c.7-.52 1.56-.84 2.5-.84h4.7a2 2 0 0 1 2 2V6Zm0 0c0-1.1.9-2 2-2h6a2 2 0 0 1 2 2v12a.5.5 0 0 1-.8.4 4 4 0 0 0-2.5-.84H14a2 2 0 0 0-2 2V6Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span>Docs</span>
+              </a>
+              <ThemeToggle />
+            </div>
           </header>
 
           <div className="sidebar-body">

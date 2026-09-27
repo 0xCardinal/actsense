@@ -1,0 +1,39 @@
+/* Square companion to the sidebar's Docs button. */
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-xs), var(--bevel);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.theme-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.theme-toggle:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+/* On the home footer it is a quiet text-row icon like the Docs link. */
+.theme-toggle--quiet {
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--ink-3);
+}
+
+.theme-toggle--quiet:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}

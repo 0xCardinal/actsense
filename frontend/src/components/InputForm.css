@@ -42,7 +42,7 @@
 .input-kind.action {
   color: var(--accent);
   background: var(--accent-soft);
-  border-color: #c7d7fe;
+  border-color: var(--accent-border);
 }
 
 .form-group input[type="text"],
@@ -95,7 +95,7 @@
 }
 
 .form-group small.field-error {
-  color: #b91c1c;
+  color: var(--danger-ink);
   font-weight: 500;
 }
 
@@ -117,11 +117,11 @@
 .submit-button {
   position: relative;
   height: 38px;
-  background: linear-gradient(180deg, #1f2937 0%, var(--ink) 100%);
-  border: 1px solid #0b1220;
+  background: linear-gradient(180deg, var(--btn-top) 0%, var(--btn-bottom) 100%);
+  border: 1px solid var(--btn-border);
   border-radius: var(--radius-md);
   padding: 0 14px;
-  color: #fff;
+  color: var(--on-inverse);
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
