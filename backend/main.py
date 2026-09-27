@@ -20,6 +20,7 @@ from security_auditor import SecurityAuditor
 from graph_builder import GraphBuilder
 from repo_cloner import RepoCloner, CloneError
 from analysis_storage import AnalysisStorage
+from dismissals import DismissalStore, apply_dismissals
 import pin_client
 
 app = FastAPI(
@@ -48,6 +49,7 @@ parser = WorkflowParser()
 auditor = SecurityAuditor()
 cloner = RepoCloner()
 storage = AnalysisStorage()
+dismissals = DismissalStore()
 logger = logging.getLogger(__name__)
 
 # Serve frontend static files if they exist (for production builds)
@@ -70,6 +72,11 @@ class AuditRequest(BaseModel):
     action: Optional[str] = None
     github_token: Optional[str] = None
     use_clone: bool = False  # New option to use clone instead of API
+
+
+class DismissRequest(BaseModel):
+    fingerprint: str
+    reason: str = ""
 
 
 class AuditYAMLRequest(BaseModel):
@@ -605,6 +612,7 @@ async def _run_audit(request: AuditRequest, log_fn: Optional[Callable[[str], Non
 
         if log_fn:
             log_fn("Building final graph...")
+        apply_dismissals(graph.nodes.values(), dismissals.get(repository or action))
         graph_data = graph.get_graph_data()
         statistics = graph.get_statistics()
 
@@ -615,7 +623,13 @@ async def _run_audit(request: AuditRequest, log_fn: Optional[Callable[[str], Non
             statistics=statistics,
             method="clone" if request.use_clone else "api"
         )
-        return {"id": analysis_id, "graph": graph_data, "statistics": statistics}
+        return {
+            "id": analysis_id,
+            "repository": repository,
+            "action": action,
+            "graph": graph_data,
+            "statistics": statistics,
+        }
     finally:
         await _close_client(client)
 
@@ -1312,6 +1326,9 @@ async def _audit_inline_workflow(request: AuditYAMLRequest, workflow: Dict[str, 
 
     _add_workflow_container_image_nodes(graph, workflow, workflow_node_id, workflow_issues)
 
+    # An inline workflow has no target to remember dismissals against; this
+    # only gives its findings fingerprints.
+    apply_dismissals(graph.nodes.values(), {})
     graph_data = graph.get_graph_data()
     statistics = graph.get_statistics()
 
@@ -1359,13 +1376,61 @@ async def list_analyses(repository: Optional[str] = None, limit: int = 50):
     return storage.list_analyses(limit=limit, repository=repository)
 
 
-@app.get("/api/analyses/{analysis_id}")
-async def get_analysis(analysis_id: str):
-    """Get a specific analysis by ID."""
+def _analysis_target(analysis: Dict[str, Any]) -> Optional[str]:
+    return analysis.get("repository") or analysis.get("action")
+
+
+def _load_analysis(analysis_id: str) -> Dict[str, Any]:
+    """A stored analysis with the target's current dismissals applied.
+
+    Dismissals live apart from analyses, so one made on any run of a target
+    shows on every run of it, including ones stored before it was made.
+    """
     analysis = storage.get_analysis(analysis_id)
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
+    graph = GraphBuilder.from_graph_data(analysis.get("graph", {}))
+    apply_dismissals(graph.nodes.values(), dismissals.get(_analysis_target(analysis)))
+    analysis["graph"] = graph.get_graph_data()
+    analysis["statistics"] = graph.get_statistics()
     return analysis
+
+
+@app.get("/api/analyses/{analysis_id}")
+async def get_analysis(analysis_id: str):
+    """Get a specific analysis by ID."""
+    return _load_analysis(analysis_id)
+
+
+@app.post("/api/analyses/{analysis_id}/dismissals")
+async def dismiss_issue(analysis_id: str, request: DismissRequest):
+    """Dismiss a finding for this analysis's target; returns the updated analysis."""
+    analysis = _load_analysis(analysis_id)
+    target = _analysis_target(analysis)
+    if not target:
+        raise HTTPException(status_code=400, detail="Only repository and action audits can dismiss findings")
+    for node in analysis["graph"]["nodes"]:
+        issue = next((i for i in node.get("issues", []) if i.get("fingerprint") == request.fingerprint), None)
+        if issue:
+            dismissals.add(target, request.fingerprint, issue, node["id"], request.reason)
+            return _load_analysis(analysis_id)
+    raise HTTPException(status_code=404, detail="Finding not found in this analysis")
+
+
+@app.delete("/api/analyses/{analysis_id}/dismissals/{fingerprint}")
+async def restore_issue(analysis_id: str, fingerprint: str):
+    """Undo a dismissal; returns the updated analysis."""
+    analysis = _load_analysis(analysis_id)
+    target = _analysis_target(analysis)
+    if not target or not dismissals.remove(target, fingerprint):
+        raise HTTPException(status_code=404, detail="Dismissal not found")
+    return _load_analysis(analysis_id)
+
+
+@app.get("/api/dismissals")
+async def list_dismissals(target: str):
+    """Dismissed findings for a repository or action."""
+    return dismissals.list(target)
 
 
 @app.delete("/api/analyses/{analysis_id}")

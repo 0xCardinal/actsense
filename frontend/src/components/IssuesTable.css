@@ -140,3 +140,45 @@
   border: 1px solid var(--line);
 }
 
+
+.issues-table-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.show-dismissed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.show-dismissed input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.issues-table-row.is-dismissed td {
+  opacity: 0.55;
+}
+
+.issues-table-row.is-dismissed .severity-badge {
+  filter: grayscale(1);
+}
+
+.dismissed-chip {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  vertical-align: middle;
+}

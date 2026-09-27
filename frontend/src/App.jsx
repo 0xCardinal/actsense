@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import InputForm from './components/InputForm'
 import ThemeToggle from './components/ThemeToggle'
@@ -14,11 +14,15 @@ import SearchOverlay from './components/SearchOverlay'
 import SearchResultsPage from './components/SearchResultsPage'
 import YAMLEditorPanel from './components/YAMLEditorPanel'
 import HomeBackdrop from './components/HomeBackdrop'
+import { DismissalContext, withoutDismissed } from './dismissals'
 import './App.css'
 
 function App() {
   const [graphData, setGraphData] = useState(null)
   const [statistics, setStatistics] = useState(null)
+  // Which stored analysis is on screen, and the repository or action it
+  // audited (dismissals are remembered per target).
+  const [analysisMeta, setAnalysisMeta] = useState(null)
   const [loading, setLoading] = useState(false)
   const [loadingStage, setLoadingStage] = useState('')
   const [loadingLogs, setLoadingLogs] = useState([])
@@ -58,6 +62,17 @@ function App() {
     const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
     return () => clearInterval(timer)
   }, [loading])
+
+  const showAnalysis = useCallback((analysis) => {
+    setGraphData(analysis?.graph || null)
+    setStatistics(analysis?.statistics || null)
+    setAnalysisMeta(analysis?.id
+      ? { id: analysis.id, target: analysis.repository || analysis.action || null }
+      : null)
+  }, [])
+
+  // Every view but the findings table works on active findings only.
+  const visibleGraph = useMemo(() => withoutDismissed(graphData), [graphData])
 
   const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform)
 
@@ -99,8 +114,7 @@ function App() {
 
   // Reset application state
   const handleReset = () => runLayoutTransition(() => {
-    setGraphData(null)
-    setStatistics(null)
+    showAnalysis(null)
     setError(null)
     setSelectedNode(null)
     setSelectedIssue(null)
@@ -155,11 +169,11 @@ function App() {
   }, [graphData])
 
   const findOtherIssueInstances = useCallback((issue) => {
-    if (!graphData?.nodes || !issue?.type) {
+    if (!visibleGraph?.nodes || !issue?.type) {
       return []
     }
 
-    return graphData.nodes.flatMap(node => {
+    return visibleGraph.nodes.flatMap(node => {
       if (node.id === issue.nodeId) {
         return []
       }
@@ -172,7 +186,7 @@ function App() {
           id: node.id,
         }))
     })
-  }, [graphData])
+  }, [visibleGraph])
 
   const handleIssueSelect = useCallback((issue) => {
     setSelectedNode(null)
@@ -257,8 +271,7 @@ function App() {
       }
       
       const result = await response.json()
-      setGraphData(result.graph)
-      setStatistics(result.statistics)
+      showAnalysis(result)
       setShareMode(false)
       setRepositoryAuditStatus({ isAudited: true })
       
@@ -297,8 +310,7 @@ function App() {
       const response = await fetch(`/api/analyses/${analysisId}`)
       if (response.ok) {
         const analysis = await response.json()
-        setGraphData(analysis.graph)
-        setStatistics(analysis.statistics)
+        showAnalysis(analysis)
         setShareMode(false)
         setViewMode('graph')
         
@@ -328,8 +340,7 @@ function App() {
   }
 
   const handleLoadAnalysis = (analysis) => runLayoutTransition(() => {
-    setGraphData(analysis.graph)
-    setStatistics(analysis.statistics)
+    showAnalysis(analysis)
     setError(null)
     // A filter or selection from the previous analysis refers to nodes that
     // may not exist in this one.
@@ -343,6 +354,39 @@ function App() {
       setFormInput(repositoryName)
     }
   })
+
+  // Dismiss or restore a finding. The server answers with the analysis as it
+  // now reads, counts included.
+  const updateDismissal = useCallback(async (request) => {
+    const response = await fetch(`/api/analyses/${analysisMeta.id}/dismissals${request.path}`, {
+      method: request.method,
+      headers: { 'Content-Type': 'application/json' },
+      body: request.body ? JSON.stringify(request.body) : undefined,
+    })
+    if (!response.ok) {
+      let detail = 'Could not update the finding'
+      try {
+        detail = (await response.json()).detail || detail
+      } catch {
+        // keep the generic message
+      }
+      throw new Error(detail)
+    }
+    showAnalysis(await response.json())
+  }, [analysisMeta, showAnalysis])
+
+  const dismissalActions = useMemo(() => ({
+    canDismiss: Boolean(analysisMeta?.target) && !shareMode,
+    dismiss: (issue, reason) => updateDismissal({
+      method: 'POST',
+      path: '',
+      body: { fingerprint: issue.fingerprint, reason },
+    }),
+    restore: (issue) => updateDismissal({
+      method: 'DELETE',
+      path: `/${encodeURIComponent(issue.fingerprint)}`,
+    }),
+  }), [analysisMeta, shareMode, updateDismissal])
 
   const handleAudit = async (data) => {
     if (auditAbortRef.current) {
@@ -415,8 +459,7 @@ function App() {
                 receivedResult = true
                 setSelectedNode(null)
                 setSelectedIssue(null)
-                setGraphData(parsed.graph)
-                setStatistics(parsed.statistics)
+                showAnalysis(parsed)
                 setGraphFilter(null)
                 setViewMode('graph')
                 addLog('Audit complete')
@@ -454,6 +497,7 @@ function App() {
   }
 
   return (
+    <DismissalContext.Provider value={dismissalActions}>
     <div className={`app ${isHome ? 'app--home' : ''}`}>
       {isHome ? (
         <main className="home">
@@ -623,7 +667,7 @@ function App() {
           <SearchResultsPage
             searchQuery={searchQuery}
             searchResults={searchResults}
-            graphData={graphData}
+            graphData={visibleGraph}
             onNodeSelect={(node) => {
               setSelectedNode(node)
               setShowSearchResults(false)
@@ -715,7 +759,7 @@ function App() {
             {graphData ? (
               viewMode === 'graph' ? (
                 <ActionGraph 
-                  graphData={graphData} 
+                  graphData={visibleGraph} 
                   onNodeSelect={setSelectedNode}
                   filter={graphFilter}
                   onClearFilter={() => setGraphFilter(null)}
@@ -725,7 +769,7 @@ function App() {
                 // Table view: show different tables based on filter
                 graphFilter?.type === 'has_dependencies' ? (
                   <TransitiveDependenciesTable 
-                    graphData={graphData}
+                    graphData={visibleGraph}
                     onNodeSelect={setSelectedNode}
                     filter={graphFilter}
                   />
@@ -738,7 +782,7 @@ function App() {
                   />
                 ) : (
                   <NodesTable 
-                    graphData={graphData}
+                    graphData={visibleGraph}
                     onNodeSelect={setSelectedNode}
                     filter={graphFilter}
                   />
@@ -784,7 +828,7 @@ function App() {
       {selectedNode && (
         <NodeDetailsPanel 
           node={selectedNode}
-          graphData={graphData}
+          graphData={visibleGraph}
           onClose={() => {
             setSelectedNode(null)
             setShareMode(false)
@@ -814,7 +858,7 @@ function App() {
 
       {showSearchOverlay && graphData && (
         <SearchOverlay
-          graphData={graphData}
+          graphData={visibleGraph}
           onClose={() => setShowSearchOverlay(false)}
           onNodeSelect={(node) => {
             setSelectedIssue(null)
@@ -861,8 +905,7 @@ function App() {
               }
               
               const result = await response.json()
-              setGraphData(result.graph)
-              setStatistics(result.statistics)
+              showAnalysis(result)
               setGraphFilter(null)
               setViewMode('graph')
               
@@ -890,6 +933,7 @@ function App() {
       )}
 
     </div>
+    </DismissalContext.Provider>
   )
 }
 

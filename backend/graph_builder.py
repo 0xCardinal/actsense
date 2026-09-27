@@ -12,6 +12,19 @@ class GraphBuilder:
         self.issues: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         self._edge_keys: Set[Tuple[str, str]] = set()
 
+    @classmethod
+    def from_graph_data(cls, graph_data: Dict[str, Any]) -> "GraphBuilder":
+        """Rebuild a builder from get_graph_data() output, e.g. a stored analysis."""
+        graph = cls()
+        for node in graph_data.get("nodes", []):
+            graph.nodes[node["id"]] = node
+            node.setdefault("issues", [])
+            if node["issues"]:
+                graph.issues[node["id"]] = node["issues"]
+        for edge in graph_data.get("edges", []):
+            graph.add_edge(edge["source"], edge["target"], edge.get("type", "uses"))
+        return graph
+
     def add_node(self, node_id: str, label: str, node_type: str = "action", metadata: Optional[Dict] = None):
         """Add a node to the graph."""
         if node_id not in self.nodes:
@@ -116,7 +129,7 @@ class GraphBuilder:
         """Get graph data in format suitable for visualization."""
         depths = self._compute_depths()
         for node_id, node in self.nodes.items():
-            issues = node.get("issues", [])
+            issues = [i for i in node.get("issues", []) if not i.get("dismissed")]
             node["issue_count"] = len(issues)
             node["depth"] = depths.get(node_id, 0)
             severities = {issue.get("severity", "low") for issue in issues}
@@ -129,24 +142,28 @@ class GraphBuilder:
         }
 
     def _unique_issues(self) -> List[Dict[str, Any]]:
-        """All issues, counting an issue object once even if attached to several nodes.
+        """All issues, counting an issue once even if attached to several nodes.
 
         Findings are deliberately mirrored onto related nodes (a package-install
         finding onto the package node, an unpinned-image finding onto the image
-        node) so the graph is navigable; they are still one finding.
+        node) so the graph is navigable; they are still one finding. Mirrors
+        share one object in a fresh audit and one fingerprint once dismissals
+        are applied (a stored analysis has lost the shared objects).
         """
-        seen: Set[int] = set()
+        seen: Set[Any] = set()
         unique = []
         for issues in self.issues.values():
             for issue in issues:
-                if id(issue) not in seen:
-                    seen.add(id(issue))
+                key = issue.get("fingerprint") or id(issue)
+                if key not in seen:
+                    seen.add(key)
                     unique.append(issue)
         return unique
 
     def get_statistics(self) -> Dict[str, Any]:
         """Get statistics about the graph."""
-        unique_issues = self._unique_issues()
+        all_issues = self._unique_issues()
+        unique_issues = [i for i in all_issues if not i.get("dismissed")]
         severity_counts = defaultdict(int)
         for issue in unique_issues:
             severity_counts[issue.get("severity", "low")] += 1
@@ -157,6 +174,9 @@ class GraphBuilder:
             "total_edges": len(self.edges),
             "total_issues": len(unique_issues),
             "severity_counts": dict(severity_counts),
-            "nodes_with_issues": sum(1 for issues in self.issues.values() if issues),
+            "dismissed_issues": len(all_issues) - len(unique_issues),
+            "nodes_with_issues": sum(
+                1 for issues in self.issues.values() if any(not i.get("dismissed") for i in issues)
+            ),
             "max_depth": max(depths.values(), default=0),
         }
