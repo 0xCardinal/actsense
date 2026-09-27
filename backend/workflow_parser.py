@@ -44,7 +44,11 @@ def _safe_load_workflow_yaml(content: str) -> Any:
     resolver table on yaml.SafeLoader, which would leak into any other
     yaml.safe_load call made while this one is in progress.
     """
-    return yaml.load(content, Loader=_WorkflowYamlLoader)  # noqa: S506 - SafeLoader subclass
+    loader = _WorkflowYamlLoader(content)
+    try:
+        return loader.get_single_data()
+    finally:
+        loader.dispose()
 
 
 class WorkflowParser:

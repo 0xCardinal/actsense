@@ -703,6 +703,26 @@ async def audit_fix(request: AuditYAMLRequest):
         await _close_client(client)
 
 
+def _replace_fetch_depth_zero(line: str) -> Optional[str]:
+    """Return a shallow-checkout replacement for a literal fetch-depth of zero."""
+    key = "fetch-depth:"
+    stripped = line.lstrip()
+    if not stripped.startswith(key):
+        return None
+
+    key_index = len(line) - len(stripped)
+    value_start = key_index + len(key)
+    comment_start = line.find("#", value_start)
+    value_end = len(line) if comment_start < 0 else comment_start
+    raw_value = line[value_start:value_end]
+    value = raw_value.strip()
+    if value not in {"0", "'0'", '"0"'}:
+        return None
+
+    zero_index = line.find("0", value_start, value_end)
+    return f"{line[:zero_index]}1{line[zero_index + 1:]}"
+
+
 async def _build_fixes(request: AuditYAMLRequest, client: GitHubClient, issues: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Turn audit findings into concrete line-level fix suggestions."""
 
@@ -1010,11 +1030,12 @@ async def _build_fixes(request: AuditYAMLRequest, client: GitHubClient, issues: 
                 continue
             seen_fixes.add(fix_key)
             for i, l in enumerate(lines):
-                if re.search(r'fetch-depth:\s*["\']?0["\']?\s*(#.*)?$', l):
+                replacement = _replace_fetch_depth_zero(l)
+                if replacement is not None:
                     fixes.append({
                         "line": i + 1,
                         "original": l,
-                        "replacement": re.sub(r'(fetch-depth:\s*["\']?)0', r'\g<1>1', l, count=1),
+                        "replacement": replacement,
                         "issue_type": issue_type,
                         "severity": issue.get("severity", "low"),
                         "description": f"Change fetch-depth from 0 (full history) to 1 (shallow) in job '{job_name}'"
@@ -1375,4 +1396,3 @@ if os.path.exists(FRONTEND_BUILD_PATH):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
