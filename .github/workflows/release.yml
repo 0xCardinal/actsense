@@ -93,7 +93,8 @@ jobs:
           NOTES_FILE="$RUNNER_TEMP/release-notes.md"
           
           # Get all tags sorted by version, excluding current tag
-          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -1 || echo "")
+          # Only X.Y.Z release tags; the moving v<major> tags are not releases.
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^${CURRENT_TAG}$" | head -1 || echo "")
           
           if [ -z "$PREV_TAG" ]; then
             # No previous tag found - this is the initial release
@@ -143,3 +144,16 @@ jobs:
             --repo "${{ github.repository }}" \
             --title "v$TAG_NAME" \
             --notes-file "$RELEASE_NOTES_FILE"
+
+      - name: Move major version tag
+        run: |
+          set -e
+          MAJOR="v${TAG_NAME%%.*}"
+          # Only move v<major> forward: a patch to an older minor must not pull it back.
+          LATEST=$(git tag --sort=-version:refname | grep -E "^${TAG_NAME%%.*}\.[0-9]+\.[0-9]+$" | head -1)
+          if [ "$LATEST" != "$TAG_NAME" ]; then
+            echo "$TAG_NAME is not the newest ${MAJOR} release ($LATEST); leaving $MAJOR alone"
+            exit 0
+          fi
+          git tag -f "$MAJOR" "${TAG_NAME}^{commit}"
+          git push -f origin "refs/tags/$MAJOR"

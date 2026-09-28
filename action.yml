@@ -1,0 +1,116 @@
+name: actsense
+description: Audit GitHub Actions workflows and actions for security issues, with SARIF output and new-findings-only gating.
+author: 0xCardinal
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  path:
+    description: Directory, workflow file or action.yml to scan, relative to the workspace.
+    default: "."
+  fail-on:
+    description: Fail when a (new) finding is at or above this severity. One of critical, high, medium, low, none.
+    default: high
+  min-severity:
+    description: Leave findings below this severity out of the report. One of critical, high, medium, low.
+    default: low
+  diff-base:
+    description: >-
+      Git ref to compare against; only findings it doesn't have count toward fail-on.
+      Defaults to the pull request's base commit on pull_request events, and a full scan otherwise.
+      Set to an empty string to always gate on every finding.
+    default: ${{ github.event.pull_request.base.sha }}
+  baseline:
+    description: Baseline file (from `actsense scan --write-baseline`). Used instead of diff-base when set.
+    default: ""
+  online:
+    description: Query the GitHub API for outdated, deprecated and missing actions.
+    default: "false"
+  github-token:
+    description: Token for online checks. Needs no extra permissions.
+    default: ${{ github.token }}
+  sarif-file:
+    description: Where to write the SARIF report.
+    default: actsense.sarif
+  upload-sarif:
+    description: Upload the SARIF report to code scanning (needs `security-events write`).
+    default: "true"
+  category:
+    description: Code scanning category, to keep several actsense runs apart.
+    default: actsense
+
+outputs:
+  sarif-file:
+    description: Path to the SARIF report.
+    value: ${{ steps.scan.outputs.sarif-file }}
+  exit-code:
+    description: 0 passed, 1 findings at or above fail-on, 2 usage or input error.
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up uv
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      with:
+        enable-cache: "false"
+
+    - name: Install actsense
+      shell: bash
+      env:
+        ACTSENSE_PROJECT: ${{ github.action_path }}/backend
+      run: uv sync --project "$ACTSENSE_PROJECT" --frozen --no-dev --quiet
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        ACTSENSE_PROJECT: ${{ github.action_path }}/backend
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_MIN_SEVERITY: ${{ inputs.min-severity }}
+        INPUT_DIFF_BASE: ${{ inputs.diff-base }}
+        INPUT_BASELINE: ${{ inputs.baseline }}
+        INPUT_ONLINE: ${{ inputs.online }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        args=(scan "$INPUT_PATH" --format sarif --output "$INPUT_SARIF_FILE"
+              --fail-on "$INPUT_FAIL_ON" --min-severity "$INPUT_MIN_SEVERITY"
+              --summary-file "$GITHUB_STEP_SUMMARY" --repo "$GITHUB_REPOSITORY")
+        if [ -n "$INPUT_BASELINE" ]; then
+          args+=(--baseline "$INPUT_BASELINE")
+        elif [ -n "$INPUT_DIFF_BASE" ]; then
+          args+=(--diff-base "$INPUT_DIFF_BASE")
+        fi
+        if [ "$INPUT_ONLINE" = "true" ]; then
+          args+=(--online)
+        fi
+
+        set +e
+        uv run --project "$ACTSENSE_PROJECT" --frozen --no-dev --quiet actsense "${args[@]}"
+        code=$?
+        set -e
+
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        echo "sarif-file=$INPUT_SARIF_FILE" >> "$GITHUB_OUTPUT"
+        if [ "$code" -eq 2 ]; then
+          exit 2
+        fi
+
+    - name: Upload SARIF
+      if: ${{ !cancelled() && inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '2' }}
+      uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif-file }}
+        category: ${{ inputs.category }}
+
+    - name: Check result
+      if: ${{ steps.scan.outputs.exit-code == '1' }}
+      shell: bash
+      env:
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        echo "::error title=actsense::Findings at or above '$INPUT_FAIL_ON'. See the job summary or the Security tab."
+        exit 1

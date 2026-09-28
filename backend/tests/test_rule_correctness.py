@@ -245,3 +245,37 @@ class TestCompositeActionAudit:
     def test_deprecated_node_runtime(self):
         issues = SecurityAuditor.audit_action("o/r@v1", {"runs": {"using": "node16", "main": "index.js"}})
         assert "deprecated_action" in _types(issues)
+
+
+class TestSarifUploadPermissions:
+    """security-events: write is what SARIF upload needs; don't report it there."""
+
+    def _workflow(self, uses):
+        return {
+            "on": ["push"],
+            "jobs": {"scan": {
+                "runs-on": "ubuntu-latest",
+                "permissions": {"contents": "read", "security-events": "write"},
+                "steps": [{"uses": uses}],
+            }},
+        }
+
+    @pytest.mark.parametrize("uses", [
+        "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2",
+        "0xCardinal/actsense@0123456789abcdef0123456789abcdef01234567",
+    ])
+    def test_sarif_uploader_justifies_security_events(self, uses):
+        wf = self._workflow(uses)
+        assert r.check_github_token_permissions(wf) == []
+        assert r.check_excessive_write_permissions(wf) == []
+
+    def test_other_actions_still_flagged(self):
+        wf = self._workflow("some/scanner@v1")
+        assert r.check_github_token_permissions(wf)
+        assert r.check_excessive_write_permissions(wf)
+
+    def test_other_write_scopes_still_flagged(self):
+        wf = self._workflow("github/codeql-action/upload-sarif@v4")
+        wf["jobs"]["scan"]["permissions"]["contents"] = "write"
+        issues = r.check_github_token_permissions(wf)
+        assert issues and issues[0]["evidence"]["write_permissions"] == ["contents"]

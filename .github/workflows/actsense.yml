@@ -1,0 +1,39 @@
+name: actsense
+
+# Scans this repository with the action in this checkout, so every change to
+# the action or the rules is exercised before it is released.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan workflows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: actsense
+        uses: ./
+        with:
+          # Pull requests fail only on findings they introduce; pushes to main
+          # refresh the Security tab without failing on existing findings.
+          fail-on: ${{ github.event_name == 'pull_request' && 'high' || 'none' }}
+          # Uploaded below, so the upload is visible in this workflow.
+          upload-sarif: "false"
+
+      # Tokens on pull requests from forks can't write security events.
+      - if: ${{ !cancelled() && steps.actsense.outputs.exit-code != '2' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ steps.actsense.outputs.sarif-file }}
+          category: actsense

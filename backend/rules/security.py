@@ -8,7 +8,6 @@ import json
 import os
 import base64
 from github_client import GitHubClient
-from fastapi import HTTPException
 import sys
 from pathlib import Path
 
@@ -73,10 +72,28 @@ def _effective_permissions(workflow: Dict[str, Any], job: Dict[str, Any]) -> Any
     return workflow.get("permissions")
 
 
-def _permissions_include_write(permissions: Any) -> bool:
+# Actions that upload SARIF to code scanning, which requires security-events: write.
+_SARIF_UPLOADERS = ("github/codeql-action/", "0xcardinal/actsense@")
+
+
+def _justified_write_scopes(job: Dict[str, Any]) -> set:
+    """Write scopes a job's own steps demonstrably need."""
+    scopes = set()
+    steps = job.get("steps") if isinstance(job, dict) else None
+    for step in steps if isinstance(steps, list) else []:
+        uses = step.get("uses") if isinstance(step, dict) else None
+        if isinstance(uses, str) and uses.strip().lower().startswith(_SARIF_UPLOADERS):
+            scopes.add("security-events")
+    return scopes
+
+
+def _unjustified_writes(permissions: Any, job: Dict[str, Any]) -> bool:
     if permissions == "write-all":
         return True
-    return isinstance(permissions, dict) and any(v == "write" for v in permissions.values())
+    if not isinstance(permissions, dict):
+        return False
+    justified = _justified_write_scopes(job)
+    return any(v == "write" and k not in justified for k, v in permissions.items())
 
 
 def _is_truthy(value: Any) -> bool:
@@ -2948,6 +2965,10 @@ def check_pinned_version(action_ref: str) -> Dict[str, Any]:
 
     Returns detailed vulnerability information with evidence and mitigation steps.
     """
+    # Local actions (./path) ship in the same commit as the calling workflow.
+    if action_ref.startswith("./"):
+        return None
+
     # Docker images are pinned only by digest (docker://img@sha256:...).
     if action_ref.startswith("docker://"):
         if "@sha256:" in action_ref:
@@ -3150,8 +3171,6 @@ async def check_ref_version_mismatch(content: Optional[str] = None, client: Opti
 
         try:
             resolved = await client.resolve_tag_to_sha(owner, repo, comment_tag)
-        except HTTPException:
-            continue
         except Exception:
             continue
 
@@ -3577,7 +3596,8 @@ def check_github_token_permissions(workflow: Dict[str, Any]) -> List[Dict[str, A
                 "recommendation": "For mitigation steps, visit: https://actsense.dev/vulnerabilities/github_token_write_all"
             })
         elif isinstance(job_permissions, dict):
-            write_perms = [k for k, v in job_permissions.items() if v == "write"]
+            justified = _justified_write_scopes(job)
+            write_perms = [k for k, v in job_permissions.items() if v == "write" and k not in justified]
             if write_perms:
                 issues.append({
                     "type": "github_token_write_permissions",
@@ -3677,7 +3697,7 @@ def check_excessive_write_permissions(workflow: Dict[str, Any]) -> List[Dict[str
         if any(op in name_lower for op in write_operations):
             continue
         permissions = _effective_permissions(workflow, job)
-        if not _permissions_include_write(permissions):
+        if not _unjustified_writes(permissions, job):
             continue
         scope = "job" if "permissions" in job else "workflow"
         issues.append({
@@ -4005,7 +4025,7 @@ async def check_missing_action_repositories(workflow: Dict[str, Any], client: Op
             try:
                 repo_info = await client.get_repository_info(action_owner, action_repo)
                 checked_repos[repo_key] = repo_info is not None
-            except (HTTPException, Exception):
+            except Exception:
                 return
 
         if checked_repos.get(repo_key) is False:
