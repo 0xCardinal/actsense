@@ -191,6 +191,12 @@ docs/
 - **One `GitHubClient` per audit** memoizes GET responses and pools connections; close it with `_close_client()`.
 - Depth limit: `DEFAULT_MAX_DEPTH` (10, matching GitHub's reusable-workflow nesting cap).
 
+## Command-line Scanner and GitHub Action
+
+`backend/cli.py` (`actsense scan <path>`, registered in `pyproject.toml`) runs `SecurityAuditor.audit_workflow()` and `audit_action()` over a local checkout and prints text, JSON, SARIF or Markdown. It does not import `main.py`, so it builds no graph, stores nothing and reads no web dismissals. Findings are fingerprinted with `dismissals.fingerprint()` using the file path as the node id; `backend/baseline.py` compares those fingerprints (as a multiset) against a baseline file or a scan of another git ref (`--diff-base`), and only new findings count toward `--fail-on`. Exit codes: 0 passed, 1 findings, 2 usage/input error.
+
+The root `action.yml` is the published action (`0xCardinal/actsense`). It installs the backend with `uv sync --frozen --no-dev` from `github.action_path`, diffs against the PR base by default, and uploads SARIF. Pin every `uses:` in it by full SHA with a version comment, pass inputs to `run:` through `env:` only, and keep `actsense scan action.yml --fail-on low` clean; `.github/workflows/actsense.yml` runs it against this repo. The release workflow moves `v<major>` to each newest `X.Y.Z` release. Keep `rules/` free of FastAPI imports so the scanner stays independent of the web server.
+
 ## Auto-fix Pinning (pin.actsense.dev)
 
 `/api/audit/fix` resolves tags to commit SHAs and images to digests through `pin_client.py` (`GET https://pin.actsense.dev/api/resolve?q=...`), falling back to the GitHub API. Unresolvable pins are emitted with `"manual": true` and a `<SHA>`/`<digest>` placeholder, and the editor's Apply All skips them. Set `PIN_API_URL=""` to disable the service.

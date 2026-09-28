@@ -211,6 +211,87 @@ Findings on a `pull_request_target` workflow, each with a fix you can apply.
 
 Pinning fixes replace tags with commit SHAs and image tags with digests. They are resolved through [pin.](https://pin.actsense.dev), with the GitHub API as a fallback, so pinning works without a token. When a pin can't be resolved, the fix is marked **manual** and contains a `<SHA>` or `<digest>` placeholder for you to fill in. **Apply All Fixes** skips these.
 
+## Scan in GitHub Actions
+
+Add `.github/workflows/actsense.yml`:
+
+```yaml
+name: actsense
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to the Security tab
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: 0xCardinal/actsense@0109eef6bd850da2b71d5232c572636ece195098 # 1.3.0
+        with:
+          fail-on: high
+```
+
+On pull requests only findings the PR introduces count toward `fail-on`: the action scans the PR's base commit too and compares finding fingerprints, so a repository with 200 existing findings can adopt it without failing every PR. Every finding still goes to the Security tab, where GitHub shows the new ones inline on the PR, and a summary is written to the job page.
+
+| Input | Default | |
+| --- | --- | --- |
+| `path` | `.` | Directory, workflow file or `action.yml` to scan |
+| `fail-on` | `high` | `critical`, `high`, `medium`, `low` or `none`. Start with `critical` and tighten later |
+| `min-severity` | `low` | Leave lower-severity findings out of the report |
+| `diff-base` | PR base commit | Git ref to compare against; empty to gate on every finding |
+| `baseline` | | Baseline file from `actsense scan --write-baseline`, used instead of `diff-base` |
+| `online` | `false` | Use the GitHub API for outdated, deprecated and missing actions |
+| `upload-sarif` | `true` | Upload to code scanning. Set `false` on private repositories without GitHub Advanced Security and on pull requests from forks, whose tokens can't write security events |
+| `sarif-file` | `actsense.sarif` | Where the SARIF report is written (also the `sarif-file` output) |
+| `category` | `actsense` | Code scanning category |
+
+The `exit-code` output is `0` (passed), `1` (findings at or above `fail-on`) or `2` (bad input). Pin the action by full commit SHA as above; Dependabot and Renovate keep the SHA and its version comment up to date.
+
+## Scan from the command line
+
+`actsense scan` runs the same checks against a local checkout, with no server or frontend:
+
+```bash
+cd backend && uv sync
+uv run actsense scan /path/to/repo --format sarif --output actsense.sarif --fail-on high
+```
+
+It scans `.github/workflows/*.yml` and every `action.yml` in the tree, skipping `node_modules`, `vendor` and gitignored files. You can also point it at a single workflow or `action.yml` file.
+
+| Option | Default | |
+| --- | --- | --- |
+| `-f, --format` | `text` | `text`, `json`, `sarif` (SARIF 2.1.0) or `markdown` |
+| `-o, --output` | stdout | Write the report to a file |
+| `--summary-file` | | Also append a Markdown summary, e.g. to `$GITHUB_STEP_SUMMARY` |
+| `--fail-on` | `high` | Exit 1 if any (new) finding is at or above this severity; `none` never fails |
+| `--min-severity` | `low` | Leave lower-severity findings out of the report |
+| `--diff-base REF` | | Also scan this git ref; only findings it doesn't have count toward `--fail-on` |
+| `--baseline FILE` | | Only findings missing from this file count toward `--fail-on` |
+| `--write-baseline FILE` | | Record the current findings as a baseline and exit 0 |
+| `--online` | off | Use the GitHub API (`GITHUB_TOKEN`) for version, deprecation and missing-repository checks |
+| `--repo` | origin remote | `owner/repo` of the checkout |
+| `--public` | detected with `--online` | Treat the repository as public for the self-hosted runner checks |
+
+Exit codes: `0` passed, `1` findings at or above `--fail-on`, `2` usage or input error.
+
+Baselines match findings by fingerprint (file, rule and the finding's identifying details, not its line number), so moving code around doesn't make old findings new. To adopt the scanner on a repository with existing findings without comparing against a branch:
+
+```bash
+uv run actsense scan . --write-baseline .actsense-baseline.json
+uv run actsense scan . --baseline .actsense-baseline.json --fail-on high
+```
+
+Without `--online` the scan is offline and deterministic. Remote actions are checked by their reference only, not fetched and followed as they are in the web app.
+
 ## Good to know
 
 <div class="as-ui-list">
