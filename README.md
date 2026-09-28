@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: 0xCardinal/actsense@0109eef6bd850da2b71d5232c572636ece195098 # 1.3.0
+      - uses: 0xCardinal/actsense@bfc71ebdd279821ce6673ac8adcd77126ceccf0f # 1.3.0
         with:
           fail-on: high
 ```
