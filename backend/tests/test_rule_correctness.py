@@ -279,3 +279,32 @@ class TestSarifUploadPermissions:
         wf["jobs"]["scan"]["permissions"]["contents"] = "write"
         issues = r.check_github_token_permissions(wf)
         assert issues and issues[0]["evidence"]["write_permissions"] == ["contents"]
+
+
+class TestTrustedPublisherPrefixes:
+    def _wf(self, uses):
+        return {"on": ["push"], "jobs": {"j": {"runs-on": "ubuntu-latest", "steps": [{"uses": uses}]}}}
+
+    def _types(self, uses, trusted):
+        from unittest.mock import patch
+        with patch.object(r, "get_trusted_publishers", return_value=trusted):
+            return {i["type"] for i in r.check_untrusted_third_party_actions(self._wf(uses))}
+
+    def test_single_action_entry(self):
+        sha = "0123456789abcdef0123456789abcdef01234567"
+        assert not self._types(f"0xCardinal/actsense@{sha}", ["0xcardinal/actsense@"])
+        assert "untrusted_action_source" in self._types(f"0xCardinal/other@{sha}", ["0xcardinal/actsense@"])
+
+    def test_owner_entry_is_case_insensitive(self):
+        assert not self._types("My-Org/tool@v1", ["my-org/"])
+        assert not self._types("my-org/tool@v1", ["My-Org/"])
+
+    def test_owner_prefix_does_not_match_longer_owner(self):
+        assert "untrusted_action_source" in self._types("dockerx/tool@v1", ["docker/"])
+
+
+def test_config_loader_keeps_single_action_entries(tmp_path):
+    from config_loader import ConfigLoader
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text('trusted_publishers:\n  - "owner/repo@"\n  - "org"\n')
+    assert ConfigLoader(str(cfg)).load_trusted_publishers() == ["owner/repo@", "org/"]

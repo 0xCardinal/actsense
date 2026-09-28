@@ -21,6 +21,10 @@ jobs:
       - run: npm test
 ```
 
+## How actsense detects this
+
+actsense reports every `write` scope in a workflow-level or job-level `permissions` block, and `write-all` as `github_token_write_all`. At the job level, `security-events: write` is not reported on a job that uploads SARIF with `github/codeql-action/*` or `0xCardinal/actsense`, since code scanning upload needs it.
+
 ## Mitigation Strategies
 
 1. **Inventory scopes**  

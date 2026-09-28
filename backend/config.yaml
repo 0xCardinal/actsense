@@ -34,6 +34,9 @@ trusted_publishers:
   - "hashicorp/"           # HashiCorp (Terraform, Vault, etc.)
   - "step-security/"       # Step Security
 
+  # actsense's own action, so scanning a workflow that runs it stays clean
+  - "0xCardinal/actsense@"
+
   # ActSense vulnerable-by-design lab (composite at infosec-soup/actsense-vuln-lab-composite)
   - "infosec-soup/"
 

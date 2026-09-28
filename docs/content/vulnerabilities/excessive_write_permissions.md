@@ -26,7 +26,7 @@ If a malicious dependency escapes the lint job, it can use the token to push com
 
 ## How actsense detects this
 
-actsense evaluates each job's **effective** permissions: job-level `permissions:` replace the workflow-level block entirely. A job is reported when its name suggests it is read-only (`test`, `lint`, `check`, `validate`, `scan`, `audit`, `analyze`, `verify`), it does not also suggest a write operation (`deploy`, `release`, `publish`, `push`, ...), and its effective token has any `write` scope. Reported as **medium**.
+actsense evaluates each job's **effective** permissions: job-level `permissions:` replace the workflow-level block entirely. A job is reported when its name suggests it is read-only (`test`, `lint`, `check`, `validate`, `scan`, `audit`, `analyze`, `verify`), it does not also suggest a write operation (`deploy`, `release`, `publish`, `push`, ...), and its effective token has any `write` scope. Reported as **medium**. `security-events: write` is not reported on a job that uploads SARIF with `github/codeql-action/*` or `0xCardinal/actsense`, since code scanning upload needs it.
 
 ## Mitigation Strategies
 

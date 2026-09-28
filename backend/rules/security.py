@@ -2752,11 +2752,11 @@ def check_untrusted_third_party_actions(workflow: Dict[str, Any]) -> List[Dict[s
     """Check for use of untrusted third-party GitHub Actions with enhanced suspicious pattern detection."""
     issues = []
 
-    # Load trusted publishers from config file (removes trailing "/" for set comparison)
-    # Config file location: backend/config.yaml
-    # See config.yaml for instructions on adding trusted publishers
-    trusted_publishers_list = get_trusted_publishers()
-    trusted_publishers = {p.rstrip("/") for p in trusted_publishers_list}  # Convert to set without "/"
+    # Trusted publishers from backend/config.yaml: "owner/" trusts an owner,
+    # "owner/repo@" a single action. A bare "owner" is read as "owner/".
+    trusted_prefixes = tuple(
+        (p if "/" in p else f"{p}/").lower() for p in get_trusted_publishers()
+    )
 
     jobs = workflow.get("jobs", {})
     actions_used = set()
@@ -2774,7 +2774,7 @@ def check_untrusted_third_party_actions(workflow: Dict[str, Any]) -> List[Dict[s
 
     # Check each action
     for action_ref, owner, job_name, step_name in actions_used:
-        if owner.lower() not in trusted_publishers:
+        if not action_ref.lower().startswith(trusted_prefixes):
             # Additional checks for suspicious patterns
             is_suspicious = False
             suspicious_reasons = []

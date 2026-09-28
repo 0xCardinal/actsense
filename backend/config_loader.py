@@ -58,9 +58,9 @@ class ConfigLoader:
             valid_publishers = []
             for publisher in trusted_publishers:
                 if isinstance(publisher, str) and publisher.strip():
-                    # Ensure it ends with / for prefix matching
+                    # Prefix match: "owner/" trusts an owner, "owner/repo@" one action.
                     publisher = publisher.strip()
-                    if not publisher.endswith("/"):
+                    if not publisher.endswith(("/", "@")):
                         publisher = publisher + "/"
                     valid_publishers.append(publisher)
             
@@ -88,6 +88,7 @@ class ConfigLoader:
             "google-github-actions/",
             "aws-actions/",
             "step-security/",
+            "0xCardinal/actsense@",
         ]
     
     def add_trusted_publisher(self, publisher: str) -> bool:
