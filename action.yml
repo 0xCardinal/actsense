@@ -87,6 +87,15 @@ runs:
         if [ "$INPUT_ONLINE" = "true" ]; then
           args+=(--online)
         fi
+        if [ -z "$INPUT_BASELINE" ] && [ -n "$INPUT_DIFF_BASE" ] && [ -n "$GITHUB_TOKEN" ]; then
+          # Lets git fetch the base commit from a shallow checkout made with
+          # persist-credentials: false. Lives only in this process's environment.
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+          echo "::add-mask::$auth"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0="http.${GITHUB_SERVER_URL}/.extraheader"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
+        fi
 
         set +e
         uv run --project "$ACTSENSE_PROJECT" --frozen --no-dev --quiet actsense "${args[@]}"
