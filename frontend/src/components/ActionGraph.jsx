@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState, useCallback } from 'react'
+import React, { useMemo, useEffect, useState, useCallback, useRef } from 'react'
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -133,8 +133,18 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
   const [showMiniMap, setShowMiniMap] = useState(true)
   const colors = GRAPH_COLORS[useResolvedTheme()] || GRAPH_COLORS.light
 
-  const handleNodeHover = useCallback((nodeId) => setHoveredNodeId(nodeId), [])
-  const handleNodeUnhover = useCallback(() => setHoveredNodeId(null), [])
+  // Leaving a node clears the hover after a short delay, so sliding the cursor
+  // across the gap to a neighbour doesn't flash the whole graph undimmed.
+  const unhoverTimer = useRef(null)
+  const handleNodeHover = useCallback((nodeId) => {
+    clearTimeout(unhoverTimer.current)
+    setHoveredNodeId(nodeId)
+  }, [])
+  const handleNodeUnhover = useCallback(() => {
+    clearTimeout(unhoverTimer.current)
+    unhoverTimer.current = setTimeout(() => setHoveredNodeId(null), 80)
+  }, [])
+  useEffect(() => () => clearTimeout(unhoverTimer.current), [])
 
   const handleNodeClick = useCallback((nodeData) => {
     const id = nodeData.originalId || nodeData.nodeId
@@ -208,21 +218,28 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
   const focusId = hoveredNodeId || selectedNodeId || null
   const lineage = useMemo(() => lineageOf(focusId, renderedEdges), [focusId, renderedEdges])
 
+  // Merge into the previous nodes so ReactFlow's measured width/height
+  // survive: nodes without them are treated as unmeasured, which drops every
+  // edge and minimap node for a frame and makes the graph flash on hover.
   useEffect(() => {
-    setNodes(laidOutNodes.map(node => {
-      const inLineage = lineage ? lineage.has(node.id) : false
-      return {
-        ...node,
-        selected: node.id === selectedNodeId,
-        zIndex: inLineage ? 2 : 1,
-        data: {
-          ...node.data,
-          isHighlighted: Boolean(lineage) && inLineage,
-          isDimmed: Boolean(lineage) && !inLineage,
-          isSelected: node.id === selectedNodeId || node.data.originalId === selectedNodeId,
-        },
-      }
-    }))
+    setNodes(prev => {
+      const prevById = new Map(prev.map(n => [n.id, n]))
+      return laidOutNodes.map(node => {
+        const inLineage = lineage ? lineage.has(node.id) : false
+        return {
+          ...prevById.get(node.id),
+          ...node,
+          selected: node.id === selectedNodeId,
+          zIndex: inLineage ? 2 : 1,
+          data: {
+            ...node.data,
+            isHighlighted: Boolean(lineage) && inLineage,
+            isDimmed: Boolean(lineage) && !inLineage,
+            isSelected: node.id === selectedNodeId || node.data.originalId === selectedNodeId,
+          },
+        }
+      })
+    })
   }, [laidOutNodes, lineage, selectedNodeId, setNodes])
 
   useEffect(() => {
@@ -234,7 +251,8 @@ function ActionGraph({ graphData, onNodeSelect, filter, onClearFilter, selectedN
         type: 'smoothstep',
         pathOptions: { borderRadius: 10 },
         animated: false,
-        zIndex: active ? 1 : 0,
+        // Keep zIndex constant: ReactFlow renders one <svg> per edge zIndex
+        // level, so changing it on hover remounts every edge and flickers.
         style: {
           stroke: color,
           strokeWidth: active ? 2 : 1.25,
