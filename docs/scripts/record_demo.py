@@ -133,7 +133,7 @@ END_CARD = """
   el.style.setProperty('--demo-end-code', dark ? '#16181d' : '#ffffff');
   el.style.setProperty('--demo-end-line', dark ? '#2a2e37' : '#e5e7eb');
   el.innerHTML = '<div><h1>actsense</h1><p>Audit your own workflows in one command</p>'
-    + '<code>docker run --rm -p 8000:8000 ghcr.io/0xcardinal/actsense:latest</code></div>';
+    + '<code>docker run --rm --pull=always -p 8000:8000 ghcr.io/0xcardinal/actsense:latest</code></div>';
   document.body.appendChild(el);
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on')));
 }

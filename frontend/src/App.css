@@ -852,11 +852,23 @@
   box-shadow: var(--shadow-xs), var(--bevel);
 }
 
+.home-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  margin-top: 12px;
+}
+
+.home-meta-sep {
+  color: var(--ink-4);
+}
+
 .home-platform {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 12px;
   font-size: 0.8125rem;
   color: var(--ink-3);
 }
@@ -868,6 +880,17 @@
 .home-platform strong {
   color: var(--ink);
   font-weight: 600;
+}
+
+/* The Black Hat wordmark in the text colour: a white PNG used as a mask, so
+   one file works on both themes. 364x105 source, shown 13px tall. */
+.home-bh-logo {
+  display: inline-block;
+  width: 45px;
+  height: 13px;
+  background-color: var(--ink);
+  -webkit-mask: url("./assets/blackhat.png") center / contain no-repeat;
+  mask: url("./assets/blackhat.png") center / contain no-repeat;
 }
 
 .org-back {

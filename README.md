@@ -2,6 +2,7 @@
 
 # actsense
 
+![Presented at Black Hat](https://img.shields.io/badge/Presented%20at-Black%20Hat-111111)
 [![Deployed on Cloudflare Pages](https://img.shields.io/badge/Deployed%20on-Cloudflare%20Pages-f38020?logo=cloudflare&logoColor=white)](https://actsense.dev)
 [![License: GPL-3.0](https://img.shields.io/github/license/0xCardinal/actsense)](https://opensource.org/licenses/GPL-3.0)
 [![AI-Assisted Development](https://img.shields.io/badge/AI-Assisted%20Development-blue)](https://github.com/0xCardinal/actsense)

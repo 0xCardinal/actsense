@@ -319,7 +319,7 @@ a.hextra-card:hover,
 }
 
 /* Links - shadcn style */
-.content a:not(.actsense-cta):not(.hextra-card a) {
+.content a:not(.actsense-cta):not(.hextra-card a):not(.as-part) {
   font-family: 'Google Sans', sans-serif;
   color: hsl(var(--primary));
   text-decoration: none;
@@ -327,7 +327,7 @@ a.hextra-card:hover,
   transition: color 0.2s;
 }
 
-.content a:not(.actsense-cta):not(.hextra-card a):not(.supporter-card):not(.contributor-card__links a):hover {
+.content a:not(.actsense-cta):not(.hextra-card a):not(.supporter-card):not(.contributor-card__links a):not(.as-part):hover {
   color: hsl(0 0% 20%);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -1496,6 +1496,49 @@ footer.hextra-footer > div:nth-child(2) {
 
 .as-platform-badge:hover {
   border-color: var(--as-line-strong);
+}
+
+/* The event and platform pills share one centred row and wrap on phones. */
+.as-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0 auto 0.75rem;
+}
+
+.as-hero-badges .as-platform-badge {
+  margin: 0;
+}
+
+.as-platform-badge {
+  transition: border-color 0.15s ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.as-platform-badge:active {
+  transform: scale(0.97);
+}
+
+/* The Black Hat wordmark, recoloured to the text colour so one white PNG
+   works on both themes. 364x105 source, shown 14px tall. */
+.as-bh-logo {
+  display: inline-block;
+  width: 48.5px;
+  height: 14px;
+  background-color: var(--as-ink);
+  -webkit-mask: url("/images/blackhat.png") center / contain no-repeat;
+  mask: url("/images/blackhat.png") center / contain no-repeat;
+}
+
+/* The event pill is a statement, not a link. */
+.as-event-badge,
+.as-event-badge:hover {
+  cursor: default;
+  border-color: var(--as-line);
+}
+
+.as-event-badge:active {
+  transform: none;
 }
 
 .as-platform-badge svg,
@@ -2804,47 +2847,118 @@ html.dark .as-shot-dark {
   background: var(--as-sunken);
 }
 
-/* Section jump list under the lede. */
-.content .as-tour {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin: 0 0 1rem;
+/* Usage page: one card per part. With JS, picking a card shows only that
+   part (static/usage-parts.js); without it, they are plain anchor links. */
+.content:has(> .as-parts) {
+  max-width: 64rem;
+  margin-inline: auto;
 }
 
-.content .as-tour a {
+.content .as-parts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.625rem;
+  margin: 1.5rem 0 2.5rem;
+  scroll-margin-top: calc(var(--navbar-height, 4rem) + 1rem);
+}
+
+.content .as-part {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 500;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
   color: var(--as-ink);
   text-decoration: none;
   background: var(--as-surface);
   border: 1px solid var(--as-line);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: var(--as-shadow-sm), var(--as-bevel);
-  transition: border-color 0.15s ease;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease,
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.content .as-tour a:hover {
-  border-color: var(--as-line-strong);
-  text-decoration: none;
+.content .as-part:active {
+  transform: scale(0.98);
 }
 
-.as-tour span {
+.content .as-part:focus-visible {
+  outline: 2px solid var(--as-ink);
+  outline-offset: 2px;
+}
+
+/* Hover: a tinted surface, a firmer edge and a lifted shadow, all colour
+   with no movement. Quieter than the selected card's solid ink edge. */
+@media (hover: hover) and (pointer: fine) {
+  .content .as-part:not(.is-active):hover {
+    text-decoration: none;
+    border-color: color-mix(in srgb, var(--as-ink) 35%, var(--as-line));
+    background: color-mix(in srgb, var(--as-ink) 3%, var(--as-surface));
+    box-shadow: var(--as-shadow-md), var(--as-bevel);
+  }
+
+  .content .as-part:not(.is-active):hover .as-part-num {
+    color: var(--as-ink);
+    border-color: color-mix(in srgb, var(--as-ink) 30%, var(--as-line));
+  }
+}
+
+.content .as-part.is-active {
+  border-color: var(--as-ink);
+  box-shadow: var(--as-shadow-sm), inset 0 0 0 1px var(--as-ink);
+}
+
+.as-part-num {
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.625rem;
+  height: 1.625rem;
   font-family: var(--as-mono);
   font-size: 0.75rem;
   color: var(--as-ink-3);
   background: var(--as-sunken);
   border: 1px solid var(--as-line);
-  border-radius: 6px;
+  border-radius: 7px;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+}
+
+.as-part.is-active .as-part-num {
+  color: var(--as-surface);
+  background: var(--as-ink);
+  border-color: var(--as-ink);
+}
+
+.as-part-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+/* The cards are links; keep the theme's link hover (underline, colour)
+   off their text. */
+.content a.as-part,
+.content a.as-part:hover,
+.content a.as-part:hover * {
+  text-decoration: none;
+}
+
+.content a.as-part .as-part-text strong {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--as-ink);
+}
+
+.content a.as-part .as-part-text span {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--as-ink-3);
+}
+
+/* A part shown on its own starts right under the cards. */
+.as-part-section > h2:first-child {
+  margin-top: 0;
 }
 
 /* Labelled controls, two to a row. */
@@ -2948,6 +3062,12 @@ html.dark .as-sev-low { color: #d1d5db; background: rgba(156, 163, 175, 0.1); bo
   border-radius: 5px;
 }
 
+@media (max-width: 480px) {
+  .content .as-parts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 640px) {
   /* Let wide tables scroll inside their frame instead of the page. */
   .content table {
@@ -2957,7 +3077,7 @@ html.dark .as-sev-low { color: #d1d5db; background: rgba(156, 163, 175, 0.1); bo
 }
 
 @media (max-width: 768px) {
-  .content .as-tour {
+  .content .as-parts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

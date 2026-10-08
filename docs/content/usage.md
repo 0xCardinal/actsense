@@ -1,5 +1,6 @@
 ---
 title: "Usage"
+layout: wide
 description: "A tour of the actsense app: start an audit, read the dependency graph, inspect findings, search, and fix a workflow."
 ---
 
@@ -7,19 +8,48 @@ description: "A tour of the actsense app: start an audit, read the dependency gr
 actsense audits a repository, a single action, a whole organization, or a workflow you paste in. It maps everything that workflow runs, audits each piece at the version it runs, and puts every finding on the node and line it came from. This page follows one audit from start to finish.
 </p>
 
+<nav class="as-parts" aria-label="Parts of this page">
+  <a class="as-part as-part--all" href="#" data-part="all">
+    <span class="as-part-num" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg></span>
+    <span class="as-part-text"><strong>Everything</strong><span>The whole tour, top to bottom</span></span>
+  </a>
+  <a class="as-part" href="#start-an-audit" data-part="start-an-audit">
+    <span class="as-part-num" aria-hidden="true">1</span>
+    <span class="as-part-text"><strong>Start an audit</strong><span>A repository, an action or pasted YAML</span></span>
+  </a>
+  <a class="as-part" href="#read-the-results" data-part="read-the-results">
+    <span class="as-part-num" aria-hidden="true">2</span>
+    <span class="as-part-text"><strong>Read the results</strong><span>Counts, severities and filters</span></span>
+  </a>
+  <a class="as-part" href="#explore-the-graph" data-part="explore-the-graph">
+    <span class="as-part-num" aria-hidden="true">3</span>
+    <span class="as-part-text"><strong>Explore the graph</strong><span>Every workflow, action and image it runs</span></span>
+  </a>
+  <a class="as-part" href="#inspect-a-node" data-part="inspect-a-node">
+    <span class="as-part-num" aria-hidden="true">4</span>
+    <span class="as-part-text"><strong>Inspect a node</strong><span>Findings, evidence, dismissing and sharing</span></span>
+  </a>
+  <a class="as-part" href="#search-and-tables" data-part="search-and-tables">
+    <span class="as-part-num" aria-hidden="true">5</span>
+    <span class="as-part-text"><strong>Search and tables</strong><span>Search findings, paths and nodes</span></span>
+  </a>
+  <a class="as-part" href="#fix-a-workflow" data-part="fix-a-workflow">
+    <span class="as-part-num" aria-hidden="true">6</span>
+    <span class="as-part-text"><strong>Fix a workflow</strong><span>Line-level fixes and pinning</span></span>
+  </a>
+  <a class="as-part" href="#scan-an-organization" data-part="scan-an-organization">
+    <span class="as-part-num" aria-hidden="true">7</span>
+    <span class="as-part-text"><strong>Scan an organization</strong><span>Many repositories, one dashboard</span></span>
+  </a>
+  <a class="as-part" href="#good-to-know" data-part="good-to-know">
+    <span class="as-part-num" aria-hidden="true">8</span>
+    <span class="as-part-text"><strong>Good to know</strong><span>Themes, local data and the API</span></span>
+  </a>
+</nav>
+
 {{< demo-video >}}
 The whole flow in 35 seconds: audit a repository, filter to critical findings, open one, and fix the workflow in the editor. The screenshots below come from an audit of the same repository, `step-security/github-actions-goat`, and follow your light or dark theme.
 {{< /demo-video >}}
-
-<nav class="as-tour" aria-label="On this page">
-  <a href="#start-an-audit"><span>1</span>Start an audit</a>
-  <a href="#read-the-results"><span>2</span>Read the results</a>
-  <a href="#explore-the-graph"><span>3</span>Explore the graph</a>
-  <a href="#inspect-a-node"><span>4</span>Inspect a node</a>
-  <a href="#search-and-tables"><span>5</span>Search and tables</a>
-  <a href="#fix-a-workflow"><span>6</span>Fix a workflow</a>
-  <a href="#scan-an-organization"><span>7</span>Scan an organization</a>
-</nav>
 
 ## Start an audit
 
