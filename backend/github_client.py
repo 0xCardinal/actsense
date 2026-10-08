@@ -341,6 +341,66 @@ class GitHubClient:
             raise HTTPException(status_code=500, detail=f"Error checking repository: {str(e)}")
         return None
 
+    async def _list_paged(self, url: str, max_pages: int) -> Optional[list]:
+        """All items of a paginated list endpoint, or None if it 404s."""
+        items: list = []
+        sep = "&" if "?" in url else "?"
+        for page in range(1, max_pages + 1):
+            response = await self._get(f"{url}{sep}per_page=100&page={page}")
+            if response.status_code == 404:
+                return None
+            if self._is_rate_limited(response):
+                raise HTTPException(status_code=403, detail=RATE_LIMIT_DETAIL)
+            if response.status_code in (401, 403):
+                raise HTTPException(
+                    status_code=403,
+                    detail="GitHub refused to list repositories. Check that the token is valid and authorized for this organization (SSO).",
+                )
+            response.raise_for_status()
+            batch = response.json()
+            items.extend(batch)
+            if len(batch) < 100:
+                break
+        return items
+
+    async def list_owner_repositories(self, owner: str, max_pages: int = 10) -> Optional[list]:
+        """Repositories of an organization or user, most recently pushed first.
+
+        Tries the organization endpoint first and falls back to the user one.
+        When the token belongs to ``owner`` itself, ``/user/repos`` is used so
+        the user's private repositories are included. Returns None when no
+        organization or user has that name.
+        """
+        name = quote(owner, safe="")
+        repos = await self._list_paged(f"{self.base_url}/orgs/{name}/repos?type=all", max_pages)
+        if repos is None and self.token:
+            me = await self._get(f"{self.base_url}/user")
+            if me.status_code == 200 and str(me.json().get("login", "")).lower() == owner.lower():
+                repos = await self._list_paged(
+                    f"{self.base_url}/user/repos?affiliation=owner&visibility=all", max_pages
+                )
+        if repos is None:
+            repos = await self._list_paged(f"{self.base_url}/users/{name}/repos?type=owner", max_pages)
+        if repos is None:
+            return None
+        result = [
+            {
+                "name": r.get("name"),
+                "full_name": r.get("full_name"),
+                "description": r.get("description"),
+                "private": bool(r.get("private")),
+                "archived": bool(r.get("archived")),
+                "fork": bool(r.get("fork")),
+                "default_branch": r.get("default_branch"),
+                "pushed_at": r.get("pushed_at"),
+                "language": r.get("language"),
+            }
+            for r in repos
+            if isinstance(r, dict) and r.get("full_name")
+        ]
+        result.sort(key=lambda r: r.get("pushed_at") or "", reverse=True)
+        return result
+
     def parse_action_reference(self, action_ref: str) -> tuple:
         """Parse action reference like 'owner/repo@v1', 'owner/repo/path@v1', or 'owner/repo@ref'."""
         if "@" in action_ref:
