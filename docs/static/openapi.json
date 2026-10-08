@@ -79,6 +79,134 @@
         }
       }
     },
+    "/api/orgs/{owner}/repos": {
+      "get": {
+        "summary": "List Org Repositories",
+        "description": "Repositories of an organization (or user) to choose from for an org scan.\n\nThe token travels in the X-GitHub-Token header so it never lands in URLs or logs.",
+        "operationId": "list_org_repositories_api_orgs__owner__repos_get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "x-github-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Github-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audit/org/stream": {
+      "post": {
+        "summary": "Audit Org Stream",
+        "description": "Scan selected repositories of an organization, streaming per-repository progress.",
+        "operationId": "audit_org_stream_api_audit_org_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrgScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audit/org": {
+      "post": {
+        "summary": "Audit Org",
+        "description": "Scan selected repositories of an organization.",
+        "operationId": "audit_org_api_audit_org_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrgScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/audit/fix": {
       "post": {
         "summary": "Audit Fix",
@@ -432,6 +560,173 @@
         }
       }
     },
+    "/api/org-scans": {
+      "get": {
+        "summary": "List Org Scans",
+        "description": "List saved org scans.",
+        "operationId": "list_org_scans_api_org_scans_get",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Org"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/org-scans/{scan_id}": {
+      "get": {
+        "summary": "Get Org Scan",
+        "description": "An org scan, with each repository's counts refreshed from its stored analysis.\n\nRefreshing picks up findings dismissed after the scan ran.",
+        "operationId": "get_org_scan_api_org_scans__scan_id__get",
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Org Scan",
+        "description": "Delete an org scan summary (per-repository analyses are kept).",
+        "operationId": "delete_org_scan_api_org_scans__scan_id__delete",
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/org-scans/{scan_id}/findings": {
+      "get": {
+        "summary": "Get Org Scan Findings",
+        "description": "Every finding across an org scan's repositories, with links to where each one lives.\n\nRead from the stored per-repository analyses, so current dismissals apply.",
+        "operationId": "get_org_scan_findings_api_org_scans__scan_id__findings_get",
+        "parameters": [
+          {
+            "name": "scan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/{full_path}": {
       "get": {
         "summary": "Serve Frontend",
@@ -572,6 +867,58 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "OrgScanRequest": {
+        "properties": {
+          "org": {
+            "type": "string",
+            "title": "Org"
+          },
+          "repositories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Repositories"
+          },
+          "github_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Token"
+          },
+          "use_clone": {
+            "type": "boolean",
+            "title": "Use Clone",
+            "default": false
+          },
+          "owner_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "organization",
+                  "user"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org",
+          "repositories"
+        ],
+        "title": "OrgScanRequest"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -595,6 +942,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

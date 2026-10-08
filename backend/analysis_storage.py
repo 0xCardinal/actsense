@@ -121,3 +121,74 @@ class AnalysisStorage:
                 return True
         return False
 
+    # Org scans group the per-repository analyses of one organization run.
+    # They live in a subdirectory so list_analyses() never picks them up.
+
+    @property
+    def org_scan_dir(self) -> Path:
+        path = self.storage_dir / "org_scans"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _org_scan_path(self, scan_id: str) -> Optional[Path]:
+        try:
+            uuid.UUID(scan_id)
+        except (ValueError, TypeError):
+            return None
+        return self.org_scan_dir / f"{scan_id}.json"
+
+    def save_org_scan(self, scan: Dict[str, Any]) -> str:
+        """Save an org scan summary and return its ID."""
+        scan_id = str(uuid.uuid4())
+        record = {"id": scan_id, "timestamp": datetime.datetime.now(datetime.UTC).isoformat(), **scan}
+        file_path = self.org_scan_dir / f"{scan_id}.json"
+        with self._lock:
+            tmp_path = file_path.with_suffix(".tmp")
+            try:
+                with open(tmp_path, 'w') as f:
+                    json.dump(record, f, indent=2)
+                tmp_path.replace(file_path)
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                raise
+        return scan_id
+
+    def get_org_scan(self, scan_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve an org scan by ID."""
+        file_path = self._org_scan_path(scan_id)
+        if file_path is None or not file_path.exists():
+            return None
+        with open(file_path, 'r') as f:
+            return json.load(f)
+
+    def list_org_scans(self, limit: int = 50, org: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List org scans (metadata only), newest first."""
+        scans = []
+        for file_path in sorted(self.org_scan_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                with open(file_path, 'r') as f:
+                    scan = json.load(f)
+            except Exception:
+                logger.exception("Error reading org scan file %s", file_path)
+                continue
+            if org and str(scan.get("org", "")).lower() != org.lower():
+                continue
+            scans.append({
+                "id": scan["id"],
+                "timestamp": scan["timestamp"],
+                "org": scan.get("org"),
+                "owner_type": scan.get("owner_type"),
+                "statistics": scan.get("statistics", {}),
+            })
+            if len(scans) >= limit:
+                break
+        return scans
+
+    def delete_org_scan(self, scan_id: str) -> bool:
+        """Delete an org scan (its per-repository analyses are kept)."""
+        file_path = self._org_scan_path(scan_id)
+        with self._lock:
+            if file_path is not None and file_path.exists():
+                file_path.unlink()
+                return True
+        return False

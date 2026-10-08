@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import './NodeDetailsPanel.css'
 import IssueDetailsModal from './IssueDetailsModal'
 import ShareModal from './ShareModal'
@@ -46,8 +46,14 @@ function buildActionDirectoryUrl({ owner, repo, ref, subdir }) {
   return base
 }
 
-function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, onScanRepository, onViewAnalysis, repositoryAuditStatus, onStartAnalysis, setRepositoryInput }) {
+function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, onScanRepository, onViewAnalysis, repositoryAuditStatus, onStartAnalysis, setRepositoryInput, focusFingerprint }) {
   const [selectedIssue, setSelectedIssue] = useState(null)
+  const focusedIssueRef = useRef(null)
+
+  // Opened from an org-wide finding: bring that finding into view.
+  useEffect(() => {
+    focusedIssueRef.current?.scrollIntoView({ block: 'center' })
+  }, [focusFingerprint, node?.id])
   const [showShareModal, setShowShareModal] = useState(false)
   
   if (!node) {
@@ -861,7 +867,8 @@ function NodeDetailsPanel({ node, graphData, onClose, onNodeSelect, shareMode, o
                 return (
                   <div
                     key={index}
-                    className="issue-item"
+                    ref={focusFingerprint && issue.fingerprint === focusFingerprint ? focusedIssueRef : undefined}
+                    className={`issue-item ${focusFingerprint && issue.fingerprint === focusFingerprint ? 'is-focused' : ''}`}
                     style={{ borderLeftColor: color, cursor: 'pointer' }}
                     onClick={() => setSelectedIssue({ ...issue, otherInstances })}
                     title="Click to view issue details"

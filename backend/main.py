@@ -1,10 +1,10 @@
 """FastAPI backend for actsense, the workflow security auditor (GitHub Actions today)."""
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any, Set, Callable, Tuple
+from typing import Optional, List, Dict, Any, Set, Callable, Tuple, Awaitable, Literal
 import asyncio
 import inspect
 import json
@@ -14,7 +14,7 @@ import logging
 import uvicorn
 import yaml
 from urllib.parse import urlparse
-from github_client import GitHubClient
+from github_client import GitHubClient, RATE_LIMIT_DETAIL
 from workflow_parser import WorkflowParser
 from security_auditor import SecurityAuditor
 from graph_builder import GraphBuilder
@@ -22,6 +22,7 @@ from repo_cloner import RepoCloner, CloneError
 from analysis_storage import AnalysisStorage
 from dismissals import DismissalStore, apply_dismissals
 import pin_client
+import org_scan
 
 app = FastAPI(
     title="actsense - Workflow Security Auditor",
@@ -72,6 +73,15 @@ class AuditRequest(BaseModel):
     action: Optional[str] = None
     github_token: Optional[str] = None
     use_clone: bool = False  # New option to use clone instead of API
+
+
+class OrgScanRequest(BaseModel):
+    org: str
+    repositories: List[str]
+    github_token: Optional[str] = None
+    use_clone: bool = False
+    # From the repository listing; only used to label the scan.
+    owner_type: Optional[Literal["organization", "user"]] = None
 
 
 class DismissRequest(BaseModel):
@@ -481,6 +491,7 @@ async def _audit_single_workflow(
         "workflow_name": workflow_file["name"],
         "workflow_path": workflow_file["path"],
         "actions": actions,
+        "uses_lines": org_scan.find_uses_lines(content),
     }
 
 
@@ -492,8 +503,11 @@ async def audit_repository(
     use_clone: bool = False,
     token: Optional[str] = None,
     log_fn: Optional[Callable[[str], None]] = None
-):
-    """Audit a repository's workflows."""
+) -> List[Dict[str, Any]]:
+    """Audit a repository's workflows.
+
+    Returns each parsed workflow's name, path and action references.
+    """
     _log = log_fn or (lambda _: None)
 
     repo_node_id = f"{owner}/{repo}"
@@ -570,6 +584,7 @@ async def audit_repository(
             inconsistency_issues = auditor.check_inconsistent_action_versions(workflow_actions_data)
             if inconsistency_issues:
                 graph.add_issues_to_node(repo_node_id, inconsistency_issues)
+        return workflow_actions_data
     finally:
         if clone_path:
             cloner.cleanup(clone_path)
@@ -648,32 +663,31 @@ async def audit(request: AuditRequest):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/api/audit/stream")
-async def audit_stream(request: AuditRequest):
-    """Audit with Server-Sent Events for real-time progress."""
-    log_queue: asyncio.Queue = asyncio.Queue()
+def _sse_response(run: Callable[[Callable[[Any], None]], Awaitable[Dict[str, Any]]]) -> StreamingResponse:
+    """Stream ``run(emit)`` as Server-Sent Events.
 
-    def log_callback(msg: str):
-        log_queue.put_nowait(msg)
+    ``emit(str)`` sends a ``log`` event and ``emit(("progress", dict))`` a
+    ``progress`` event; the returned dict is sent as the final ``result``.
+    """
+    queue: asyncio.Queue = asyncio.Queue()
 
-    async def run_audit():
-        """Execute the audit and push the result (or error) onto the queue."""
+    async def runner():
         try:
-            result = await _run_audit(request, log_fn=log_callback)
-            log_queue.put_nowait(("__RESULT__", result))
+            result = await run(queue.put_nowait)
+            queue.put_nowait(("__RESULT__", result))
         except HTTPException as exc:
-            log_queue.put_nowait(("__ERROR__", exc.detail))
+            queue.put_nowait(("__ERROR__", exc.detail))
         except CloneError as e:
-            log_queue.put_nowait(("__ERROR__", e.detail))
+            queue.put_nowait(("__ERROR__", e.detail))
         except Exception:
             logger.exception("Unexpected error during streaming audit")
-            log_queue.put_nowait(("__ERROR__", "Internal server error"))
+            queue.put_nowait(("__ERROR__", "Internal server error"))
 
     async def event_generator():
-        task = asyncio.create_task(run_audit())
+        task = asyncio.create_task(runner())
         try:
             while True:
-                msg = await log_queue.get()
+                msg = await queue.get()
                 if msg is None:
                     break
                 if isinstance(msg, tuple):
@@ -684,6 +698,8 @@ async def audit_stream(request: AuditRequest):
                     elif kind == "__ERROR__":
                         yield f"event: error\ndata: {json.dumps({'detail': payload})}\n\n"
                         break
+                    elif kind == "progress":
+                        yield f"event: progress\ndata: {json.dumps(payload)}\n\n"
                 else:
                     yield f"event: log\ndata: {json.dumps({'message': msg})}\n\n"
         finally:
@@ -691,6 +707,182 @@ async def audit_stream(request: AuditRequest):
                 task.cancel()
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/api/audit/stream")
+async def audit_stream(request: AuditRequest):
+    """Audit with Server-Sent Events for real-time progress."""
+    return _sse_response(lambda emit: _run_audit(request, log_fn=emit))
+
+
+@app.get("/api/orgs/{owner}/repos")
+async def list_org_repositories(owner: str, x_github_token: Optional[str] = Header(default=None)):
+    """Repositories of an organization (or user) to choose from for an org scan.
+
+    The token travels in the X-GitHub-Token header so it never lands in URLs or logs.
+    """
+    login = org_scan.parse_owner(owner)
+    if not login:
+        raise HTTPException(status_code=400, detail="Invalid organization or user name")
+    client = GitHubClient(token=x_github_token or None)
+    try:
+        listing = await client.list_owner_repositories(login)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed to list repositories for %s", login)
+        raise HTTPException(status_code=502, detail="Failed to list repositories from GitHub")
+    finally:
+        await _close_client(client)
+    if listing is None:
+        raise HTTPException(status_code=404, detail=f"No GitHub organization or user named '{login}'")
+    return {"org": login, **listing, "max_selectable": org_scan.MAX_ORG_SCAN_REPOS}
+
+
+def _repo_result(repository: str, status: str, **extra: Any) -> Dict[str, Any]:
+    return {"repository": repository, "status": status, "analysis_id": None, "error": None,
+            "workflows": 0, "statistics": {}, **extra}
+
+
+async def _run_org_scan(
+    request: OrgScanRequest,
+    log_fn: Optional[Callable[[Any], None]] = None,
+) -> Dict[str, Any]:
+    """Audit each selected repository of an org, store each, and store a summary."""
+    emit = log_fn or (lambda _: None)
+    owner = org_scan.parse_owner(request.org)
+    if not owner:
+        raise HTTPException(status_code=400, detail="Invalid organization or user name")
+    names, rejected = org_scan.normalize_repositories(owner, request.repositories)
+    if rejected:
+        raise HTTPException(status_code=400, detail=f"Not repositories of {owner}: {', '.join(rejected[:5])}")
+    if not names:
+        raise HTTPException(status_code=400, detail="Select at least one repository")
+    if len(names) > org_scan.MAX_ORG_SCAN_REPOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Select at most {org_scan.MAX_ORG_SCAN_REPOS} repositories per scan",
+        )
+
+    client = GitHubClient(token=request.github_token)
+    semaphore = asyncio.Semaphore(org_scan.ORG_SCAN_CONCURRENCY)
+    rate_limited = asyncio.Event()
+    workflow_data: Dict[str, List[Dict[str, Any]]] = {}
+    branches: Dict[str, str] = {}
+    done = 0
+    total = len(names)
+
+    async def scan_one(name: str) -> Dict[str, Any]:
+        nonlocal done
+        repository = f"{owner}/{name}"
+        async with semaphore:
+            if rate_limited.is_set():
+                result = _repo_result(repository, "skipped", error="Skipped: GitHub API rate limit reached")
+            else:
+                emit(f"{repository}: auditing")
+                result = await _scan_org_repository(
+                    client, owner, name, request, emit, rate_limited, workflow_data, branches,
+                )
+        done += 1
+        emit(("progress", {"completed": done, "total": total, "result": result}))
+        status = result["status"] if result["status"] != "ok" else f"{result['statistics'].get('total_issues', 0)} issue(s)"
+        emit(f"[{done}/{total}] {repository}: {status}")
+        return result
+
+    try:
+        emit(f"Scanning {total} repositories of {owner}")
+        results = await asyncio.gather(*(scan_one(n) for n in names))
+    finally:
+        await _close_client(client)
+
+    emit("Building organization summary...")
+    scan = {
+        "org": owner,
+        "owner_type": request.owner_type,
+        "method": "clone" if request.use_clone else "api",
+        "repositories": list(results),
+        "statistics": org_scan.summarize(list(results)),
+        "action_inventory": org_scan.build_action_inventory(workflow_data, branches, owner),
+        "rate_limited": rate_limited.is_set(),
+    }
+    scan_id = storage.save_org_scan(scan)
+    return {"id": scan_id, **scan}
+
+
+async def _scan_org_repository(
+    client: GitHubClient,
+    owner: str,
+    name: str,
+    request: OrgScanRequest,
+    emit: Callable[[Any], None],
+    rate_limited: asyncio.Event,
+    workflow_data: Dict[str, List[Dict[str, Any]]],
+    branches: Dict[str, str],
+) -> Dict[str, Any]:
+    """Audit and store one repository of an org scan; failures become a result, not an exception."""
+    repository = f"{owner}/{name}"
+    graph = GraphBuilder()
+    try:
+        workflows = await audit_repository(
+            client, owner, name, graph, request.use_clone, request.github_token,
+            log_fn=lambda m: emit(f"{repository}: {m}") if isinstance(m, str) else None,
+        )
+    except HTTPException as exc:
+        if exc.detail == RATE_LIMIT_DETAIL:
+            rate_limited.set()
+        return _repo_result(repository, "error", error=str(exc.detail))
+    except CloneError as exc:
+        return _repo_result(repository, "error", error=exc.detail)
+    except Exception:
+        logger.exception("Unexpected error auditing %s in org scan", repository)
+        return _repo_result(repository, "error", error="Internal error while auditing this repository")
+
+    workflow_data[repository] = workflows or []
+    branches[repository] = (graph.nodes.get(repository, {}).get("metadata") or {}).get("default_branch") or "main"
+    apply_dismissals(graph.nodes.values(), dismissals.get(repository))
+    graph_data = graph.get_graph_data()
+    statistics = graph.get_statistics()
+    analysis_id = storage.save_analysis(
+        repository=repository, action=None, graph_data=graph_data,
+        statistics=statistics, method="clone" if request.use_clone else "api",
+    )
+    workflow_count = sum(1 for n in graph_data.get("nodes", []) if n.get("type") == "workflow")
+    # audit_repository records a workflow it could not fetch or parse as a
+    # finding rather than raising, so read those back to report the repo honestly.
+    failures = [
+        i for i in graph.issues.get(repository, []) if i.get("type") == "workflow_processing_error"
+    ]
+    if any(RATE_LIMIT_DETAIL in i.get("message", "") for i in failures):
+        rate_limited.set()
+    error = None
+    if failures:
+        error = f"{len(failures)} workflow(s) could not be processed: {failures[0].get('message', '')}"
+    if workflow_count:
+        status = "ok"
+    else:
+        status = "error" if failures else "no_workflows"
+    return _repo_result(
+        repository, status, analysis_id=analysis_id, workflows=workflow_count,
+        statistics=statistics, error=error,
+    )
+
+
+@app.post("/api/audit/org/stream")
+async def audit_org_stream(request: OrgScanRequest):
+    """Scan selected repositories of an organization, streaming per-repository progress."""
+    return _sse_response(lambda emit: _run_org_scan(request, log_fn=emit))
+
+
+@app.post("/api/audit/org")
+async def audit_org(request: OrgScanRequest):
+    """Scan selected repositories of an organization."""
+    try:
+        return await _run_org_scan(request)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error during org scan")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/api/audit/fix")
@@ -1431,6 +1623,62 @@ async def restore_issue(analysis_id: str, fingerprint: str):
 async def list_dismissals(target: str):
     """Dismissed findings for a repository or action."""
     return dismissals.list(target)
+
+
+@app.get("/api/org-scans")
+async def list_org_scans(org: Optional[str] = None, limit: int = 50):
+    """List saved org scans."""
+    return storage.list_org_scans(limit=limit, org=org)
+
+
+@app.get("/api/org-scans/{scan_id}")
+async def get_org_scan(scan_id: str):
+    """An org scan, with each repository's counts refreshed from its stored analysis.
+
+    Refreshing picks up findings dismissed after the scan ran.
+    """
+    scan = storage.get_org_scan(scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Org scan not found")
+    for result in scan.get("repositories", []):
+        if not result.get("analysis_id"):
+            continue
+        try:
+            result["statistics"] = _load_analysis(result["analysis_id"])["statistics"]
+        except HTTPException:
+            result["analysis_id"] = None
+            result["error"] = "The stored analysis for this repository was deleted"
+    scan["statistics"] = {**scan.get("statistics", {}), **org_scan.summarize(scan.get("repositories", []))}
+    return scan
+
+
+@app.get("/api/org-scans/{scan_id}/findings")
+async def get_org_scan_findings(scan_id: str):
+    """Every finding across an org scan's repositories, with links to where each one lives.
+
+    Read from the stored per-repository analyses, so current dismissals apply.
+    """
+    scan = storage.get_org_scan(scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Org scan not found")
+    findings: List[Dict[str, Any]] = []
+    for result in scan.get("repositories", []):
+        if not result.get("analysis_id"):
+            continue
+        try:
+            analysis = _load_analysis(result["analysis_id"])
+        except HTTPException:
+            continue
+        findings.extend(org_scan.collect_findings(result["repository"], analysis.get("graph", {})))
+    return {"org": scan.get("org"), "findings": findings}
+
+
+@app.delete("/api/org-scans/{scan_id}")
+async def delete_org_scan(scan_id: str):
+    """Delete an org scan summary (per-repository analyses are kept)."""
+    if storage.delete_org_scan(scan_id):
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="Org scan not found")
 
 
 @app.delete("/api/analyses/{analysis_id}")

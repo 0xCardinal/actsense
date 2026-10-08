@@ -584,3 +584,9 @@
   font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
+
+/* Opened from an org-wide finding. */
+.issue-item.is-focused {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}

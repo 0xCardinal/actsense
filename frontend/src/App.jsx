@@ -14,8 +14,17 @@ import SearchOverlay from './components/SearchOverlay'
 import SearchResultsPage from './components/SearchResultsPage'
 import YAMLEditorPanel from './components/YAMLEditorPanel'
 import HomeBackdrop from './components/HomeBackdrop'
+import OrgWorkspace from './components/OrgWorkspace'
 import { DismissalContext, withoutDismissed } from './dismissals'
 import './App.css'
+
+// Keep ?org-scan=<id> in the address bar so a scan survives a reload and can be shared.
+function setOrgScanParam(id) {
+  const url = new URL(window.location.href)
+  if (id) url.searchParams.set('org-scan', id)
+  else url.searchParams.delete('org-scan')
+  window.history.replaceState({}, '', url)
+}
 
 function App() {
   const [graphData, setGraphData] = useState(null)
@@ -42,6 +51,18 @@ function App() {
   const [savedYAMLContent, setSavedYAMLContent] = useState(null)
   const [auditTarget, setAuditTarget] = useState('')
   const [elapsed, setElapsed] = useState(0)
+  // Organization scans: the repository picker, the scan (live or stored),
+  // and whether the org view or a single repository's graph is showing.
+  const [orgPicker, setOrgPicker] = useState(null)
+  const [orgScan, setOrgScan] = useState(null)
+  const [orgRunning, setOrgRunning] = useState(false)
+  const [orgProgress, setOrgProgress] = useState(null)
+  const [orgView, setOrgView] = useState(false)
+  const orgAbortRef = useRef(null)
+  // The finding an org-level click came from, highlighted in the side panel.
+  const [focusFingerprint, setFocusFingerprint] = useState(null)
+  // Bumped when a finding is dismissed or restored, so org findings reload.
+  const [orgFindingsVersion, setOrgFindingsVersion] = useState(0)
   const inputFormRef = useRef(null)
   // Form values survive the home <-> workspace switch (the form remounts).
   const formValuesRef = useRef({ input: '', token: '', useClone: false })
@@ -77,7 +98,7 @@ function App() {
   const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform)
 
   // First run shows a single search box; anything else is the workspace.
-  const isHome = !graphData && !loading && !showSearchResults
+  const isHome = !graphData && !loading && !showSearchResults && !orgView
 
   // Morph between the home and workspace layouts with the View Transitions
   // API where available; elsewhere (or with reduced motion) switch instantly.
@@ -87,7 +108,11 @@ function App() {
       update()
       return
     }
-    document.startViewTransition(() => flushSync(update))
+    const transition = document.startViewTransition(() => flushSync(update))
+    // The browser aborts a transition when, for example, the tab is hidden;
+    // the update still applies, so only the animation is lost.
+    transition.ready?.catch(() => {})
+    transition.finished?.catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -102,7 +127,7 @@ function App() {
       // Cmd+K on Mac, Ctrl+K on Windows/Linux
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
-        if (graphData) {
+        if (graphData && !orgView) {
           setShowSearchOverlay(true)
         }
       }
@@ -110,7 +135,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [graphData])
+  }, [graphData, orgView])
 
   // Reset application state
   const handleReset = () => runLayoutTransition(() => {
@@ -123,6 +148,13 @@ function App() {
     setShareMode(false)
     setRepositoryAuditStatus(null)
     setFormInput('')
+    orgAbortRef.current?.abort()
+    setOrgPicker(null)
+    setOrgScan(null)
+    setOrgRunning(false)
+    setOrgProgress(null)
+    setOrgView(false)
+    setOrgScanParam(null)
   })
 
   // Check if repository is audited
@@ -195,6 +227,24 @@ function App() {
       otherInstances: findOtherIssueInstances(issue),
     })
   }, [findOtherIssueInstances])
+
+  // Open a stored org scan from an ?org-scan=<id> link (only on mount)
+  useEffect(() => {
+    const scanId = new URLSearchParams(window.location.search).get('org-scan')
+    if (!scanId) return
+    fetch(`/api/org-scans/${encodeURIComponent(scanId)}`)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('Org scan not found'))))
+      .then(scan => {
+        setOrgScan(scan)
+        setOrgView(true)
+        setFormInput(scan.org)
+      })
+      .catch(err => {
+        setError(err.message)
+        setOrgScanParam(null)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Handle share link parsing (only on mount)
   useEffect(() => {
@@ -341,6 +391,8 @@ function App() {
 
   const handleLoadAnalysis = (analysis) => runLayoutTransition(() => {
     showAnalysis(analysis)
+    setOrgView(false)
+    setOrgScanParam(null)
     setError(null)
     // A filter or selection from the previous analysis refers to nodes that
     // may not exist in this one.
@@ -354,6 +406,15 @@ function App() {
       setFormInput(repositoryName)
     }
   })
+
+  // Reload the stored org scan so its counts reflect current dismissals.
+  const refreshOrgScan = useCallback(() => {
+    if (!orgScan?.id) return
+    fetch(`/api/org-scans/${encodeURIComponent(orgScan.id)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(scan => { if (scan) setOrgScan(scan) })
+      .catch(() => {})
+  }, [orgScan?.id])
 
   // Dismiss or restore a finding. The server answers with the analysis as it
   // now reads, counts included.
@@ -373,7 +434,11 @@ function App() {
       throw new Error(detail)
     }
     showAnalysis(await response.json())
-  }, [analysisMeta, showAnalysis])
+    if (orgScan) {
+      setOrgFindingsVersion(v => v + 1)
+      refreshOrgScan()
+    }
+  }, [analysisMeta, showAnalysis, orgScan, refreshOrgScan])
 
   const dismissalActions = useMemo(() => ({
     canDismiss: Boolean(analysisMeta?.target) && !shareMode,
@@ -388,7 +453,246 @@ function App() {
     }),
   }), [analysisMeta, shareMode, updateDismissal])
 
+  const readErrorDetail = async (response, fallback) => {
+    try {
+      const body = await response.json()
+      return body.detail || body.message || fallback
+    } catch {
+      return response.statusText || fallback
+    }
+  }
+
+  // Read a Server-Sent Events response, calling onEvent(type, data) per event.
+  const readEventStream = async (response, onEvent) => {
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let eventType = null
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim()
+        } else if (line.startsWith('data: ') && eventType) {
+          let parsed
+          try {
+            parsed = JSON.parse(line.slice(6))
+          } catch {
+            continue
+          }
+          onEvent(eventType, parsed)
+          eventType = null
+        } else if (line.trim() === '') {
+          eventType = null
+        }
+      }
+    }
+  }
+
+  // Load the repositories of an organization or user so some can be picked.
+  const handleOrgLookup = async ({ org, github_token, use_clone }) => {
+    orgAbortRef.current?.abort()
+    runLayoutTransition(() => {
+      setError(null)
+      showAnalysis(null)
+      setSelectedNode(null)
+      setSelectedIssue(null)
+      setOrgScan(null)
+      setOrgProgress(null)
+      setOrgView(true)
+      setOrgPicker({ org, loading: true, token: github_token, useClone: use_clone })
+    })
+    setOrgScanParam(null)
+    try {
+      const response = await fetch(`/api/orgs/${encodeURIComponent(org)}/repos`, {
+        headers: github_token ? { 'X-GitHub-Token': github_token } : {},
+      })
+      if (!response.ok) {
+        throw new Error(await readErrorDetail(response, 'Failed to list repositories'))
+      }
+      const body = await response.json()
+      setOrgPicker({
+        org: body.org,
+        repositories: body.repositories,
+        maxSelectable: body.max_selectable,
+        ownerType: body.owner_type,
+        privateIncluded: body.private_included,
+        token: github_token,
+        useClone: use_clone,
+      })
+    } catch (err) {
+      setOrgPicker({ org, error: err.message, token: github_token, useClone: use_clone })
+    }
+  }
+
+  // Scan the chosen repositories, updating each row as it finishes.
+  const handleOrgScan = async (repositories) => {
+    const picker = orgPicker
+    const controller = new AbortController()
+    orgAbortRef.current = controller
+    setOrgRunning(true)
+    setOrgProgress({ completed: 0, total: repositories.length })
+    setOrgScan({
+      org: picker.org,
+      owner_type: picker.ownerType,
+      repositories: repositories.map(name => ({ repository: name, status: 'pending', workflows: 0, statistics: {} })),
+    })
+    let finished = false
+    try {
+      const response = await fetch('/api/audit/org/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org: picker.org,
+          repositories,
+          github_token: picker.token || undefined,
+          use_clone: Boolean(picker.useClone),
+          owner_type: picker.ownerType || undefined,
+        }),
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        throw new Error(await readErrorDetail(response, 'Failed to scan repositories'))
+      }
+      await readEventStream(response, (type, data) => {
+        // The server logs "<owner/repo>: auditing" when a repository starts.
+        const started = type === 'log' && /^(\S+\/\S+): auditing$/.exec(data.message || '')
+        if (started) {
+          const name = started[1].toLowerCase()
+          setOrgScan(prev => prev && ({
+            ...prev,
+            repositories: prev.repositories.map(r => (
+              r.status === 'pending' && r.repository.toLowerCase() === name ? { ...r, status: 'running' } : r
+            )),
+          }))
+        } else if (type === 'progress') {
+          setOrgProgress({ completed: data.completed, total: data.total })
+          setOrgScan(prev => prev && ({
+            ...prev,
+            repositories: prev.repositories.map(r => (
+              r.repository.toLowerCase() === data.result.repository.toLowerCase() ? data.result : r
+            )),
+          }))
+        } else if (type === 'result') {
+          finished = true
+          setOrgScan(data)
+          setOrgScanParam(data.id)
+          if (window.refreshAnalysisHistory) window.refreshAnalysisHistory()
+        } else if (type === 'error') {
+          finished = true
+          throw new Error(data.detail || 'Scan failed')
+        }
+      })
+      if (!finished) {
+        throw new Error('The connection to the server closed before the scan finished. Check the server logs and try again.')
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        setOrgScan(null)
+        return
+      }
+      setOrgScan(prev => ({ ...(prev || { org: picker.org, repositories: [] }), error: err.message }))
+    } finally {
+      if (orgAbortRef.current === controller) {
+        orgAbortRef.current = null
+        setOrgRunning(false)
+        setOrgProgress(null)
+      }
+    }
+  }
+
+  const handleOpenOrgRepository = async (result) => {
+    try {
+      const response = await fetch(`/api/analyses/${result.analysis_id}`)
+      if (!response.ok) throw new Error(await readErrorDetail(response, 'Failed to load analysis'))
+      const analysis = await response.json()
+      runLayoutTransition(() => {
+        showAnalysis(analysis)
+        setGraphFilter(null)
+        setViewMode('graph')
+        setSelectedNode(null)
+        setSelectedIssue(null)
+        setOrgView(false)
+      })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // Coming back from a repository's graph: reload the scan so dismissals
+  // made there show in the org counts.
+  const handleBackToOrgScan = () => {
+    setOrgView(true)
+    setSelectedNode(null)
+    setFocusFingerprint(null)
+    if (orgScan?.id) setOrgScanParam(orgScan.id)
+    refreshOrgScan()
+  }
+
+  // Open an org-wide finding in the same side panel the graph uses: load the
+  // repository's analysis (for the graph context and dismissals) and select
+  // the node the finding sits on. With inGraph, also switch to that graph.
+  const handleOpenOrgFinding = async (finding, { inGraph = false } = {}) => {
+    const result = orgScan?.repositories?.find(r => r.repository === finding.repository)
+    if (!result?.analysis_id) return
+    try {
+      const response = await fetch(`/api/analyses/${result.analysis_id}`)
+      if (!response.ok) throw new Error(await readErrorDetail(response, 'Failed to load analysis'))
+      const analysis = await response.json()
+      const graphNode = analysis.graph?.nodes?.find(n => n.id === finding.node?.id)
+      const select = () => {
+        showAnalysis(analysis)
+        setSelectedIssue(null)
+        setFocusFingerprint(finding.fingerprint || null)
+        setSelectedNode(graphNode ? {
+          id: graphNode.id,
+          data: {
+            label: graphNode.label,
+            nodeLabel: graphNode.label,
+            nodeType: graphNode.type,
+            type: graphNode.type,
+            issues: graphNode.issues || [],
+            metadata: graphNode.metadata || {},
+            severity: graphNode.severity,
+            issueCount: graphNode.issue_count,
+            nodeId: graphNode.id,
+            originalId: graphNode.id,
+          },
+        } : null)
+        if (inGraph) {
+          setGraphFilter(null)
+          setViewMode('graph')
+          setOrgView(false)
+        }
+      }
+      if (inGraph) runLayoutTransition(select)
+      else select()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleLoadOrgScan = (scan) => runLayoutTransition(() => {
+    showAnalysis(null)
+    setSelectedNode(null)
+    setSelectedIssue(null)
+    setError(null)
+    setOrgPicker(null)
+    setOrgScan(scan)
+    setOrgView(true)
+    setOrgScanParam(scan.id)
+    setFormInput(scan.org)
+  })
+
   const handleAudit = async (data) => {
+    if (data.org) {
+      handleOrgLookup(data)
+      return
+    }
     if (auditAbortRef.current) {
       auditAbortRef.current.abort()
     }
@@ -457,6 +761,8 @@ function App() {
                 }
               } else if (eventType === 'result') {
                 receivedResult = true
+                setOrgView(false)
+                setOrgScanParam(null)
                 setSelectedNode(null)
                 setSelectedIssue(null)
                 showAnalysis(parsed)
@@ -581,7 +887,7 @@ function App() {
             </a>
             <ThemeToggle className="theme-toggle--quiet" />
             <div className="home-history">
-              <AnalysisHistory onLoadAnalysis={handleLoadAnalysis} popover />
+              <AnalysisHistory onLoadAnalysis={handleLoadAnalysis} onLoadOrgScan={handleLoadOrgScan} popover />
             </div>
           </footer>
         </main>
@@ -645,7 +951,16 @@ function App() {
               )}
             </section>
 
-            {statistics && (
+            {orgScan && !orgView && (
+              <button type="button" className="org-back" onClick={handleBackToOrgScan}>
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M7.5 2.5 4 6l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Back to {orgScan.org} scan
+              </button>
+            )}
+
+            {statistics && !orgView && (
               <section className="sidebar-section sidebar-section-results" aria-label="Results">
                 <Statistics
                   data={statistics}
@@ -659,11 +974,31 @@ function App() {
           </div>
 
           <footer className="sidebar-footer">
-            <AnalysisHistory onLoadAnalysis={handleLoadAnalysis} />
+            <AnalysisHistory onLoadAnalysis={handleLoadAnalysis} onLoadOrgScan={handleLoadOrgScan} />
           </footer>
         </aside>
         
-        {showSearchResults ? (
+        {orgView ? (
+          <div className="main-content">
+            <OrgWorkspace
+              picker={orgPicker}
+              scan={orgScan}
+              running={orgRunning}
+              progress={orgProgress}
+              onScan={handleOrgScan}
+              onOpenRepository={handleOpenOrgRepository}
+              onCancel={() => orgAbortRef.current?.abort()}
+              onOpenFinding={handleOpenOrgFinding}
+              activeFingerprint={selectedNode ? focusFingerprint : null}
+              refreshKey={orgFindingsVersion}
+              onChooseRepositories={orgPicker?.repositories && orgPicker.org.toLowerCase() === orgScan?.org?.toLowerCase() ? () => { setOrgScan(null); setOrgScanParam(null) } : () => handleOrgLookup({
+                org: orgScan.org,
+                github_token: formValuesRef.current.token || undefined,
+                use_clone: formValuesRef.current.useClone,
+              })}
+            />
+          </div>
+        ) : showSearchResults ? (
           <SearchResultsPage
             searchQuery={searchQuery}
             searchResults={searchResults}
@@ -760,7 +1095,7 @@ function App() {
               viewMode === 'graph' ? (
                 <ActionGraph 
                   graphData={visibleGraph} 
-                  onNodeSelect={setSelectedNode}
+                  onNodeSelect={(node) => { setFocusFingerprint(null); setSelectedNode(node) }}
                   filter={graphFilter}
                   onClearFilter={() => setGraphFilter(null)}
                   selectedNodeId={selectedNode?.id}
@@ -833,7 +1168,9 @@ function App() {
             setSelectedNode(null)
             setShareMode(false)
             setRepositoryAuditStatus(null)
+            setFocusFingerprint(null)
           }}
+          focusFingerprint={focusFingerprint}
           onNodeSelect={setSelectedNode}
           shareMode={shareMode}
           onScanRepository={handleShareScanRepository}

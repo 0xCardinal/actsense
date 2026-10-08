@@ -725,6 +725,22 @@ Restore a dismissed finding. Returns the analysis with dismissals applied.
 ### GET `/api/dismissals?target=owner/repo`
 List dismissals for a repository or action.
 
+### GET `/api/orgs/{org}/repos`
+Repositories of an organization (falling back to a user account) for the repository picker, most recently pushed first, with `owner_type` (`organization` or `user`) and `private_included`. A user's listing holds only repositories they own, and their private ones only when the token is theirs (`/user/repos`). The token goes in the `X-GitHub-Token` header, never the URL.
+
+### POST `/api/audit/org` and `/api/audit/org/stream`
+Scan selected repositories of an organization or user: `{"org": "acme", "repositories": ["api", "acme/web"], "github_token": "...", "use_clone": false, "owner_type": "organization"}`. `owner_type` comes from the listing and only labels the scan. The stream sends `log`, one `progress` event per finished repository and a final `result`.
+
+### GET `/api/org-scans`, GET/DELETE `/api/org-scans/{id}`
+List, read or delete stored org scans. Reading one refreshes each repository's counts from its stored analysis, so later dismissals show.
+
+### GET `/api/org-scans/{id}/findings`
+Every finding across the scan's repositories, read from the stored analyses (current dismissals apply). Each carries `location` (the GitHub file and `#L<line>` it comes from; findings on actions, images and packages point at the workflow line that uses them), `target` (the action at its pinned ref, for "via" findings) and `docs_url`. Findings mirrored onto several nodes appear once, by fingerprint.
+
+## Organization Scans
+
+`_run_org_scan()` in `main.py` runs the existing `audit_repository()` for each selected repository: at most `ORG_SCAN_CONCURRENCY` (4) at a time, at most `MAX_ORG_SCAN_REPOS` (200) per scan, all sharing one `GitHubClient` so common actions are fetched once. Each repository is stored as an ordinary analysis (graph, dismissals and history work unchanged), and the org scan record in `data/analyses/org_scans/` keeps each repository's status (`ok`, `no_workflows`, `error`, `skipped`), analysis id and counts, the totals, and an action inventory. One failing repository never stops the scan, and a workflow that could not be fetched marks its repository `error` rather than `no_workflows`. Once the GitHub rate limit is hit, repositories not yet started are `skipped` and the scan is saved with `rate_limited: true`. `backend/org_scan.py` holds the pure parts (input parsing, `summarize()`, `collect_findings()`, `build_action_inventory()`; each inventory ref lists its `usages` with file and line, and actions owned by the org are `internal`), which ranks actions from untrusted publishers that are not pinned by SHA everywhere first, then actions used at more than one ref. In the UI, entering a bare name (`acme`, `@acme`, `github.com/acme`) opens the picker, and `?org-scan=<id>` links reopen a scan.
+
 ## Dismissed Findings
 
 `backend/dismissals.py` gives every issue a `fingerprint`: a hash of its node id, type, identifying fields and message, leaving out what shifts between runs (`line_number`, `latest_version`, `days_old`, `commit_date`, digits in the message). Dismissals are stored per audit target in `data/dismissals.json` and applied when an audit is built and whenever a stored analysis is read, so one dismissal covers every run of that target. A dismissed issue carries `"dismissed": {"reason", "dismissed_at"}` and is left out of `issue_count`, node `severity` and the statistics (`dismissed_issues` counts them). If you add a volatile field to an issue, add it to `_VOLATILE_FIELDS` or dismissals of that finding won't survive a re-run.

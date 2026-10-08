@@ -599,6 +599,15 @@
   pointer-events: none;
 }
 
+/* "Find repos" is wider than "Audit", so the badge and text sit further left. */
+.input-form--hero .audit-input.has-kind.is-org {
+  padding-right: 200px !important;
+}
+
+.input-kind--inline.org {
+  right: 132px;
+}
+
 .input-form--hero .field-error {
   padding: 0 6px;
 }
@@ -630,6 +639,9 @@
   }
   .input-form--hero .audit-input.has-kind {
     padding-right: 100px !important;
+  }
+  .input-form--hero .audit-input.has-kind.is-org {
+    padding-right: 128px !important;
   }
 }
 
@@ -856,4 +868,25 @@
 .home-platform strong {
   color: var(--ink);
   font-weight: 600;
+}
+
+.org-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 16px 8px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.org-back:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }

@@ -4,7 +4,7 @@ description: "A tour of the actsense app: start an audit, read the dependency gr
 ---
 
 <p class="as-usage-lede">
-actsense audits a repository, a single action, or a workflow you paste in. It maps everything that workflow runs, audits each piece at the version it runs, and puts every finding on the node and line it came from. This page follows one audit from start to finish.
+actsense audits a repository, a single action, a whole organization, or a workflow you paste in. It maps everything that workflow runs, audits each piece at the version it runs, and puts every finding on the node and line it came from. This page follows one audit from start to finish.
 </p>
 
 {{< demo-video >}}
@@ -18,6 +18,7 @@ The whole flow in 35 seconds: audit a repository, filter to critical findings, o
   <a href="#inspect-a-node"><span>4</span>Inspect a node</a>
   <a href="#search-and-tables"><span>5</span>Search and tables</a>
   <a href="#fix-a-workflow"><span>6</span>Fix a workflow</a>
+  <a href="#scan-an-organization"><span>7</span>Scan an organization</a>
 </nav>
 
 ## Start an audit
@@ -32,6 +33,7 @@ The start screen. The **Try** chips run example audits.
 | --- | --- |
 | `owner/repo`<br>`https://github.com/owner/repo` | Every workflow in `.github/workflows`, plus the actions, reusable workflows and images they use |
 | `owner/repo@ref`<br>`actions/checkout@v4` | That one action at that ref, plus its own dependencies |
+| `org` or `user`<br>`https://github.com/org` | The repositories you pick from that organization or user. See [Scan an organization](#scan-an-organization) |
 | **Secure workflow** | A workflow you paste in. See [Fix a workflow](#fix-a-workflow) |
 
 The two options below the input:
@@ -210,6 +212,47 @@ Findings on a `pull_request_target` workflow, each with a fix you can apply.
 </ol>
 
 Pinning fixes replace tags with commit SHAs and image tags with digests. They are resolved through [pin.](https://pin.actsense.dev), with the GitHub API as a fallback, so pinning works without a token. When a pin can't be resolved, the fix is marked **manual** and contains a `<SHA>` or `<digest>` placeholder for you to fill in. **Apply All Fixes** skips these.
+
+## Scan an organization
+
+Type an organization or user name on its own (`my-org`, `@my-org` or `https://github.com/my-org`). The input is marked **Owner** and the button reads **Find repos**. actsense asks GitHub which kind of account it is and labels the scan **Organization scan** or **User scan**.
+
+For a user, only the repositories that user owns are listed, not ones in organizations they belong to: scan those organizations by their own name. A user's private repositories are listed only when the token belongs to that user. For an organization, private repositories are listed whenever your token can see them.
+
+<ol class="as-steps as-steps--stack">
+  <li>
+    <span class="as-step-num">1</span>
+    <h3>Choose repositories</h3>
+    <p>actsense lists the organization's repositories, most recently pushed first. Everything except forks and archived repositories starts selected. Filter by name, include forks or archived repositories, and scan up to 200 at a time.</p>
+  </li>
+  <li>
+    <span class="as-step-num">2</span>
+    <h3>Scan</h3>
+    <p>Four repositories are audited at a time, each exactly as a single repository audit would be. Each row shows <strong>Queued</strong>, <strong>Scanning</strong> and then its result. A repository that fails is reported and the scan carries on.</p>
+  </li>
+  <li>
+    <span class="as-step-num">3</span>
+    <h3>Review the organization</h3>
+    <p>The summary counts findings across every repository. Three tabs break it down:</p>
+  </li>
+</ol>
+
+<div class="as-ui-list">
+  <div>
+    <strong>Repositories</strong>
+    <p>Every scanned repository, riskiest first, with its findings by severity. Click a row to open its dependency graph; <strong>Back to scan</strong> in the sidebar returns here.</p>
+  </div>
+  <div>
+    <strong>Findings</strong>
+    <p>Every finding across the organization, grouped by rule or by repository, with search and severity filters. Each one links to the workflow file and line on GitHub, the action it comes through, and how to fix it. Click a finding to open it in the same side panel as the graph, where you can dismiss it, or use <strong>Graph</strong> to jump to it in the repository's graph.</p>
+  </div>
+  <div>
+    <strong>Action inventory</strong>
+    <p>Every action the scanned workflows use, flagging third-party actions, actions not pinned to a commit SHA, and actions used at several refs. Expand one to see each ref and every file and line that uses it.</p>
+  </div>
+</div>
+
+Each repository is saved as an ordinary analysis, so dismissals and history work as they do for a single repository. **Copy link** shares the organization view. Scanning many repositories needs a [GitHub token](#start-an-audit): without one, GitHub's limit of 60 requests an hour runs out after a few repositories, and the rest are marked **Skipped** so you can scan them again.
 
 ## Good to know
 

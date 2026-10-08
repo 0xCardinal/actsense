@@ -4,6 +4,18 @@ import './InputForm.css'
 // The form is mounted in two places (home hero and workspace sidebar). The
 // parent keeps the values in `defaults` and receives every change through
 // `onValuesChange`, so switching layouts never loses what was typed.
+const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/
+
+// 'acme', '@acme' or a github.com/acme URL name a whole owner: an
+// organization or a user (which one is only known once GitHub answers).
+export function orgFromInput(value) {
+  let v = (value || '').trim().replace(/\/+$/, '')
+  const url = v.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/(.+)$/i)
+  if (url) v = url[1]
+  v = v.replace(/^@/, '')
+  return OWNER_RE.test(v) ? v : null
+}
+
 const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 'sidebar', defaults = {}, onValuesChange }, ref) => {
   const [input, setInput] = useState(defaults.input || '')
   const [githubToken, setGithubToken] = useState(defaults.token || '')
@@ -16,13 +28,17 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
     onValuesChange && onValuesChange({ input, token: githubToken, useClone })
   }, [input, githubToken, useClone, onValuesChange])
 
-  // Detect if input is an action or repository
+  // Detect if input is an action, a repository or an owner (org or user)
   const detectInputType = (value) => {
     if (!value || !value.trim()) {
       return 'repository' // Default to repository
     }
     
     const trimmed = value.trim()
+
+    if (orgFromInput(trimmed)) {
+      return 'org'
+    }
     
     // Check if it's an action reference (has @ symbol and owner/repo@ref format)
     if (trimmed.includes('@')) {
@@ -55,14 +71,19 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
     const trimmedInput = input.trim()
 
     if (!trimmedInput) {
-      setFieldError('Enter a repository or an action reference.')
+      setFieldError('Enter an organization or user, a repository or an action reference.')
       return
     }
     if (inputType === 'repository' && !/^https?:\/\//.test(trimmedInput) && !/^[\w.-]+\/[\w.-]+$/.test(trimmedInput)) {
-      setFieldError('Use owner/repo, a github.com URL, or owner/repo@ref for a single action.')
+      setFieldError('Use an organization or user name, owner/repo, a github.com URL, or owner/repo@ref for a single action.')
       return
     }
     setFieldError('')
+
+    if (inputType === 'org') {
+      onAudit({ org: orgFromInput(trimmedInput), github_token: githubToken || undefined, use_clone: useClone })
+      return
+    }
     
     const data = {
       github_token: githubToken || undefined,
@@ -81,11 +102,12 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
   const inputType = detectInputType(input)
   const placeholder = inputType === 'action' 
     ? 'owner/repo@v1 or owner/repo@main' 
-    : 'owner/repo or https://github.com/owner/repo'
+    : 'org or user, owner/repo, or a GitHub URL'
 
   const isHero = variant === 'hero'
   const isAction = inputType === 'action'
-  const kindLabel = input.trim() ? (isAction ? 'Action' : 'Repo') : null
+  const isOrg = inputType === 'org'
+  const kindLabel = input.trim() ? (isAction ? 'Action' : isOrg ? 'Owner' : 'Repo') : null
 
   const submitLabel = loading ? (
     <span className="loading-container">
@@ -96,7 +118,7 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
       </span>
       <span className="loading-text">Auditing</span>
     </span>
-  ) : (isHero ? 'Audit' : 'Run audit')
+  ) : isOrg ? (isHero ? 'Find repos' : 'Choose repositories') : (isHero ? 'Audit' : 'Run audit')
 
   const createWorkflowButton = (
     <button
@@ -117,7 +139,7 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
     <form className={`input-form input-form--${variant}`} onSubmit={handleSubmit} role={isHero ? 'search' : undefined}>
       <div className="form-group">
         <label htmlFor="input" className={isHero ? 'visually-hidden' : ''}>
-          Repository or action
+          Owner, repository or action
           {!isHero && kindLabel && (
             <span className={`input-kind ${inputType}`}>{kindLabel}</span>
           )}
@@ -134,7 +156,7 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
             autoComplete="off"
             aria-invalid={Boolean(fieldError)}
             aria-describedby={fieldError ? 'input-help' : undefined}
-            className={`audit-input ${fieldError ? 'has-error' : ''} ${isHero && kindLabel ? 'has-kind' : ''}`}
+            className={`audit-input ${fieldError ? 'has-error' : ''} ${isHero && kindLabel ? 'has-kind' : ''} ${isHero && isOrg ? 'is-org' : ''}`}
             autoFocus={isHero}
           />
           {isHero && kindLabel && (
