@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import './AnalysisHistory.css'
 
-function AnalysisHistory({ onLoadAnalysis, popover = false }) {
+function AnalysisHistory({ onLoadAnalysis, onLoadOrgScan, popover = false }) {
   const [analyses, setAnalyses] = useState([])
+  const [orgScans, setOrgScans] = useState([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(false)
   const rootRef = useRef(null)
@@ -33,10 +34,16 @@ function AnalysisHistory({ onLoadAnalysis, popover = false }) {
 
   const fetchAnalyses = async () => {
     try {
-      const response = await fetch('/api/analyses?limit=20')
+      const [response, orgResponse] = await Promise.all([
+        fetch('/api/analyses?limit=20'),
+        fetch('/api/org-scans?limit=10'),
+      ])
       if (response.ok) {
         const data = await response.json()
         setAnalyses(data)
+      }
+      if (orgResponse.ok) {
+        setOrgScans(await orgResponse.json())
       }
     } catch (error) {
       console.error('Failed to fetch analyses:', error)
@@ -57,12 +64,26 @@ function AnalysisHistory({ onLoadAnalysis, popover = false }) {
     }
   }
 
+  const handleLoadOrgScan = async (scanId) => {
+    try {
+      const response = await fetch(`/api/org-scans/${scanId}`)
+      if (response.ok) {
+        onLoadOrgScan(await response.json())
+        if (popover) setExpanded(false)
+      }
+    } catch (error) {
+      console.error('Failed to load org scan:', error)
+    }
+  }
+
   const formatDate = (dateString) => {
     const date = new Date(dateString)
     return date.toLocaleString()
   }
 
-  if (!expanded && analyses.length === 0) {
+  const total = analyses.length + orgScans.length
+
+  if (!expanded && total === 0) {
     return null
   }
 
@@ -75,7 +96,7 @@ function AnalysisHistory({ onLoadAnalysis, popover = false }) {
         aria-expanded={expanded}
       >
         <h3>Previous analyses</h3>
-        <span className="history-count">{analyses.length}</span>
+        <span className="history-count">{total}</span>
         <svg className={`toggle-icon ${expanded ? 'open' : ''}`} width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
           <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -85,10 +106,35 @@ function AnalysisHistory({ onLoadAnalysis, popover = false }) {
         <div className="history-content">
           {loading ? (
             <div className="history-loading">Loading...</div>
-          ) : analyses.length === 0 ? (
+          ) : total === 0 ? (
             <div className="history-empty">No previous analyses</div>
           ) : (
             <div className="history-list">
+              {onLoadOrgScan && orgScans.map((scan) => (
+                <div key={scan.id} className="history-item">
+                  <div className="history-item-header">
+                    <div className="history-item-title">
+                      <strong>{scan.org}</strong>
+                      <div className="history-item-meta">
+                        <span className="history-method">org</span>
+                        <span className="history-item-date">{formatDate(scan.timestamp)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {scan.statistics && (
+                    <div className="history-item-stats">
+                      <span>{scan.statistics.total_issues || 0} issues</span>
+                      <span>{scan.statistics.total_repositories || 0} repositories</span>
+                    </div>
+                  )}
+                  <button
+                    className="history-load-button"
+                    onClick={() => handleLoadOrgScan(scan.id)}
+                  >
+                    Load
+                  </button>
+                </div>
+              ))}
               {analyses.map((analysis) => (
                 <div key={analysis.id} className="history-item">
                   <div className="history-item-header">

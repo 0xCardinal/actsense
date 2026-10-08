@@ -467,3 +467,9 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.input-kind.org {
+  color: var(--sev-none);
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
