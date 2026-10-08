@@ -493,7 +493,7 @@ function App() {
     }
   }
 
-  // Load the repositories of an organization so the user can pick some.
+  // Load the repositories of an organization or user so some can be picked.
   const handleOrgLookup = async ({ org, github_token, use_clone }) => {
     orgAbortRef.current?.abort()
     runLayoutTransition(() => {
@@ -519,6 +519,8 @@ function App() {
         org: body.org,
         repositories: body.repositories,
         maxSelectable: body.max_selectable,
+        ownerType: body.owner_type,
+        privateIncluded: body.private_included,
         token: github_token,
         useClone: use_clone,
       })
@@ -536,6 +538,7 @@ function App() {
     setOrgProgress({ completed: 0, total: repositories.length })
     setOrgScan({
       org: picker.org,
+      owner_type: picker.ownerType,
       repositories: repositories.map(name => ({ repository: name, status: 'pending', workflows: 0, statistics: {} })),
     })
     let finished = false
@@ -548,11 +551,12 @@ function App() {
           repositories,
           github_token: picker.token || undefined,
           use_clone: Boolean(picker.useClone),
+          owner_type: picker.ownerType || undefined,
         }),
         signal: controller.signal,
       })
       if (!response.ok) {
-        throw new Error(await readErrorDetail(response, 'Failed to scan organization'))
+        throw new Error(await readErrorDetail(response, 'Failed to scan repositories'))
       }
       await readEventStream(response, (type, data) => {
         // The server logs "<owner/repo>: auditing" when a repository starts.
@@ -580,7 +584,7 @@ function App() {
           if (window.refreshAnalysisHistory) window.refreshAnalysisHistory()
         } else if (type === 'error') {
           finished = true
-          throw new Error(data.detail || 'Organization scan failed')
+          throw new Error(data.detail || 'Scan failed')
         }
       })
       if (!finished) {

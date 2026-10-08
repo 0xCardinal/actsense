@@ -895,6 +895,21 @@
             "type": "boolean",
             "title": "Use Clone",
             "default": false
+          },
+          "owner_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "organization",
+                  "user"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Type"
           }
         },
         "type": "object",

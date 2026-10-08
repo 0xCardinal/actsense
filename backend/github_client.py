@@ -363,22 +363,30 @@ class GitHubClient:
                 break
         return items
 
-    async def list_owner_repositories(self, owner: str, max_pages: int = 10) -> Optional[list]:
+    async def list_owner_repositories(self, owner: str, max_pages: int = 10) -> Optional[Dict[str, Any]]:
         """Repositories of an organization or user, most recently pushed first.
 
-        Tries the organization endpoint first and falls back to the user one.
-        When the token belongs to ``owner`` itself, ``/user/repos`` is used so
-        the user's private repositories are included. Returns None when no
-        organization or user has that name.
+        Returns ``{"owner_type", "private_included", "repositories"}``, or None
+        when no organization or user has that name. Tries the organization
+        endpoint first and falls back to the user one. A user's listing holds
+        only the repositories they own; their private ones are included only
+        when the token belongs to that user (``/user/repos``). An
+        organization's private repositories show whenever the token can see them.
         """
         name = quote(owner, safe="")
+        owner_type = "organization"
+        private_included = bool(self.token)
         repos = await self._list_paged(f"{self.base_url}/orgs/{name}/repos?type=all", max_pages)
-        if repos is None and self.token:
-            me = await self._get(f"{self.base_url}/user")
-            if me.status_code == 200 and str(me.json().get("login", "")).lower() == owner.lower():
-                repos = await self._list_paged(
-                    f"{self.base_url}/user/repos?affiliation=owner&visibility=all", max_pages
-                )
+        if repos is None:
+            owner_type = "user"
+            private_included = False
+            if self.token:
+                me = await self._get(f"{self.base_url}/user")
+                if me.status_code == 200 and str(me.json().get("login", "")).lower() == owner.lower():
+                    repos = await self._list_paged(
+                        f"{self.base_url}/user/repos?affiliation=owner&visibility=all", max_pages
+                    )
+                    private_included = repos is not None
         if repos is None:
             repos = await self._list_paged(f"{self.base_url}/users/{name}/repos?type=owner", max_pages)
         if repos is None:
@@ -399,7 +407,7 @@ class GitHubClient:
             if isinstance(r, dict) and r.get("full_name")
         ]
         result.sort(key=lambda r: r.get("pushed_at") or "", reverse=True)
-        return result
+        return {"owner_type": owner_type, "private_included": private_included, "repositories": result}
 
     def parse_action_reference(self, action_ref: str) -> tuple:
         """Parse action reference like 'owner/repo@v1', 'owner/repo/path@v1', or 'owner/repo@ref'."""

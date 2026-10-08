@@ -33,7 +33,7 @@ The start screen. The **Try** chips run example audits.
 | --- | --- |
 | `owner/repo`<br>`https://github.com/owner/repo` | Every workflow in `.github/workflows`, plus the actions, reusable workflows and images they use |
 | `owner/repo@ref`<br>`actions/checkout@v4` | That one action at that ref, plus its own dependencies |
-| `org`<br>`https://github.com/org` | The repositories you pick from that organization or user. See [Scan an organization](#scan-an-organization) |
+| `org` or `user`<br>`https://github.com/org` | The repositories you pick from that organization or user. See [Scan an organization](#scan-an-organization) |
 | **Secure workflow** | A workflow you paste in. See [Fix a workflow](#fix-a-workflow) |
 
 The two options below the input:
@@ -215,7 +215,9 @@ Pinning fixes replace tags with commit SHAs and image tags with digests. They ar
 
 ## Scan an organization
 
-Type an organization or user name on its own (`my-org`, `@my-org` or `https://github.com/my-org`). The input is marked **Org** and the button reads **Find repos**.
+Type an organization or user name on its own (`my-org`, `@my-org` or `https://github.com/my-org`). The input is marked **Owner** and the button reads **Find repos**. actsense asks GitHub which kind of account it is and labels the scan **Organization scan** or **User scan**.
+
+For a user, only the repositories that user owns are listed, not ones in organizations they belong to: scan those organizations by their own name. A user's private repositories are listed only when the token belongs to that user. For an organization, private repositories are listed whenever your token can see them.
 
 <ol class="as-steps as-steps--stack">
   <li>
@@ -246,7 +248,7 @@ Type an organization or user name on its own (`my-org`, `@my-org` or `https://gi
   </div>
   <div>
     <strong>Action inventory</strong>
-    <p>Every action the organization's workflows use, flagging third-party actions, actions not pinned to a commit SHA, and actions used at several refs. Expand one to see each ref and every file and line that uses it.</p>
+    <p>Every action the scanned workflows use, flagging third-party actions, actions not pinned to a commit SHA, and actions used at several refs. Expand one to see each ref and every file and line that uses it.</p>
   </div>
 </div>
 

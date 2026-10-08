@@ -6,7 +6,8 @@ import './InputForm.css'
 // `onValuesChange`, so switching layouts never loses what was typed.
 const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/
 
-// 'acme', '@acme' or a github.com/acme URL name a whole organization (or user).
+// 'acme', '@acme' or a github.com/acme URL name a whole owner: an
+// organization or a user (which one is only known once GitHub answers).
 export function orgFromInput(value) {
   let v = (value || '').trim().replace(/\/+$/, '')
   const url = v.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/(.+)$/i)
@@ -27,7 +28,7 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
     onValuesChange && onValuesChange({ input, token: githubToken, useClone })
   }, [input, githubToken, useClone, onValuesChange])
 
-  // Detect if input is an action, a repository or an organization
+  // Detect if input is an action, a repository or an owner (org or user)
   const detectInputType = (value) => {
     if (!value || !value.trim()) {
       return 'repository' // Default to repository
@@ -70,11 +71,11 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
     const trimmedInput = input.trim()
 
     if (!trimmedInput) {
-      setFieldError('Enter an organization, a repository or an action reference.')
+      setFieldError('Enter an organization or user, a repository or an action reference.')
       return
     }
     if (inputType === 'repository' && !/^https?:\/\//.test(trimmedInput) && !/^[\w.-]+\/[\w.-]+$/.test(trimmedInput)) {
-      setFieldError('Use an organization name, owner/repo, a github.com URL, or owner/repo@ref for a single action.')
+      setFieldError('Use an organization or user name, owner/repo, a github.com URL, or owner/repo@ref for a single action.')
       return
     }
     setFieldError('')
@@ -101,12 +102,12 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
   const inputType = detectInputType(input)
   const placeholder = inputType === 'action' 
     ? 'owner/repo@v1 or owner/repo@main' 
-    : 'org, owner/repo or https://github.com/owner/repo'
+    : 'org or user, owner/repo, or a GitHub URL'
 
   const isHero = variant === 'hero'
   const isAction = inputType === 'action'
   const isOrg = inputType === 'org'
-  const kindLabel = input.trim() ? (isAction ? 'Action' : isOrg ? 'Org' : 'Repo') : null
+  const kindLabel = input.trim() ? (isAction ? 'Action' : isOrg ? 'Owner' : 'Repo') : null
 
   const submitLabel = loading ? (
     <span className="loading-container">
@@ -138,7 +139,7 @@ const InputForm = forwardRef(({ onAudit, loading, onOpenYAMLEditor, variant = 's
     <form className={`input-form input-form--${variant}`} onSubmit={handleSubmit} role={isHero ? 'search' : undefined}>
       <div className="form-group">
         <label htmlFor="input" className={isHero ? 'visually-hidden' : ''}>
-          Organization, repository or action
+          Owner, repository or action
           {!isHero && kindLabel && (
             <span className={`input-kind ${inputType}`}>{kindLabel}</span>
           )}

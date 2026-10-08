@@ -177,6 +177,7 @@ class AnalysisStorage:
                 "id": scan["id"],
                 "timestamp": scan["timestamp"],
                 "org": scan.get("org"),
+                "owner_type": scan.get("owner_type"),
                 "statistics": scan.get("statistics", {}),
             })
             if len(scans) >= limit:

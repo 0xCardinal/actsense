@@ -726,10 +726,10 @@ Restore a dismissed finding. Returns the analysis with dismissals applied.
 List dismissals for a repository or action.
 
 ### GET `/api/orgs/{org}/repos`
-Repositories of an organization (falling back to a user account) for the repository picker, most recently pushed first. The token goes in the `X-GitHub-Token` header, never the URL.
+Repositories of an organization (falling back to a user account) for the repository picker, most recently pushed first, with `owner_type` (`organization` or `user`) and `private_included`. A user's listing holds only repositories they own, and their private ones only when the token is theirs (`/user/repos`). The token goes in the `X-GitHub-Token` header, never the URL.
 
 ### POST `/api/audit/org` and `/api/audit/org/stream`
-Scan selected repositories of an organization: `{"org": "acme", "repositories": ["api", "acme/web"], "github_token": "...", "use_clone": false}`. The stream sends `log`, one `progress` event per finished repository and a final `result`.
+Scan selected repositories of an organization or user: `{"org": "acme", "repositories": ["api", "acme/web"], "github_token": "...", "use_clone": false, "owner_type": "organization"}`. `owner_type` comes from the listing and only labels the scan. The stream sends `log`, one `progress` event per finished repository and a final `result`.
 
 ### GET `/api/org-scans`, GET/DELETE `/api/org-scans/{id}`
 List, read or delete stored org scans. Reading one refreshes each repository's counts from its stored analysis, so later dismissals show.

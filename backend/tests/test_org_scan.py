@@ -64,7 +64,10 @@ class TestListOwnerRepositories:
             return _response(200, page1 if url.endswith("page=1") else page2)
 
         client._get = fake_get
-        repos = await client.list_owner_repositories("acme")
+        listing = await client.list_owner_repositories("acme")
+        assert listing["owner_type"] == "organization"
+        assert listing["private_included"] is False
+        repos = listing["repositories"]
         assert len(repos) == 101
         assert repos[0]["full_name"] == "acme/newest"
         assert all("/orgs/acme/repos" in u for u in calls)
@@ -80,8 +83,10 @@ class TestListOwnerRepositories:
             return _response(200, [_repo("dotfiles")])
 
         client._get = fake_get
-        repos = await client.list_owner_repositories("someone")
-        assert [r["name"] for r in repos] == ["dotfiles"]
+        listing = await client.list_owner_repositories("someone")
+        assert listing["owner_type"] == "user"
+        assert listing["private_included"] is False
+        assert [r["name"] for r in listing["repositories"]] == ["dotfiles"]
 
     @pytest.mark.asyncio
     async def test_token_owner_uses_user_repos(self):
@@ -97,8 +102,10 @@ class TestListOwnerRepositories:
             return _response(200, [_repo("secret", private=True)])
 
         client._get = fake_get
-        repos = await client.list_owner_repositories("me")
-        assert repos[0]["private"] is True
+        listing = await client.list_owner_repositories("me")
+        assert listing["owner_type"] == "user"
+        assert listing["private_included"] is True
+        assert listing["repositories"][0]["private"] is True
         assert any("/user/repos?affiliation=owner" in u for u in seen)
 
     @pytest.mark.asyncio
@@ -229,12 +236,16 @@ async def _fake_audit(client, owner, repo, graph, use_clone=False, token=None, l
 class TestOrgEndpoints:
     def test_list_repos_passes_header_token(self, api):
         client, _, fake = api
-        fake.list_owner_repositories = AsyncMock(return_value=[_repo("api")])
+        fake.list_owner_repositories = AsyncMock(return_value={
+            "owner_type": "user", "private_included": False, "repositories": [_repo("api")],
+        })
         with patch.object(main, "GitHubClient", return_value=fake) as cls:
             resp = client.get("/api/orgs/acme/repos", headers={"X-GitHub-Token": "test-token"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["org"] == "acme"
+        assert body["owner_type"] == "user"
+        assert body["private_included"] is False
         assert body["repositories"][0]["name"] == "api"
         assert body["max_selectable"] == org_scan.MAX_ORG_SCAN_REPOS
         cls.assert_called_once_with(token="test-token")
@@ -248,6 +259,15 @@ class TestOrgEndpoints:
     def test_list_repos_invalid_name(self, api):
         client, _, _ = api
         assert client.get("/api/orgs/-bad/repos").status_code == 400
+
+    def test_scan_records_owner_type(self, api):
+        client, _, _ = api
+        with patch.object(main, "audit_repository", side_effect=_fake_audit):
+            body = client.post("/api/audit/org", json={"org": "someone", "repositories": ["api"], "owner_type": "user"}).json()
+        assert body["owner_type"] == "user"
+        assert client.get("/api/org-scans").json()[0]["owner_type"] == "user"
+        bad = client.post("/api/audit/org", json={"org": "someone", "repositories": ["api"], "owner_type": "team"})
+        assert bad.status_code == 422
 
     def test_scan_validates_input(self, api):
         client, _, _ = api

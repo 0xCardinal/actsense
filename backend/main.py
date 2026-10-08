@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any, Set, Callable, Tuple, Awaitable
+from typing import Optional, List, Dict, Any, Set, Callable, Tuple, Awaitable, Literal
 import asyncio
 import inspect
 import json
@@ -80,6 +80,8 @@ class OrgScanRequest(BaseModel):
     repositories: List[str]
     github_token: Optional[str] = None
     use_clone: bool = False
+    # From the repository listing; only used to label the scan.
+    owner_type: Optional[Literal["organization", "user"]] = None
 
 
 class DismissRequest(BaseModel):
@@ -724,7 +726,7 @@ async def list_org_repositories(owner: str, x_github_token: Optional[str] = Head
         raise HTTPException(status_code=400, detail="Invalid organization or user name")
     client = GitHubClient(token=x_github_token or None)
     try:
-        repos = await client.list_owner_repositories(login)
+        listing = await client.list_owner_repositories(login)
     except HTTPException:
         raise
     except Exception:
@@ -732,9 +734,9 @@ async def list_org_repositories(owner: str, x_github_token: Optional[str] = Head
         raise HTTPException(status_code=502, detail="Failed to list repositories from GitHub")
     finally:
         await _close_client(client)
-    if repos is None:
+    if listing is None:
         raise HTTPException(status_code=404, detail=f"No GitHub organization or user named '{login}'")
-    return {"org": login, "repositories": repos, "max_selectable": org_scan.MAX_ORG_SCAN_REPOS}
+    return {"org": login, **listing, "max_selectable": org_scan.MAX_ORG_SCAN_REPOS}
 
 
 def _repo_result(repository: str, status: str, **extra: Any) -> Dict[str, Any]:
@@ -796,6 +798,7 @@ async def _run_org_scan(
     emit("Building organization summary...")
     scan = {
         "org": owner,
+        "owner_type": request.owner_type,
         "method": "clone" if request.use_clone else "api",
         "repositories": list(results),
         "statistics": org_scan.summarize(list(results)),

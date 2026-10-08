@@ -42,6 +42,10 @@ const ruleTitle = (type) => (type || 'unknown')
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
+// Scans stored before owner_type existed don't know which kind they were.
+const scanLabel = (ownerType) => (ownerType === 'user' ? 'User scan' : ownerType === 'organization' ? 'Organization scan' : 'Scan')
+const ownerNoun = (ownerType) => (ownerType === 'user' ? 'this user' : ownerType === 'organization' ? 'this organization' : 'these repositories')
+
 // One line for the table; the full message stays available on hover.
 function summarizeError(error) {
   if (!error) return ''
@@ -189,7 +193,7 @@ function SevPill({ severity }) {
 /* ------------------------------------------------------------------ */
 
 function OrgRepoPicker({ picker, onScan, disabled }) {
-  const { org, repositories = [], maxSelectable = 200 } = picker
+  const { org, repositories = [], maxSelectable = 200, ownerType, privateIncluded } = picker
   const [query, setQuery] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [showForks, setShowForks] = useState(false)
@@ -229,11 +233,18 @@ function OrgRepoPicker({ picker, onScan, disabled }) {
       <header className="org-hero">
         <OrgAvatar org={org} />
         <div className="org-hero-text">
-          <p className="org-eyebrow">Choose repositories</p>
+          <p className="org-eyebrow">{ownerType === 'user' ? 'User' : 'Organization'} · choose repositories</p>
           <h2 className="org-title">{org}</h2>
           <p className="org-sub">
             {plural(repositories.length, 'repository', 'repositories')}. Each one you pick is audited on its own and rolled up here.
           </p>
+          {ownerType === 'user' && (
+            <p className="org-sub org-dim">
+              {privateIncluded
+                ? `Repositories ${org} owns, private ones included. Repositories in organizations ${org} belongs to are not listed; scan those organizations by name.`
+                : `Public repositories ${org} owns. Private ones need a token belonging to ${org}, and repositories in organizations ${org} belongs to are scanned by the organization's name.`}
+            </p>
+          )}
         </div>
         <div className="org-hero-actions">
           <button
@@ -627,7 +638,7 @@ function FindingGroup({ group, mode, index, defaultOpen, onOpenFinding, activeFi
   )
 }
 
-function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, activeFingerprint }) {
+function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, activeFingerprint, ownerType }) {
   const { findings, loading, error } = state
   const { query, severities, mode, showDismissed, repository, action } = filter
   const onAction = (f) => !action || (f.node?.type === 'action' && f.node.id.startsWith(`${action}@`))
@@ -694,7 +705,7 @@ function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, ac
   if (!findings) return null
   if (findings.length === 0) {
     return (
-      <EmptyState title="No findings across this organization" tone="good">
+      <EmptyState title={`No findings across ${ownerNoun(ownerType)}`} tone="good">
         Every scanned workflow passed. Repositories that failed or were skipped are not included.
       </EmptyState>
     )
@@ -811,7 +822,7 @@ function actionHomeUrl(action) {
   return owner && repo ? `https://github.com/${owner}/${repo}` : null
 }
 
-function InventoryTab({ org, inventory: rawInventory, findings, onShowFindings }) {
+function InventoryTab({ org, ownerType, inventory: rawInventory, findings, onShowFindings }) {
   const inventory = useMemo(() => rawInventory.map(a => {
     const internal = a.internal ?? a.action.toLowerCase().startsWith(`${org.toLowerCase()}/`)
     return { ...a, internal, trusted: a.trusted || internal }
@@ -885,7 +896,7 @@ function InventoryTab({ org, inventory: rawInventory, findings, onShowFindings }
                     <span className="org-mono org-group-title org-truncate">{a.action}</span>
                   </button>
                   <span className="org-action-tags">
-                    <span className={`org-tag ${a.trusted ? '' : 'is-warn'}`}>{a.internal ? 'Internal' : a.trusted ? 'Trusted' : 'Third party'}</span>
+                    <span className={`org-tag ${a.trusted ? '' : 'is-warn'}`}>{a.internal ? (ownerType === 'user' ? 'Own' : 'Internal') : a.trusted ? 'Trusted' : 'Third party'}</span>
                     <span className={`org-tag ${a.pinning === 'sha' ? 'is-ok' : 'is-warn'}`}>
                       {a.pinning === 'sha' ? 'SHA pinned' : a.pinning === 'tag' ? 'Tag or branch' : 'Mixed pinning'}
                     </span>
@@ -1014,7 +1025,7 @@ function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, o
       <header className="org-hero">
         <OrgAvatar org={scan.org} />
         <div className="org-hero-text">
-          <p className="org-eyebrow">Organization scan</p>
+          <p className="org-eyebrow">{scanLabel(scan.owner_type)}</p>
           <h2 className="org-title">{scan.org}</h2>
           <p className="org-sub">
             {running
@@ -1090,10 +1101,11 @@ function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, o
             onRetry={retryFindings}
             onOpenFinding={scan.id ? onOpenFinding : null}
             activeFingerprint={activeFingerprint}
+            ownerType={scan.owner_type}
           />
         )}
         {tab === 'actions' && (
-          <InventoryTab org={scan.org} inventory={inventory} findings={findingsState.findings} onShowFindings={showFindings} />
+          <InventoryTab org={scan.org} ownerType={scan.owner_type} inventory={inventory} findings={findingsState.findings} onShowFindings={showFindings} />
         )}
       </div>
     </section>

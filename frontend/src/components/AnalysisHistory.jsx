@@ -116,7 +116,7 @@ function AnalysisHistory({ onLoadAnalysis, onLoadOrgScan, popover = false }) {
                     <div className="history-item-title">
                       <strong>{scan.org}</strong>
                       <div className="history-item-meta">
-                        <span className="history-method">org</span>
+                        <span className="history-method">{scan.owner_type === 'user' ? 'user' : 'org'}</span>
                         <span className="history-item-date">{formatDate(scan.timestamp)}</span>
                       </div>
                     </div>
