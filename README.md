@@ -22,6 +22,7 @@
 - 🔎 **Powerful Search**: Search security issues and assets with natural language queries (Cmd+K / Ctrl+K)
 - 📋 **Table Views**: View nodes and dependencies in organized table formats
 - 🔗 **Transitive Dependency Analysis**: Automatically resolves and audits all action dependencies
+- 🏢 **Organization Scans**: Enter an organization name, pick its repositories and scan them together, with an org-wide dashboard and an inventory of every action in use
 - 💾 **Analysis History**: Save and load previous analyses
 - 🔐 **Multiple Analysis Methods**: Use GitHub API, clone repositories locally, or analyze YAML directly
 - ✏️ **YAML Editor**: Paste and analyze workflow YAML directly with real-time validation
