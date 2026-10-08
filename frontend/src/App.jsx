@@ -636,18 +636,21 @@ function App() {
   // Open an org-wide finding in the same side panel the graph uses: load the
   // repository's analysis (for the graph context and dismissals) and select
   // the node the finding sits on. With inGraph, also switch to that graph.
-  const handleOpenOrgFinding = async (finding, { inGraph = false } = {}) => {
-    const result = orgScan?.repositories?.find(r => r.repository === finding.repository)
+  // Open a node of one scanned repository: in the side panel over the org
+  // view, or (inGraph) in that repository's graph. A node that is not in the
+  // graph (an old scan, a renamed ref) still opens the graph, unselected.
+  const handleOpenOrgNode = async (repository, nodeId, { inGraph = true, fingerprint = null } = {}) => {
+    const result = orgScan?.repositories?.find(r => r.repository === repository)
     if (!result?.analysis_id) return
     try {
       const response = await fetch(`/api/analyses/${result.analysis_id}`)
       if (!response.ok) throw new Error(await readErrorDetail(response, 'Failed to load analysis'))
       const analysis = await response.json()
-      const graphNode = analysis.graph?.nodes?.find(n => n.id === finding.node?.id)
+      const graphNode = analysis.graph?.nodes?.find(n => n.id === nodeId)
       const select = () => {
         showAnalysis(analysis)
         setSelectedIssue(null)
-        setFocusFingerprint(finding.fingerprint || null)
+        setFocusFingerprint(fingerprint)
         setSelectedNode(graphNode ? {
           id: graphNode.id,
           data: {
@@ -675,6 +678,9 @@ function App() {
       setError(err.message)
     }
   }
+
+  const handleOpenOrgFinding = (finding, { inGraph = false } = {}) =>
+    handleOpenOrgNode(finding.repository, finding.node?.id, { inGraph, fingerprint: finding.fingerprint || null })
 
   const handleLoadOrgScan = (scan) => runLayoutTransition(() => {
     showAnalysis(null)
@@ -989,6 +995,7 @@ function App() {
               onOpenRepository={handleOpenOrgRepository}
               onCancel={() => orgAbortRef.current?.abort()}
               onOpenFinding={handleOpenOrgFinding}
+              onOpenNode={handleOpenOrgNode}
               activeFingerprint={selectedNode ? focusFingerprint : null}
               refreshKey={orgFindingsVersion}
               onChooseRepositories={orgPicker?.repositories && orgPicker.org.toLowerCase() === orgScan?.org?.toLowerCase() ? () => { setOrgScan(null); setOrgScanParam(null) } : () => handleOrgLookup({

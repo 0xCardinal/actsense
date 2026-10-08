@@ -240,15 +240,15 @@ For a user, only the repositories that user owns are listed, not ones in organiz
 <div class="as-ui-list">
   <div>
     <strong>Repositories</strong>
-    <p>Every scanned repository, riskiest first, with its findings by severity. Click a row to open its dependency graph; <strong>Back to scan</strong> in the sidebar returns here.</p>
+    <p>Every scanned repository, riskiest first, with its findings by severity. Expand a row to list its workflow files, each with its findings, a GitHub link and a <strong>Graph</strong> link, or click the row to open the repository's dependency graph; <strong>Back to scan</strong> in the sidebar returns here.</p>
   </div>
   <div>
     <strong>Findings</strong>
     <p>Every finding across the organization, grouped by rule or by repository, with search and severity filters. Each one links to the workflow file and line on GitHub, the action it comes through, and how to fix it. Click a finding to open it in the same side panel as the graph, where you can dismiss it, or use <strong>Graph</strong> to jump to it in the repository's graph.</p>
   </div>
   <div>
-    <strong>Action inventory</strong>
-    <p>Every action the scanned workflows use, flagging third-party actions, actions not pinned to a commit SHA, and actions used at several refs. Expand one to see each ref and every file and line that uses it.</p>
+    <strong>Inventory</strong>
+    <p>Everything in the scanned CI: every workflow file, and every action and reusable workflow they call with <code>uses:</code>. Actions are labelled by publisher: <strong>Internal</strong> (the organization's own, <strong>Own</strong> for a user), <strong>GitHub</strong> (<code>actions/</code> and <code>github/</code>), <strong>Third party · allowlisted</strong> (another publisher on the trusted list in <code>backend/config.yaml</code>, such as <code>docker/</code>) or <strong>Third party</strong>. The dropdowns filter by kind, publisher, pinning and refs. Expand an action to see each ref and every file and line that uses it, or a workflow file to see what it calls. <strong>Graph</strong> opens the repository's graph at that workflow or action; an action used in several repositories has one per usage.</p>
   </div>
 </div>
 

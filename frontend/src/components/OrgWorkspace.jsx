@@ -369,8 +369,9 @@ function SeverityBar({ counts = {} }) {
   )
 }
 
-function MetricStrip({ stats, repoCount, actionCount }) {
+function MetricStrip({ stats, repos, actionCount }) {
   const failed = (stats.failed_repositories ?? 0) + (stats.skipped_repositories ?? 0)
+  const workflowFiles = stats.workflow_files ?? repos.reduce((n, r) => n + (r.workflows || 0), 0)
   return (
     <div className="org-metrics">
       <div className="org-metric org-metric--lead">
@@ -383,11 +384,15 @@ function MetricStrip({ stats, repoCount, actionCount }) {
         <span className="org-metric-label">Repos with findings</span>
         <span className="org-metric-value">
           {stats.repositories_with_issues ?? 0}
-          <span className="org-metric-of">/{stats.total_repositories ?? repoCount}</span>
+          <span className="org-metric-of">/{stats.total_repositories ?? repos.length}</span>
         </span>
       </div>
       <div className="org-metric">
-        <span className="org-metric-label">Distinct actions</span>
+        <span className="org-metric-label">Workflow files</span>
+        <span className="org-metric-value">{workflowFiles}</span>
+      </div>
+      <div className="org-metric">
+        <span className="org-metric-label">Actions used</span>
         <span className="org-metric-value">{actionCount}</span>
       </div>
       <div className={`org-metric ${failed > 0 ? 'is-warn' : ''}`}>
@@ -416,7 +421,54 @@ function compareRisk(a, b) {
   return a.repository.localeCompare(b.repository)
 }
 
-function RepositoriesTab({ repos, onOpenRepository, onShowFindings }) {
+function WorkflowFiles({ files, onShowFindings, onOpenNode, repository }) {
+  if (!files) return <SkeletonRows rows={2} />
+  return (
+    <ul className="org-wf-files">
+      {files.map(f => (
+        <li key={f.path}>
+          <ExtLink href={f.url} className="org-ref org-ref--file" title="Open on GitHub">
+            <Icon.File />
+            <span className="org-mono">{f.path}</span>
+          </ExtLink>
+          <span className="org-wf-actions">
+            {f.findings && onShowFindings ? (
+              <button type="button" className="org-link" onClick={() => onShowFindings({ repository, path: f.path })}>
+                {plural(f.findings, 'finding')}
+              </button>
+            ) : <span className="org-num org-dim">No findings</span>}
+            {onOpenNode && (
+              <GraphLink
+                compact
+                label={`Open ${repoName(repository)} graph at ${fileName(f.path)}`}
+                onClick={() => onOpenNode(repository, workflowNodeId(repository, f.path))}
+              />
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function RepositoriesTab({ repos, workflows, onOpenRepository, onShowFindings, onOpenNode }) {
+  const [open, setOpen] = useState(() => new Set())
+
+  const filesByRepo = useMemo(() => {
+    if (!workflows) return null
+    const map = {}
+    workflows.forEach(w => { (map[w.repository] = map[w.repository] || []).push(w) })
+    Object.values(map).forEach(list => list.sort((a, b) => b.findings - a.findings || a.path.localeCompare(b.path)))
+    return map
+  }, [workflows])
+
+  const toggleFiles = (r) => setOpen(prev => {
+    const next = new Set(prev)
+    if (next.has(r.repository)) next.delete(r.repository)
+    else next.add(r.repository)
+    return next
+  })
+
   return (
     <div className="org-table-wrap">
       <table className="org-table org-table--repos">
@@ -446,15 +498,30 @@ function RepositoriesTab({ repos, onOpenRepository, onShowFindings }) {
             const openable = r.status === 'ok' && r.analysis_id
             const counts = r.statistics?.severity_counts || {}
             const scanned = r.status === 'ok' || r.status === 'no_workflows'
+            const expandable = openable && r.workflows > 0
+            const expanded = expandable && open.has(r.repository)
             return (
+              <React.Fragment key={r.repository}>
               <tr
-                key={r.repository}
                 className={`org-enter ${openable ? 'is-openable' : ''}`}
                 style={stagger(i)}
                 onClick={openable ? () => onOpenRepository(r) : undefined}
               >
                 <td className="org-cell-repo" title={r.repository}>
-                  <span className="org-mono org-truncate">{repoName(r.repository)}</span>
+                  <span className="org-repo-cell">
+                    {expandable ? (
+                      <button
+                        type="button"
+                        className="org-expand"
+                        aria-expanded={expanded}
+                        aria-label={`${expanded ? 'Hide' : 'Show'} workflow files of ${r.repository}`}
+                        onClick={(e) => { e.stopPropagation(); toggleFiles(r) }}
+                      >
+                        <Icon.Chevron open={expanded} />
+                      </button>
+                    ) : <span className="org-expand-spacer" aria-hidden="true" />}
+                    <span className="org-mono org-truncate">{repoName(r.repository)}</span>
+                  </span>
                 </td>
                 <td className="org-cell-status">
                   <span className={`org-status org-status--${r.status}`}>
@@ -500,6 +567,19 @@ function RepositoriesTab({ repos, onOpenRepository, onShowFindings }) {
                   )}
                 </td>
               </tr>
+              {expanded && (
+                <tr className="org-detail-row">
+                  <td colSpan={SEVERITIES.length + 4}>
+                    <WorkflowFiles
+                      files={filesByRepo ? (filesByRepo[r.repository] || []) : null}
+                      repository={r.repository}
+                      onShowFindings={onShowFindings}
+                      onOpenNode={onOpenNode}
+                    />
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             )
           })}
         </tbody>
@@ -640,8 +720,8 @@ function FindingGroup({ group, mode, index, defaultOpen, onOpenFinding, activeFi
 
 function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, activeFingerprint, ownerType }) {
   const { findings, loading, error } = state
-  const { query, severities, mode, showDismissed, repository, action } = filter
-  const onAction = (f) => !action || (f.node?.type === 'action' && f.node.id.startsWith(`${action}@`))
+  const { query, severities, mode, showDismissed, repository, action, path } = filter
+  const onAction = (f) => (!action || usesTarget(f.node) === action) && (!path || f.location?.path === path)
 
   const dismissedCount = useMemo(() => (findings || []).filter(f => f.dismissed).length, [findings])
 
@@ -656,7 +736,7 @@ function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, ac
         .some(v => v && String(v).toLowerCase().includes(q)))
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [findings, query, severities, showDismissed, repository, action])
+  }, [findings, query, severities, showDismissed, repository, action, path])
 
   const severityCounts = useMemo(() => {
     const counts = {}
@@ -667,7 +747,7 @@ function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, ac
     })
     return counts
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [findings, showDismissed, repository, action])
+  }, [findings, showDismissed, repository, action, path])
 
   const groups = useMemo(() => {
     const map = new Map()
@@ -685,14 +765,14 @@ function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, ac
   }, [filtered, mode])
 
   const set = (patch) => onFilterChange({ ...filter, ...patch })
-  const clear = () => set({ query: '', severities: new Set(), repository: null, action: null })
+  const clear = () => set({ query: '', severities: new Set(), repository: null, action: null, path: null })
   const toggleSeverity = (sev) => {
     const next = new Set(severities)
     if (next.has(sev)) next.delete(sev)
     else next.add(sev)
     set({ severities: next })
   }
-  const hasFilters = Boolean(query || severities.size > 0 || repository || action)
+  const hasFilters = Boolean(query || severities.size > 0 || repository || action || path)
 
   if (loading) return <SkeletonRows rows={7} />
   if (error) {
@@ -757,10 +837,20 @@ function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, ac
       </div>
 
       <div className="org-filter-line">
-        <span><span className="org-num org-strong">{filtered.length}</span> <span className="org-dim">{filtered.length === 1 ? 'finding' : 'findings'} in {plural(groups.length, mode === 'rule' ? 'rule' : 'repository', mode === 'rule' ? 'rules' : 'repositories')}</span></span>
+        <span className="org-count-line">
+          Showing <span className="org-num org-strong">{filtered.length}</span> {filtered.length === 1 ? 'finding' : 'findings'} in {plural(groups.length, mode === 'rule' ? 'rule' : 'repository', mode === 'rule' ? 'rules' : 'repositories')}
+        </span>
+        {path && (
+          <button type="button" className="org-filter-pill" onClick={() => set({ path: null })}>
+            <span className="org-dim-inherit">File</span>
+            <span className="org-mono">{fileName(path)}</span>
+            <span aria-hidden="true">×</span>
+            <span className="visually-hidden">Remove file filter</span>
+          </button>
+        )}
         {action && (
           <button type="button" className="org-filter-pill" onClick={() => set({ action: null })}>
-            <span className="org-dim-inherit">Action</span>
+            <span className="org-dim-inherit">Uses</span>
             <span className="org-mono">{action}</span>
             <span aria-hidden="true">×</span>
             <span className="visually-hidden">Remove action filter</span>
@@ -789,7 +879,7 @@ function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, ac
           action={<button type="button" className="org-btn" onClick={clear}>Clear filters</button>}
         />
       ) : (
-        <ul className="org-groups" key={`${mode}:${repository || ''}:${action || ''}`}>
+        <ul className="org-groups" key={`${mode}:${repository || ''}:${action || ''}:${path || ''}`}>
           {groups.map((g, i) => (
             <FindingGroup
               key={g.key}
@@ -811,138 +901,338 @@ function FindingsTab({ state, filter, onFilterChange, onRetry, onOpenFinding, ac
 /* Action inventory tab                                                */
 /* ------------------------------------------------------------------ */
 
-const INVENTORY_FILTERS = [
-  ['third', 'Third party', a => !a.trusted],
-  ['unpinned', 'Not SHA pinned', a => a.pinning !== 'sha'],
-  ['inconsistent', 'Several refs', a => a.refs.length > 1],
+// Each dropdown is [key, label, options]; an option is [value, label, test].
+// Publisher, pinning and refs describe things workflows call, so setting any
+// of them leaves workflow files out.
+const INVENTORY_SELECTS = [
+  ['kind', 'Kind', [
+    ['all', 'All kinds', () => true],
+    ['action', 'Actions', a => a.kind === 'action'],
+    ['reusable_workflow', 'Reusable workflows', a => a.kind === 'reusable_workflow'],
+    ['workflow_file', 'Workflow files', a => a.kind === 'workflow_file'],
+  ]],
+  ['publisher', 'Publisher', [
+    ['any', 'Any publisher', () => true],
+    ['internal', 'Internal', a => a.publisher === 'internal'],
+    ['github', 'GitHub', a => a.publisher === 'github'],
+    ['third', 'Third party (all)', a => a.publisher === 'allowlisted' || a.publisher === 'third_party'],
+    ['allowlisted', 'Third party · allowlisted', a => a.publisher === 'allowlisted'],
+    ['third_party', 'Third party · not allowlisted', a => a.publisher === 'third_party'],
+  ]],
+  ['pinning', 'Pinning', [
+    ['any', 'Any pinning', () => true],
+    ['sha', 'SHA pinned', a => a.pinning === 'sha'],
+    ['unpinned', 'Not SHA pinned', a => a.pinning && a.pinning !== 'sha'],
+    ['mixed', 'Mixed pinning', a => a.pinning === 'mixed'],
+  ]],
+  ['refs', 'Refs', [
+    ['any', 'Any refs', () => true],
+    ['several', 'Several refs', a => a.refs?.length > 1],
+  ]],
 ]
 
-function actionHomeUrl(action) {
-  const [owner, repo] = action.split('/')
-  return owner && repo ? `https://github.com/${owner}/${repo}` : null
+const DEFAULT_SELECTS = { kind: 'all', publisher: 'any', pinning: 'any', refs: 'any' }
+
+const REUSABLE_RE = /^[^/]+\/[^/]+\/\.github\/workflows\/[^/]+\.ya?ml$/i
+const GITHUB_PUBLISHERS = ['actions/', 'github/']
+
+// Who publishes an inventory entry. Scans stored before publisher/kind were
+// recorded derive them here (allowlisted shows as "trusted" in those).
+function describeEntry(a, org) {
+  const lowered = a.action.toLowerCase()
+  const publisher = a.publisher || (
+    a.internal || lowered.startsWith(`${org.toLowerCase()}/`) ? 'internal'
+      : GITHUB_PUBLISHERS.some(p => lowered.startsWith(p)) ? 'github'
+        : a.trusted ? 'allowlisted' : 'third_party'
+  )
+  const kind = a.kind || (REUSABLE_RE.test(a.action) ? 'reusable_workflow' : 'action')
+  return { ...a, key: `uses:${a.action}`, publisher, kind }
 }
 
-function InventoryTab({ org, ownerType, inventory: rawInventory, findings, onShowFindings }) {
-  const inventory = useMemo(() => rawInventory.map(a => {
-    const internal = a.internal ?? a.action.toLowerCase().startsWith(`${org.toLowerCase()}/`)
-    return { ...a, internal, trusted: a.trusted || internal }
-  }), [rawInventory, org])
+function publisherLabel(publisher, ownerType) {
+  if (publisher === 'internal') return ownerType === 'user' ? 'Own' : 'Internal'
+  if (publisher === 'github') return 'GitHub'
+  if (publisher === 'allowlisted') return 'Third party · allowlisted'
+  return 'Third party'
+}
+
+const fileName = (path) => path.split('/').pop()
+
+// "repo › file.yml" for workflows; an action keeps its name.
+function entryName(a) {
+  if (a.kind === 'workflow_file') return `${repoName(a.repository)} › ${fileName(a.path)}`
+  if (a.kind !== 'reusable_workflow') return a.action
+  const [, repo, ...path] = a.action.split('/')
+  return `${repo} › ${path[path.length - 1]}`
+}
+
+function actionHomeUrl(a) {
+  const [owner, repo, ...rest] = a.action.split('/')
+  if (!owner || !repo) return null
+  if (a.kind === 'reusable_workflow') return `https://github.com/${owner}/${repo}/blob/HEAD/${rest.join('/')}`
+  return `https://github.com/${owner}/${repo}`
+}
+
+// Findings on an action or reusable workflow node, keyed by name without ref.
+function usesTarget(node) {
+  if (!node || (node.type !== 'action' && node.type !== 'reusable_workflow') || !node.id.includes('@')) return null
+  return node.id.slice(0, node.id.lastIndexOf('@'))
+}
+
+const KIND_TAG = { reusable_workflow: 'Reusable workflow', workflow_file: 'Workflow file' }
+
+// Workflow nodes are "<owner/repo>:<file name>"; actions are "<name>@<ref>".
+const workflowNodeId = (repository, path) => `${repository}:${fileName(path)}`
+
+function GraphLink({ onClick, label, compact = false }) {
+  return (
+    <button
+      type="button"
+      className="org-docs"
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      title={label}
+      aria-label={label}
+    >
+      <Icon.Graph />
+      {!compact && <span className="org-link-text">Graph</span>}
+    </button>
+  )
+}
+
+function InventorySelect({ name, label, options, value, counts, onChange }) {
+  const active = value !== options[0][0]
+  return (
+    <label className={`org-select ${active ? 'is-active' : ''}`}>
+      <span className="visually-hidden">{label}</span>
+      <select value={value} onChange={(e) => onChange(name, e.target.value)}>
+        {options.map(([v, text]) => (
+          <option key={v} value={v}>{v === options[0][0] ? text : `${text} (${counts[v] ?? 0})`}</option>
+        ))}
+      </select>
+      <Icon.Chevron open />
+    </label>
+  )
+}
+
+function InventoryTab({ org, ownerType, inventory: rawInventory, workflows, workflowsLoading, findings, onShowFindings, onOpenNode }) {
   const [query, setQuery] = useState('')
-  const [only, setOnly] = useState(new Set())
+  const [selects, setSelects] = useState(DEFAULT_SELECTS)
   const [expanded, setExpanded] = useState(null)
+
+  const entries = useMemo(() => [
+    ...rawInventory.map(a => describeEntry(a, org)),
+    ...(workflows || [])
+      .map(w => ({ ...w, key: `wf:${w.repository}:${w.path}`, kind: 'workflow_file', action: `${w.repository}/${w.path}` }))
+      .sort((a, b) => b.findings - a.findings || a.action.localeCompare(b.action)),
+  ], [rawInventory, workflows, org])
 
   const findingCounts = useMemo(() => {
     const counts = {}
     ;(findings || []).forEach(f => {
-      if (f.dismissed || f.node?.type !== 'action' || !f.node.id.includes('@')) return
-      const name = f.node.id.slice(0, f.node.id.lastIndexOf('@'))
+      const name = usesTarget(f.node)
+      if (f.dismissed || !name) return
       counts[name] = (counts[name] || 0) + 1
     })
     return counts
   }, [findings])
 
+  const test = (key, value) => INVENTORY_SELECTS.find(([k]) => k === key)[2].find(([v]) => v === value)[2]
+  const matchesQuery = (a, q) => !q || a.action.toLowerCase().includes(q) ||
+    (a.repositories || [a.repository]).some(r => r && r.toLowerCase().includes(q))
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return inventory.filter(a =>
-      (!q || a.action.toLowerCase().includes(q) || a.repositories.some(r => r.toLowerCase().includes(q))) &&
-      INVENTORY_FILTERS.every(([key, , test]) => !only.has(key) || test(a))
-    )
-  }, [inventory, query, only])
+    return entries.filter(a => matchesQuery(a, q) && INVENTORY_SELECTS.every(([key]) => test(key, selects[key])(a)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, query, selects])
 
-  const toggle = (key) => setOnly(prev => {
-    const next = new Set(prev)
-    if (next.has(key)) next.delete(key)
-    else next.add(key)
-    return next
-  })
+  // Each option's count, given the other dropdowns' current choices.
+  const counts = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const out = {}
+    INVENTORY_SELECTS.forEach(([key, , options]) => {
+      const base = entries.filter(a => matchesQuery(a, q) &&
+        INVENTORY_SELECTS.every(([other]) => other === key || test(other, selects[other])(a)))
+      out[key] = Object.fromEntries(options.map(([v, , t]) => [v, base.filter(t).length]))
+    })
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, query, selects])
 
-  if (inventory.length === 0) {
+  const filtered = Boolean(query) || INVENTORY_SELECTS.some(([key]) => selects[key] !== DEFAULT_SELECTS[key])
+  const clear = () => { setQuery(''); setSelects(DEFAULT_SELECTS) }
+  const onSelect = (key, value) => setSelects(prev => ({ ...prev, [key]: value }))
+
+  if (entries.length === 0 && !workflowsLoading) {
     return (
-      <EmptyState title="No actions found">
-        None of the scanned workflows reference an action with <code>uses:</code>.
+      <EmptyState title="Nothing to list">
+        No workflow files were scanned, so there is nothing they call with <code>uses:</code>.
       </EmptyState>
     )
   }
 
   return (
-    <div>
+    <div className="org-inventory">
       <div className="org-toolbar">
         <label className="org-search">
           <Icon.Search />
-          <input type="search" placeholder="Search actions or repositories" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search actions" />
+          <input type="search" placeholder="Search the inventory" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search the inventory" />
         </label>
-        <div className="org-toggle-group" role="group" aria-label="Show only">
-          {INVENTORY_FILTERS.map(([key, label, test]) => (
-            <button key={key} type="button" className={`org-chip ${only.has(key) ? 'is-on' : ''}`} aria-pressed={only.has(key)} onClick={() => toggle(key)}>
-              {label}
-              <span className="org-chip-count">{inventory.filter(test).length}</span>
-            </button>
+        <div className="org-selects" role="group" aria-label="Filters">
+          {INVENTORY_SELECTS.map(([key, label, options]) => (
+            <InventorySelect key={key} name={key} label={label} options={options} value={selects[key]} counts={counts[key]} onChange={onSelect} />
           ))}
         </div>
       </div>
 
+      <div className="org-filter-line">
+        <span className="org-count-line">
+          Showing <span className="org-num org-strong">{visible.length}</span> of <span className="org-num">{entries.length}</span> {entries.length === 1 ? 'item' : 'items'}
+        </span>
+        <span className="org-toolbar-spacer" />
+        {filtered && <button type="button" className="org-link" onClick={clear}>Clear filters</button>}
+      </div>
+
       {visible.length === 0 ? (
-        <EmptyState title="No actions match" action={<button type="button" className="org-btn" onClick={() => { setQuery(''); setOnly(new Set()) }}>Clear filters</button>} />
+        workflowsLoading && selects.kind === 'workflow_file'
+          ? <SkeletonRows rows={4} />
+          : <EmptyState title="Nothing matches these filters" action={<button type="button" className="org-btn" onClick={clear}>Clear filters</button>} />
       ) : (
         <ul className="org-groups">
           {visible.map((a, i) => {
-            const isOpen = expanded === a.action
-            const issues = findingCounts[a.action] || 0
+            const isOpen = expanded === a.key
+            const isFile = a.kind === 'workflow_file'
+            const issues = isFile ? a.findings : (findingCounts[a.action] || 0)
+            // One graph to open from the row itself: the workflow's own repo,
+            // or the only repo using this action at its only ref.
+            const singleTarget = isFile
+              ? { repository: a.repository, nodeId: workflowNodeId(a.repository, a.path) }
+              : (a.repositories?.length === 1 && a.refs?.length === 1
+                ? { repository: a.repositories[0], nodeId: `${a.action}@${a.refs[0].ref}` }
+                : null)
             return (
-              <li key={a.action} className="org-group org-enter" style={stagger(i)}>
+              <li key={a.key} className="org-group org-enter" style={stagger(i)}>
                 <div className="org-group-head">
-                  <button type="button" className="org-group-toggle" aria-expanded={isOpen} onClick={() => setExpanded(isOpen ? null : a.action)}>
+                  <button type="button" className="org-group-toggle" aria-expanded={isOpen} onClick={() => setExpanded(isOpen ? null : a.key)}>
                     <Icon.Chevron open={isOpen} />
-                    <span className="org-mono org-group-title org-truncate">{a.action}</span>
+                    <span className="org-mono org-group-title org-truncate" title={a.action}>{entryName(a)}</span>
                   </button>
                   <span className="org-action-tags">
-                    <span className={`org-tag ${a.trusted ? '' : 'is-warn'}`}>{a.internal ? (ownerType === 'user' ? 'Own' : 'Internal') : a.trusted ? 'Trusted' : 'Third party'}</span>
-                    <span className={`org-tag ${a.pinning === 'sha' ? 'is-ok' : 'is-warn'}`}>
-                      {a.pinning === 'sha' ? 'SHA pinned' : a.pinning === 'tag' ? 'Tag or branch' : 'Mixed pinning'}
-                    </span>
+                    {KIND_TAG[a.kind] && <span className={`org-tag org-tag--kind org-tag--${a.kind}`}>{KIND_TAG[a.kind]}</span>}
+                    {!isFile && (
+                      <span
+                        className={`org-tag ${a.publisher === 'third_party' ? 'is-warn' : ''}`}
+                        title={a.publisher === 'allowlisted' ? 'Not GitHub or yours, but on the trusted publisher list in config.yaml' : undefined}
+                      >
+                        {publisherLabel(a.publisher, ownerType)}
+                      </span>
+                    )}
+                    {!isFile && (
+                      <span className={`org-tag org-tag--pin ${a.pinning === 'sha' ? 'is-ok' : 'is-warn'}`}>
+                        {a.pinning === 'sha' ? 'SHA pinned' : a.pinning === 'tag' ? 'Tag or branch' : 'Mixed pinning'}
+                      </span>
+                    )}
                   </span>
                   <span className="org-action-stats">
-                    <span className="org-num">{plural(a.repository_count, 'repo')}</span>
-                    <span className={`org-num ${a.refs.length > 1 ? 'org-warn-text' : ''}`}>{plural(a.refs.length, 'ref')}</span>
+                    {isFile ? (
+                      <>
+                        <span className="org-num">{plural(a.uses.length, 'use')}</span>
+                        <span />
+                      </>
+                    ) : (
+                      <>
+                        <span className="org-num">{plural(a.repository_count, 'repo')}</span>
+                        <span className={`org-num ${a.refs.length > 1 ? 'org-warn-text' : ''}`}>{plural(a.refs.length, 'ref')}</span>
+                      </>
+                    )}
                     {issues > 0 && (
-                      <button type="button" className="org-link" onClick={() => onShowFindings({ action: a.action })}>
+                      <button
+                        type="button"
+                        className="org-link"
+                        onClick={() => onShowFindings(isFile ? { repository: a.repository, path: a.path } : { action: a.action })}
+                      >
                         {plural(issues, 'finding')}
                       </button>
+                    )}
+                  </span>
+                  <span className="org-action-graph">
+                    {onOpenNode && singleTarget && (
+                      <GraphLink
+                        label={`Open ${repoName(singleTarget.repository)} graph at ${entryName(a)}`}
+                        onClick={() => onOpenNode(singleTarget.repository, singleTarget.nodeId)}
+                      />
                     )}
                   </span>
                 </div>
                 {isOpen && (
                   <div className="org-action-body">
-                    <ul className="org-refs">
-                      {a.refs.map(ref => (
-                        <li key={ref.ref} className="org-ref-block">
-                          <div className="org-ref-head">
-                            <code className="org-mono org-ref-name">@{ref.ref}</code>
-                            <span className={`org-tag ${ref.pinning === 'sha' ? 'is-ok' : 'is-warn'}`}>{ref.pinning === 'sha' ? 'SHA' : 'Tag or branch'}</span>
-                            <span className="org-dim org-num">{plural(ref.repositories.length, 'repo')}</span>
-                          </div>
-                          {ref.usages?.length ? (
-                            <ul className="org-usages">
-                              {ref.usages.map((u, j) => (
-                                <li key={`${u.repository}:${u.path}:${u.line ?? j}`}>
-                                  <span className="org-ref org-ref--repo">{repoName(u.repository)}</span>
-                                  <ExtLink href={u.url} className="org-ref org-ref--file" title="Open on GitHub">
-                                    <Icon.File />
-                                    <span className="org-mono">{u.path}{u.line ? `:${u.line}` : ''}</span>
-                                  </ExtLink>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="org-usages-fallback">
-                              {ref.repositories.map(repoName).join(', ')}
-                              <span className="org-dim"> · scan again to see file and line references</span>
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    <ExtLink href={actionHomeUrl(a.action)} className="org-ref">View {a.action.split('/').slice(0, 2).join('/')} on GitHub</ExtLink>
+                    {isFile ? (
+                      a.uses.length ? (
+                        <ul className="org-usages org-usages--single">
+                          {a.uses.map(u => (
+                            <li key={u}><span className="org-mono org-truncate" title={u}>{u}</span></li>
+                          ))}
+                        </ul>
+                      ) : <p className="org-usages-fallback org-dim">Calls no actions or reusable workflows.</p>
+                    ) : (
+                      <ul className="org-refs">
+                        {a.refs.map(ref => (
+                          <li key={ref.ref} className="org-ref-block">
+                            <div className="org-ref-head">
+                              <code className="org-mono org-ref-name">@{ref.ref}</code>
+                              <span className={`org-tag ${ref.pinning === 'sha' ? 'is-ok' : 'is-warn'}`}>{ref.pinning === 'sha' ? 'SHA' : 'Tag or branch'}</span>
+                              <span className="org-dim org-num">{plural(ref.repositories.length, 'repo')}</span>
+                            </div>
+                            {ref.usages?.length ? (
+                              <ul className="org-usages">
+                                {ref.usages.map((u, j) => (
+                                  <li key={`${u.repository}:${u.path}:${u.line ?? j}`}>
+                                    <span className="org-ref org-ref--repo">{repoName(u.repository)}</span>
+                                    <span className="org-usage-ref">
+                                      <ExtLink href={u.url} className="org-ref org-ref--file" title="Open on GitHub">
+                                        <Icon.File />
+                                        <span className="org-mono">{u.path}{u.line ? `:${u.line}` : ''}</span>
+                                      </ExtLink>
+                                      {onOpenNode && (
+                                        <GraphLink
+                                          compact
+                                          label={`Open ${repoName(u.repository)} graph at ${a.action}@${ref.ref}`}
+                                          onClick={() => onOpenNode(u.repository, `${a.action}@${ref.ref}`)}
+                                        />
+                                      )}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="org-usages-fallback">
+                                {ref.repositories.map((repo, j) => (
+                                  <React.Fragment key={repo}>
+                                    {j > 0 && ', '}
+                                    {onOpenNode ? (
+                                      <button
+                                        type="button"
+                                        className="org-inline-link"
+                                        onClick={() => onOpenNode(repo, `${a.action}@${ref.ref}`)}
+                                        title={`Open ${repoName(repo)} graph at ${a.action}@${ref.ref}`}
+                                      >
+                                        {repoName(repo)}
+                                      </button>
+                                    ) : repoName(repo)}
+                                  </React.Fragment>
+                                ))}
+                                <span className="org-dim"> · scan again to see file and line references</span>
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <ExtLink href={isFile ? a.url : actionHomeUrl(a)} className="org-ref">
+                      {isFile ? `View ${a.path} on GitHub`
+                        : a.kind === 'reusable_workflow' ? `View ${fileName(a.action)} on GitHub`
+                          : `View ${a.action.split('/').slice(0, 2).join('/')} on GitHub`}
+                    </ExtLink>
                   </div>
                 )}
               </li>
@@ -958,10 +1248,10 @@ function InventoryTab({ org, ownerType, inventory: rawInventory, findings, onSho
 /* Scan results                                                        */
 /* ------------------------------------------------------------------ */
 
-const EMPTY_FILTER = { query: '', severities: new Set(), mode: 'rule', showDismissed: false, repository: null, action: null }
+const EMPTY_FILTER = { query: '', severities: new Set(), mode: 'rule', showDismissed: false, repository: null, action: null, path: null }
 
 function useOrgFindings(scanId, enabled, refreshKey) {
-  const [state, setState] = useState({ findings: null, loading: false, error: null })
+  const [state, setState] = useState({ findings: null, workflows: null, loading: false, error: null })
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
@@ -970,9 +1260,9 @@ function useOrgFindings(scanId, enabled, refreshKey) {
     setState(s => ({ ...s, loading: s.findings === null, error: null }))
     fetch(`/api/org-scans/${encodeURIComponent(scanId)}/findings`, { signal: controller.signal })
       .then(r => (r.ok ? r.json() : r.json().then(b => Promise.reject(new Error(b.detail || 'Request failed')))))
-      .then(body => setState({ findings: body.findings || [], loading: false, error: null }))
+      .then(body => setState({ findings: body.findings || [], workflows: body.workflows || [], loading: false, error: null }))
       .catch(err => {
-        if (err.name !== 'AbortError') setState({ findings: null, loading: false, error: err.message })
+        if (err.name !== 'AbortError') setState({ findings: null, workflows: null, loading: false, error: err.message })
       })
     return () => controller.abort()
   }, [scanId, enabled, attempt, refreshKey])
@@ -980,7 +1270,7 @@ function useOrgFindings(scanId, enabled, refreshKey) {
   return [state, () => setAttempt(a => a + 1)]
 }
 
-function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, onRescan, onOpenFinding, activeFingerprint, refreshKey }) {
+function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, onRescan, onOpenFinding, onOpenNode, activeFingerprint, refreshKey }) {
   const [tab, setTab] = useState('repositories')
   const [copied, setCopied] = useState(false)
   const [filter, setFilter] = useState(EMPTY_FILTER)
@@ -994,7 +1284,7 @@ function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, o
   const completed = progress?.completed ?? repos.filter(r => r.status !== 'pending' && r.status !== 'running').length
   const total = progress?.total ?? repos.length
   // refreshKey changes when a finding is dismissed or restored in the side panel.
-  const [findingsState, retryFindings] = useOrgFindings(scan.id, !running && tab !== 'repositories', refreshKey)
+  const [findingsState, retryFindings] = useOrgFindings(scan.id, !running, refreshKey)
 
   const showFindings = (patch) => {
     setFilter({ ...EMPTY_FILTER, ...patch })
@@ -1017,7 +1307,7 @@ function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, o
   const tabs = [
     ['repositories', 'Repositories', repos.length],
     ['findings', 'Findings', stats.total_issues ?? 0],
-    ['actions', 'Action inventory', inventory.length],
+    ['actions', 'Inventory', inventory.length + ((findingsState.workflows?.length) ?? (stats.workflow_files ?? 0))],
   ]
 
   return (
@@ -1070,7 +1360,7 @@ function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, o
         </p>
       )}
 
-      {!running && <MetricStrip stats={stats} repoCount={repos.length} actionCount={inventory.length} />}
+      {!running && <MetricStrip stats={stats} repos={repos} actionCount={inventory.length} />}
 
       <div className="org-tabs" role="tablist" aria-label="Scan views">
         {tabs.map(([key, label, count]) => (
@@ -1091,7 +1381,13 @@ function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, o
 
       <div className="org-tabpanel" role="tabpanel">
         {tab === 'repositories' && (
-          <RepositoriesTab repos={repos} onOpenRepository={onOpenRepository} onShowFindings={scan.id && !running ? showFindings : null} />
+          <RepositoriesTab
+            repos={repos}
+            workflows={findingsState.workflows}
+            onOpenRepository={onOpenRepository}
+            onShowFindings={scan.id && !running ? showFindings : null}
+            onOpenNode={scan.id && !running ? onOpenNode : null}
+          />
         )}
         {tab === 'findings' && (
           <FindingsTab
@@ -1105,7 +1401,16 @@ function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, o
           />
         )}
         {tab === 'actions' && (
-          <InventoryTab org={scan.org} ownerType={scan.owner_type} inventory={inventory} findings={findingsState.findings} onShowFindings={showFindings} />
+          <InventoryTab
+            org={scan.org}
+            ownerType={scan.owner_type}
+            inventory={inventory}
+            workflows={findingsState.workflows}
+            workflowsLoading={findingsState.loading}
+            findings={findingsState.findings}
+            onShowFindings={showFindings}
+            onOpenNode={scan.id ? onOpenNode : null}
+          />
         )}
       </div>
     </section>
@@ -1116,7 +1421,7 @@ function OrgScanResults({ scan, running, progress, onOpenRepository, onCancel, o
 /* Workspace                                                           */
 /* ------------------------------------------------------------------ */
 
-function OrgWorkspace({ picker, scan, running, progress, onScan, onOpenRepository, onCancel, onChooseRepositories, onOpenFinding, activeFingerprint, refreshKey }) {
+function OrgWorkspace({ picker, scan, running, progress, onScan, onOpenRepository, onCancel, onChooseRepositories, onOpenFinding, onOpenNode, activeFingerprint, refreshKey }) {
   if (scan) {
     return (
       <div className="org-workspace">
@@ -1128,6 +1433,7 @@ function OrgWorkspace({ picker, scan, running, progress, onScan, onOpenRepositor
           onCancel={onCancel}
           onRescan={onChooseRepositories}
           onOpenFinding={onOpenFinding}
+          onOpenNode={onOpenNode}
           activeFingerprint={activeFingerprint}
           refreshKey={refreshKey}
         />

@@ -692,7 +692,7 @@
     "/api/org-scans/{scan_id}/findings": {
       "get": {
         "summary": "Get Org Scan Findings",
-        "description": "Every finding across an org scan's repositories, with links to where each one lives.\n\nRead from the stored per-repository analyses, so current dismissals apply.",
+        "description": "Every finding and workflow file across an org scan's repositories, with links to where each lives.\n\nRead from the stored per-repository analyses, so current dismissals apply.",
         "operationId": "get_org_scan_findings_api_org_scans__scan_id__findings_get",
         "parameters": [
           {
