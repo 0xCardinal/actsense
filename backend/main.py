@@ -1654,7 +1654,7 @@ async def get_org_scan(scan_id: str):
 
 @app.get("/api/org-scans/{scan_id}/findings")
 async def get_org_scan_findings(scan_id: str):
-    """Every finding across an org scan's repositories, with links to where each one lives.
+    """Every finding and workflow file across an org scan's repositories, with links to where each lives.
 
     Read from the stored per-repository analyses, so current dismissals apply.
     """
@@ -1662,6 +1662,7 @@ async def get_org_scan_findings(scan_id: str):
     if not scan:
         raise HTTPException(status_code=404, detail="Org scan not found")
     findings: List[Dict[str, Any]] = []
+    workflows: List[Dict[str, Any]] = []
     for result in scan.get("repositories", []):
         if not result.get("analysis_id"):
             continue
@@ -1669,8 +1670,11 @@ async def get_org_scan_findings(scan_id: str):
             analysis = _load_analysis(result["analysis_id"])
         except HTTPException:
             continue
-        findings.extend(org_scan.collect_findings(result["repository"], analysis.get("graph", {})))
-    return {"org": scan.get("org"), "findings": findings}
+        graph = analysis.get("graph", {})
+        repo_findings = org_scan.collect_findings(result["repository"], graph)
+        findings.extend(repo_findings)
+        workflows.extend(org_scan.collect_workflows(result["repository"], graph, repo_findings))
+    return {"org": scan.get("org"), "findings": findings, "workflows": workflows}
 
 
 @app.delete("/api/org-scans/{scan_id}")

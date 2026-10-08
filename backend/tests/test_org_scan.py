@@ -149,6 +149,7 @@ class TestAggregation:
         assert s["total_issues"] == 3
         assert s["dismissed_issues"] == 1
         assert s["severity_counts"] == {"critical": 0, "high": 2, "medium": 0, "low": 1}
+        assert s["workflow_files"] == 0
 
     def test_action_inventory(self):
         data = {
@@ -299,6 +300,7 @@ class TestOrgEndpoints:
         assert stats["failed_repositories"] == 1
         assert stats["total_issues"] == 2
         assert stats["severity_counts"]["high"] == 2
+        assert stats["workflow_files"] == 2
 
         inv = {a["action"]: a for a in body["action_inventory"]}
         assert inv["third/party"]["repository_count"] == 2
@@ -461,6 +463,36 @@ class TestReferences:
         assert inv["acme/shared/.github/workflows/ci.yml"]["trusted"] is True
         assert inv["evil/thing"]["internal"] is False
 
+    @pytest.mark.parametrize("action,publisher", [
+        ("acme/shared", "internal"),
+        ("actions/checkout", "github"),
+        ("github/codeql-action/upload-sarif", "github"),
+        ("docker/login-action", "allowlisted"),
+        ("tj-actions/changed-files", "third_party"),
+    ])
+    def test_publisher_of(self, action, publisher):
+        assert org_scan.publisher_of(action, "acme", ["actions/", "github/", "docker/"]) == publisher
+
+    @pytest.mark.parametrize("action,kind", [
+        ("acme/shared/.github/workflows/ci.yml", "reusable_workflow"),
+        ("acme/shared/.github/workflows/ci.yaml", "reusable_workflow"),
+        ("actions/checkout", "action"),
+        ("github/codeql-action/upload-sarif", "action"),
+        ("acme/tools/.github/actions/setup", "action"),
+    ])
+    def test_kind_of(self, action, kind):
+        assert org_scan.kind_of(action) == kind
+
+    def test_inventory_labels_publisher_and_kind(self):
+        data = {"acme/api": [{"actions": [
+            "acme/shared/.github/workflows/ci.yml@main", "docker/login-action@v3", "actions/checkout@v4",
+        ]}]}
+        inv = {a["action"]: a for a in org_scan.build_action_inventory(data, owner="acme")}
+        assert inv["acme/shared/.github/workflows/ci.yml"]["kind"] == "reusable_workflow"
+        assert inv["docker/login-action"]["publisher"] in ("allowlisted", "third_party")
+        assert inv["docker/login-action"]["kind"] == "action"
+        assert inv["actions/checkout"]["publisher"] == "github"
+
     def test_mirrored_findings_count_once(self):
         graph = self._graph()
         issue = {"type": "unpinned_container_image", "severity": "medium", "message": "img",
@@ -470,6 +502,24 @@ class TestReferences:
         findings = [f for f in org_scan.collect_findings("acme/api", graph) if f["type"] == "unpinned_container_image"]
         assert len(findings) == 1
         assert findings[0]["target"]["label"] == "alpine:3"
+
+    def test_collect_workflows(self):
+        workflows = org_scan.collect_workflows("acme/api", self._graph())
+        assert workflows == [{
+            "repository": "acme/api",
+            "path": ".github/workflows/ci.yml",
+            "url": "https://github.com/acme/api/blob/trunk/.github/workflows/ci.yml",
+            "findings": 0,  # its one finding is dismissed
+            "uses": ["evil/thing/sub@v1"],
+        }]
+
+    def test_workflow_counts_findings_located_in_it(self):
+        graph = self._graph()
+        findings = org_scan.collect_findings("acme/api", graph)
+        [wf] = org_scan.collect_workflows("acme/api", graph, findings)
+        # The action and image findings point at lines in ci.yml; the
+        # workflow's own finding is dismissed.
+        assert wf["findings"] == 2
 
     def test_inventory_usages_link_to_lines(self):
         data = {"acme/api": [{
@@ -492,6 +542,9 @@ class TestOrgFindingsEndpoint:
         assert resp.status_code == 200
         findings = resp.json()["findings"]
         assert {f["repository"] for f in findings} == {"acme/api", "acme/web"}
+        workflows = resp.json()["workflows"]
+        assert sorted(w["repository"] for w in workflows) == ["acme/api", "acme/web"]
+        assert all(w["path"] == ".github/workflows/ci.yml" for w in workflows)
         assert all(f["location"]["url"].startswith("https://github.com/acme/") for f in findings)
 
     def test_findings_unknown_scan(self, api):

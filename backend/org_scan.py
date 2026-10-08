@@ -90,6 +90,7 @@ def summarize(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "total_issues": total_issues,
         "dismissed_issues": dismissed,
         "severity_counts": severity_counts,
+        "workflow_files": sum(r.get("workflows") or 0 for r in results),
     }
 
 
@@ -102,6 +103,35 @@ def _pinning(ref: str) -> str:
 def _is_trusted(action: str, trusted: List[str]) -> bool:
     lowered = action.lower()
     return any(lowered.startswith(t.lower()) for t in trusted)
+
+
+# GitHub's own publishers; everything else on the allowlist is a third party
+# the configuration chose to trust.
+GITHUB_PUBLISHERS = ("actions/", "github/")
+
+
+def publisher_of(action: str, owner: Optional[str], trusted: List[str]) -> str:
+    """Who publishes an action, relative to the scanned owner.
+
+    ``internal`` (the owner's own), ``github``, ``allowlisted`` (a third
+    party on the trusted publisher list) or ``third_party``.
+    """
+    lowered = action.lower()
+    if owner and lowered.startswith(f"{owner.lower()}/"):
+        return "internal"
+    if lowered.startswith(GITHUB_PUBLISHERS):
+        return "github"
+    if _is_trusted(action, trusted):
+        return "allowlisted"
+    return "third_party"
+
+
+def kind_of(action: str) -> str:
+    """``reusable_workflow`` for owner/repo/.github/workflows/x.yml, else ``action``."""
+    path = action.split("/", 2)[2] if action.count("/") >= 2 else ""
+    if path.startswith(".github/workflows/") and path.endswith((".yml", ".yaml")):
+        return "reusable_workflow"
+    return "action"
 
 
 def build_action_inventory(
@@ -144,11 +174,13 @@ def build_action_inventory(
         repositories = sorted({repo for repos in refs.values() for repo in repos})
         kinds = {_pinning(ref) for ref in refs}
         pinning = "sha" if kinds == {"sha"} else "tag" if kinds == {"tag"} else "mixed"
-        internal = bool(owner) and name.lower().startswith(f"{owner.lower()}/")
+        publisher = publisher_of(name, owner, trusted)
         inventory.append({
             "action": name,
-            "internal": internal,
-            "trusted": internal or _is_trusted(name, trusted),
+            "kind": kind_of(name),
+            "publisher": publisher,
+            "internal": publisher == "internal",
+            "trusted": publisher != "third_party",
             "pinning": pinning,
             "repository_count": len(repositories),
             "workflow_count": workflow_counts[name],
@@ -301,3 +333,43 @@ def collect_findings(repository: str, graph_data: Dict[str, Any]) -> List[Dict[s
             if fingerprint:
                 by_fingerprint[fingerprint] = finding
     return findings
+
+
+def collect_workflows(
+    repository: str,
+    graph_data: Dict[str, Any],
+    findings: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """The repository's workflow files, with their findings and what they call.
+
+    A file's findings are those located in it (``collect_findings`` output),
+    which includes findings on the actions and images it uses, not only the
+    ones attached to the workflow node.
+    """
+    located: Dict[str, int] = defaultdict(int)
+    for f in findings or []:
+        path = (f.get("location") or {}).get("path")
+        if path and not f.get("dismissed") and f.get("repository") == repository:
+            located[path] += 1
+    nodes = {n["id"]: n for n in graph_data.get("nodes", [])}
+    branch = ((nodes.get(repository) or {}).get("metadata") or {}).get("default_branch") or "main"
+    uses: Dict[str, List[str]] = defaultdict(list)
+    for edge in graph_data.get("edges", []):
+        target = nodes.get(edge.get("target")) or {}
+        if target.get("type") in ("action", "reusable_workflow"):
+            uses[edge.get("source")].append(target["id"])
+    workflows = []
+    for node in graph_data.get("nodes", []):
+        path = (node.get("metadata") or {}).get("path")
+        if node.get("type") != "workflow" or not path:
+            continue
+        workflows.append({
+            "repository": repository,
+            "path": path,
+            "url": _blob_url(repository, branch, path),
+            "findings": located[path] if findings is not None else sum(
+                1 for i in node.get("issues") or [] if not i.get("dismissed")
+            ),
+            "uses": sorted(set(uses.get(node["id"], []))),
+        })
+    return workflows
